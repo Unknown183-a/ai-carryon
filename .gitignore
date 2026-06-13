@@ -1,0 +1,9 @@
+.env
+token.pickle
+client_secrets.json
+output/
+assets/backgrounds/
+__pycache__/
+*.pyc
+.venv/
+SadTalker/
