@@ -1,32 +1,29 @@
+# agents/script_agent.py
+from langchain_groq import ChatGroq
 from dotenv import load_dotenv
+
 load_dotenv()
 
+llm = ChatGroq(model="llama-3.3-70b-versatile")
+
 def create_script(research_data):
-    from langchain_groq import ChatGroq
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.8)
-
     prompt = f"""
-    Create a YouTube Short.
+    Write a YouTube Shorts script (60-80 words max) based on this research.
 
-    Duration: 45 seconds
+    Rules:
+    - Sound like a real human talking, NOT a robot
+    - Use natural conversational language: "So basically...", "Here's the thing...", "Right?", "And honestly..."
+    - Short punchy sentences. Never more than 10 words per sentence.
+    - Start with a shocking/curiosity hook in the first 3 seconds
+    - NO labels like "Hook:", "CTA:", no timestamps, no quotes
+    - End with a quick CTA like "Follow for more"
+    - Write ONLY the spoken words, nothing else
 
-    Style:
-    - Fast paced
-    - Engaging
-    - Fireship style
+    Research: {research_data}
 
-    Content:
-
-    {research_data}
-
-    Format:
-
-    Hook
-    Main Content
-    CTA
-
-    Keep it under 120 words.
+    Example style:
+    So this AI tool just changed everything. Seriously. It can write code, debug it, and deploy it — all by itself. No human needed. That's kind of insane, right? And the crazy part? It's completely free. This is LangChain. And if you're not using it yet, you're already behind. Follow for more.
     """
 
-    response = llm.invoke(prompt)
-    return response.content
+    response = llm.invoke(prompt).content
+    return response.strip()
