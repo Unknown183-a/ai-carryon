@@ -6,10 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-
-# "Adam" voice - natural, energetic, great for tech content
-# You can change this to any ElevenLabs voice ID
-VOICE_ID = "pNInz6obpgDQGcFmaJgB"
+VOICE_ID = "pNInz6obpgDQGcFmaJgB"  # Adam - energetic tech voice
 
 def generate_voice(script):
     os.makedirs("output", exist_ok=True)
