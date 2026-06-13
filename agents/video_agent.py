@@ -159,10 +159,10 @@ def create_video():
 
     final.write_videofile(
         output_path,
-        fps=30,
+        fps=24,
         codec="libx264",
         audio_codec="aac",
-        preset="medium"
+        preset="ultrafast"
     )
 
     latest_path = "output/final_video.mp4"
