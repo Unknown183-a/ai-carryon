@@ -43,22 +43,22 @@ def generate_thumbnail(title, topic):
 
     if bg_path:
         bg = Image.open(bg_path).convert("RGB")
-        bg = bg.resize((1280, 720))
+        bg = bg.resize((1080, 1920))
         # Darken + blur background
         bg = bg.filter(ImageFilter.GaussianBlur(radius=3))
         bg = ImageEnhance.Brightness(bg).enhance(0.4)
     else:
-        bg = Image.new("RGB", (1280, 720), color=(10, 10, 20))
+        bg = Image.new("RGB", (1080, 1920), color=(10, 10, 20))
 
     draw = ImageDraw.Draw(bg)
 
     # --- Gradient dark overlay ---
-    overlay = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
-    for y in range(720):
+    overlay = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+    for y in range(1920):
         alpha = int(180 * (y / 720))
-        for x in range(1280):
+        for x in range(1080):
             overlay.putpixel((x, y), (0, 0, 0, alpha))
-    bg.paste(Image.new("RGB", (1280, 720), (0, 0, 0)),
+    bg.paste(Image.new("RGB", (1080, 1920), (0, 0, 0)),
              mask=overlay.split()[3])
 
     # --- Fonts ---
