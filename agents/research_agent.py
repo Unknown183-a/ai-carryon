@@ -1,14 +1,14 @@
-from langchain_groq import ChatGroq
+# agents/research_agent.py
+import os
 from dotenv import load_dotenv
-
 load_dotenv()
 
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    temperature=0.5
-)
-
 def research(topic):
+    from langchain_groq import ChatGroq
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        temperature=0.5
+    )
 
     prompt = f"""
     Research the following topic:
@@ -26,5 +26,4 @@ def research(topic):
     """
 
     response = llm.invoke(prompt)
-
     return response.content

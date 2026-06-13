@@ -1,14 +1,9 @@
-from langchain_groq import ChatGroq
 from dotenv import load_dotenv
-
 load_dotenv()
 
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    temperature=1
-)
-
 def generate_thumbnail_text(topic):
+    from langchain_groq import ChatGroq
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=1)
 
     prompt = f"""
         You are a YouTube growth expert.
@@ -39,5 +34,4 @@ def generate_thumbnail_text(topic):
         """
 
     response = llm.invoke(prompt)
-
     return response.content

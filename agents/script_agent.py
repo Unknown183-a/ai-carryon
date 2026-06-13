@@ -1,14 +1,9 @@
-from langchain_groq import ChatGroq
 from dotenv import load_dotenv
-
 load_dotenv()
 
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    temperature=0.8
-)
-
 def create_script(research_data):
+    from langchain_groq import ChatGroq
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.8)
 
     prompt = f"""
     Create a YouTube Short.
@@ -34,5 +29,4 @@ def create_script(research_data):
     """
 
     response = llm.invoke(prompt)
-
     return response.content

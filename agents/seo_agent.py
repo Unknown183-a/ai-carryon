@@ -1,13 +1,10 @@
-# agents/seo_agent.py
-from langchain_groq import ChatGroq
 from dotenv import load_dotenv
-
 load_dotenv()
 
-llm = ChatGroq(model="llama-3.3-70b-versatile")
-
-
 def generate_seo(topic, script):
+    from langchain_groq import ChatGroq
+    llm = ChatGroq(model="llama-3.3-70b-versatile")
+
     prompt = f"""
     Based on the topic and script below, generate YouTube SEO content.
 

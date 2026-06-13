@@ -1,42 +1,30 @@
-# agents/trending_agent.py
 import os
 import requests
-from langchain_groq import ChatGroq
 from dotenv import load_dotenv
-
 load_dotenv()
-
-llm = ChatGroq(model="llama-3.3-70b-versatile")
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 
 def fetch_trending_topics(region_code="US", max_results=25):
-    """Fetch currently trending YouTube videos"""
-
+    YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
     url = "https://www.googleapis.com/youtube/v3/videos"
     params = {
         "part": "snippet",
         "chart": "mostPopular",
         "regionCode": region_code,
         "maxResults": max_results,
-        "videoCategoryId": "28",  # Science & Technology
+        "videoCategoryId": "28",
         "key": YOUTUBE_API_KEY
     }
-
     response = requests.get(url, params=params, timeout=15)
     response.raise_for_status()
     data = response.json()
-
-    titles = []
-    for item in data.get("items", []):
-        title = item["snippet"]["title"]
-        titles.append(title)
-
+    titles = [item["snippet"]["title"] for item in data.get("items", [])]
     return titles
 
 
 def pick_best_topic(trending_titles):
-    """Use Groq LLM to pick the best topic to make a Short about"""
+    from langchain_groq import ChatGroq
+    llm = ChatGroq(model="llama-3.3-70b-versatile")
 
     titles_text = "\n".join([f"{i+1}. {t}" for i, t in enumerate(trending_titles)])
 
@@ -56,16 +44,11 @@ def pick_best_topic(trending_titles):
     """
 
     response = llm.invoke(prompt).content.strip()
-
-    # Clean up any quotes
-    response = response.strip('"').strip("'")
-
-    return response
+    return response.strip('"').strip("'")
 
 
 def get_trending_topic(region_code="US"):
-    """Main function — returns the best trending topic to make a video about"""
-
+    YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
     if not YOUTUBE_API_KEY:
         raise ValueError("YOUTUBE_API_KEY not set in .env file")
 
@@ -78,5 +61,4 @@ def get_trending_topic(region_code="US"):
     print(f"Found {len(trending_titles)} trending videos")
     topic = pick_best_topic(trending_titles)
     print(f"Selected topic: {topic}")
-
     return topic
