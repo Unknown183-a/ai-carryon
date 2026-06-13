@@ -3,7 +3,6 @@ import time
 import os
 import datetime
 
-# Set timezone to India
 os.environ['TZ'] = 'Asia/Kolkata'
 
 from agents.research_agent import research
@@ -32,7 +31,6 @@ def log(message):
 
 def generate_and_upload():
     log("=== Starting scheduled video generation ===")
-
     try:
         log("Fetching trending YouTube topic...")
         topic = get_trending_topic(region_code="US")
@@ -84,23 +82,14 @@ def generate_and_upload():
         log(f"ERROR: {str(e)}")
 
 
-# ─── Schedule ─────────────────────────────────────────────────────────────────
-
-# Post every day at 9 AM India time (IST)
+# Test run at 12:20 AM, then back to 9 AM daily
+schedule.every().day.at("00:20").do(generate_and_upload)
 schedule.every().day.at("09:00").do(generate_and_upload)
-
-# Uncomment to also post at 6 PM IST for 2 videos per day:
-# schedule.every().day.at("18:00").do(generate_and_upload)
-
-# ──────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     log("Scheduler started!")
     log(f"Timezone: Asia/Kolkata (IST)")
     log(f"Next run: {schedule.next_run()}")
-
-    # Uncomment to test immediately:
-    # generate_and_upload()
 
     while True:
         schedule.run_pending()
