@@ -24,7 +24,7 @@ def zoom_in_effect(clip, zoom_ratio=0.03):
         new_w, new_h = int(w * zoom), int(h * zoom)
         from PIL import Image
         pil_img = Image.fromarray(img)
-        pil_img = pil_img.resize((new_w, new_h))
+        pil_img = pil_img.resize((new_w, new_h), Image.LANCZOS)
         left = (new_w - w) // 2
         top = (new_h - h) // 2
         pil_img = pil_img.crop((left, top, left + w, top + h))
@@ -47,7 +47,7 @@ def resize_to_shorts(image_path):
         new_h = int(orig_w / target_ratio)
         top = (orig_h - new_h) // 2
         img = img.crop((0, top, orig_w, top + new_h))
-    img = img.resize((target_w, target_h))
+    img = img.resize((target_w, target_h), Image.LANCZOS)
     temp_path = image_path.replace(".jpg", "_shorts.jpg").replace(".png", "_shorts.jpg")
     img.save(temp_path, "JPEG", quality=95)
     return temp_path
@@ -91,9 +91,7 @@ def parse_srt(srt_path):
 
 
 def make_word_caption_clip(word, start, end):
-    """Create a single word TextClip — appears and disappears cleanly"""
     duration = end - start
-
     txt = (
         TextClip(
             text=word.upper(),
@@ -138,6 +136,9 @@ def create_video():
         clips.append(clip)
 
     bg = concatenate_videoclips(clips, method="compose")
+
+    # Force correct shorts dimensions
+    bg = bg.resized((SHORTS_WIDTH, SHORTS_HEIGHT))
 
     # Word-by-word captions
     word_timings = parse_srt(srt_path)
