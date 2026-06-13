@@ -123,7 +123,7 @@ def add_captions_ffmpeg(video_path, srt_path, output_path):
             f":borderw=5"
             f":bordercolor=black"
             f":x=(w-text_w)/2"
-            f":y=(h*0.6)-text_h/2"
+            f":y=(h*0.6-text_h/2)"
             f":enable='between(t,{start:.3f},{end:.3f})'"
         )
         filters.append(filter_str)
