@@ -110,25 +110,17 @@ def add_captions_ffmpeg(video_path, srt_path, output_path):
     """Burn word-by-word captions into video using ffmpeg drawtext"""
     captions = parse_srt(srt_path)
 
-    # Build drawtext filter for each word
     filters = []
     for start, end, word in captions:
-        # Escape special characters
-        word_escaped = word.upper().replace("'", "\\'").replace(":", "\\:").replace(",", "\\,")
-        
-        filter_str = (
-            f"drawtext=text='{word_escaped}'"
-            f":fontsize=90"
-            f":fontcolor=yellow"
-            f":borderw=5"
-            f":bordercolor=black"
-            f":x=(w-text_w)/2"
-            f":y=(h*0.6-text_h/2)"
-            f":enable='between(t,{start:.3f},{end:.3f})'"
-        )
-        filters.append(filter_str)
+        word_escaped = word.upper().replace("'", "\'").replace(":", "\:").replace(",", "\,")
+        start_str = "{:.3f}".format(start)
+        end_str = "{:.3f}".format(end)
+        y_expr = "h*0.6-text_h/2"
+        x_expr = "(w-text_w)/2"
+        enable = "between(t," + start_str + "," + end_str + ")"
+        f = "drawtext=text='" + word_escaped + "':fontsize=90:fontcolor=yellow:borderw=5:bordercolor=black:x=" + x_expr + ":y=" + y_expr + ":enable='" + enable + "'"
+        filters.append(f)
 
-    # Combine all filters
     vf = ",".join(filters)
 
     cmd = [
