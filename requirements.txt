@@ -1,4 +1,4 @@
-streamlit
+streamlit==1.45.0
 langchain-groq
 langchain
 moviepy
@@ -8,6 +8,5 @@ python-dotenv
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
-pexels-api
-gtts
+gTTS
 schedule
