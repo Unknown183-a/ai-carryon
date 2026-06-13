@@ -5,6 +5,7 @@ import shutil
 import datetime
 import subprocess
 
+
 SHORTS_WIDTH = 1080
 SHORTS_HEIGHT = 1920
 SHORTS_MAX_DURATION = 60
@@ -56,11 +57,10 @@ def parse_srt(srt_path):
 
 
 def resize_image(image_path, output_path):
-    cmd = [
-        "ffmpeg", "-y", "-i", image_path,
-        "-vf", "scale=" + str(SHORTS_WIDTH) + ":" + str(SHORTS_HEIGHT) + ":force_original_aspect_ratio=increase,crop=" + str(SHORTS_WIDTH) + ":" + str(SHORTS_HEIGHT),
-        output_path
-    ]
+    w = str(SHORTS_WIDTH)
+    h = str(SHORTS_HEIGHT)
+    vf = "scale=" + w + ":" + h + ":force_original_aspect_ratio=increase,crop=" + w + ":" + h
+    cmd = ["ffmpeg", "-y", "-i", image_path, "-vf", vf, output_path]
     subprocess.run(cmd, check=True, capture_output=True)
     return output_path
 
@@ -68,7 +68,6 @@ def resize_image(image_path, output_path):
 def create_slideshow(images, duration, output_path):
     n = len(images)
     per_image = duration / n
-
     resized = []
     for i, img in enumerate(images):
         out = "/tmp/slide_" + str(i) + ".jpg"
@@ -78,14 +77,16 @@ def create_slideshow(images, duration, output_path):
     list_path = "/tmp/images.txt"
     with open(list_path, "w") as f:
         for img in resized:
-            f.write("file '" + img + "'\n")
+            f.write("file " + repr(img) + "\n")
             f.write("duration " + str(per_image) + "\n")
-        f.write("file '" + resized[-1] + "'\n")
+        f.write("file " + repr(resized[-1]) + "\n")
 
+    w = str(SHORTS_WIDTH)
+    h = str(SHORTS_HEIGHT)
     cmd = [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", list_path,
-        "-vf", "scale=" + str(SHORTS_WIDTH) + ":" + str(SHORTS_HEIGHT),
+        "-vf", "scale=" + w + ":" + h,
         "-c:v", "libx264", "-r", "30",
         "-pix_fmt", "yuv420p",
         "-t", str(duration),
@@ -99,22 +100,29 @@ def build_drawtext_filter(captions):
     parts = []
     for start, end, word in captions:
         w = word.upper()
-        w = w.replace("\\", "\\\\")
+        w = w.replace("\\", "")
         w = w.replace("'", "")
         w = w.replace(":", " ")
         w = w.replace(",", " ")
+        w = w.replace("$", "")
+        w = w.replace("%", " PCT")
         
         start_s = "{:.3f}".format(start)
         end_s = "{:.3f}".format(end)
         
-        part = "drawtext=text='" + w + "'"
-        part += ":fontsize=90"
-        part += ":fontcolor=yellow"
-        part += ":borderw=5"
-        part += ":bordercolor=black"
-        part += ":x=(w-text_w)/2"
-        part += ":y=h*0.6-text_h/2"
-        part += ":enable='between(t," + start_s + "," + end_s + ")'"
+        # Build y expression using multiplication
+        y = "h" + chr(42) + "0.6-text_h/2"
+        
+        part = (
+            "drawtext=text='" + w + "'"
+            + ":fontsize=90"
+            + ":fontcolor=yellow"
+            + ":borderw=5"
+            + ":bordercolor=black"
+            + ":x=(w-text_w)/2"
+            + ":y=" + y
+            + ":enable='between(t," + start_s + "," + end_s + ")'"
+        )
         parts.append(part)
     
     return ",".join(parts)
@@ -125,11 +133,7 @@ def create_video():
     srt_path = "output/captions.srt"
 
     duration = get_audio_duration(audio_path)
-
-    if duration > SHORTS_MAX_DURATION:
-        print("WARNING: Audio is " + str(round(duration, 1)) + "s over 60s limit!")
-    else:
-        print("Duration: " + str(round(duration, 1)) + "s Shorts ready!")
+    print("Duration: " + str(round(duration, 1)) + "s")
 
     images = get_background_images()
     if not images:
@@ -138,26 +142,21 @@ def create_video():
     os.makedirs("output", exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Step 1: Create slideshow
     print("Creating slideshow...")
     slideshow_path = "/tmp/slideshow_" + timestamp + ".mp4"
     create_slideshow(images, duration, slideshow_path)
 
-    # Step 2: Add audio
     print("Adding audio...")
     with_audio_path = "/tmp/with_audio_" + timestamp + ".mp4"
     cmd = [
         "ffmpeg", "-y",
         "-i", slideshow_path,
         "-i", audio_path,
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-shortest",
-        with_audio_path
+        "-c:v", "copy", "-c:a", "aac",
+        "-shortest", with_audio_path
     ]
     subprocess.run(cmd, check=True, capture_output=True)
 
-    # Step 3: Add captions
     print("Adding captions...")
     captions = parse_srt(srt_path)
     vf = build_drawtext_filter(captions)
@@ -176,6 +175,5 @@ def create_video():
 
     latest_path = "output/final_video.mp4"
     shutil.copy(output_path, latest_path)
-
     print("Video ready: " + output_path)
     return latest_path
