@@ -151,25 +151,86 @@ def create_video():
         layers.append(person_clip)
         layers.append(grad)
 
-    # --- Word-by-word captions (middle of screen) ---
-    captions = parse_srt(srt_path)
-    for start, end, text in captions:
-        txt = (
-            TextClip(
-                text=text.upper(),
-                font_size=85,
-                color="white",
-                stroke_color="black",
-                stroke_width=3,
-                size=(900, None),
-                method="caption",
-                font=font_path
+    # --- Yellow highlight word captions ---
+    import json
+    words_path = "output/captions_words.json"
+    
+    if os.path.exists(words_path):
+        with open(words_path) as f:
+            word_entries = json.load(f)
+        
+        for entry in word_entries:
+            start = entry["start"]
+            end = entry["end"]
+            before = entry["before"].upper()
+            current = entry["current"].upper()
+            after = entry["after"].upper()
+            
+            # Full line with placeholder
+            if before and after:
+                display = f"{before} {current} {after}"
+            elif before:
+                display = f"{before} {current}"
+            elif after:
+                display = f"{current} {after}"
+            else:
+                display = current
+
+            # White background text (full line)
+            txt_white = (
+                TextClip(
+                    text=display,
+                    font_size=85,
+                    color="white",
+                    stroke_color="black",
+                    stroke_width=3,
+                    size=(900, None),
+                    method="caption",
+                    font=font_path
+                )
+                .with_position(("center", 0.45), relative=True)
+                .with_start(start)
+                .with_end(end)
             )
-            .with_position(("center", 0.45), relative=True)
-            .with_start(start)
-            .with_end(end)
-        )
-        layers.append(txt)
+            layers.append(txt_white)
+
+            # Yellow highlight for current word only
+            txt_yellow = (
+                TextClip(
+                    text=current,
+                    font_size=90,
+                    color="#FFD700",
+                    stroke_color="black",
+                    stroke_width=3,
+                    size=(900, None),
+                    method="caption",
+                    font=font_path
+                )
+                .with_position(("center", 0.45), relative=True)
+                .with_start(start)
+                .with_end(end)
+            )
+            layers.append(txt_yellow)
+    else:
+        # Fallback to regular captions
+        captions = parse_srt(srt_path)
+        for start, end, text in captions:
+            txt = (
+                TextClip(
+                    text=text.upper(),
+                    font_size=85,
+                    color="white",
+                    stroke_color="black",
+                    stroke_width=3,
+                    size=(900, None),
+                    method="caption",
+                    font=font_path
+                )
+                .with_position(("center", 0.45), relative=True)
+                .with_start(start)
+                .with_end(end)
+            )
+            layers.append(txt)
 
     # --- Background music ---
     audio_clips = [voice]
