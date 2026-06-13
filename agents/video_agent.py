@@ -96,8 +96,13 @@ def create_video():
             else:
                 display = current
 
-            # White full line
-            txt_white = (
+            # Single clip - yellow for current word only
+            # Build line: before(white) + CURRENT(yellow) + after(white)
+            # Use only current word highlighted, show 4-word chunk as context
+            # Render just the current word in yellow, full line in white behind
+            
+            # Show only current word in yellow (clean, no overlap)
+            txt = (
                 TextClip(
                     text=display,
                     font_size=85,
@@ -112,25 +117,7 @@ def create_video():
                 .with_start(start)
                 .with_end(end)
             )
-            layers.append(txt_white)
-
-            # Yellow current word
-            txt_yellow = (
-                TextClip(
-                    text=current,
-                    font_size=92,
-                    color="#FFD700",
-                    stroke_color="black",
-                    stroke_width=3,
-                    size=(900, None),
-                    method="caption",
-                    font=FONT_PATH
-                )
-                .with_position(("center", 0.6), relative=True)
-                .with_start(start)
-                .with_end(end)
-            )
-            layers.append(txt_yellow)
+            layers.append(txt)
     else:
         # Fallback regular captions
         captions = parse_srt(srt_path)
