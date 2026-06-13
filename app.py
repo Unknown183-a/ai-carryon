@@ -78,7 +78,7 @@ if st.button("Generate"):
             thumbnail_image = generate_thumbnail(seo["title"], topic)
 
         st.subheader("🖼️ Thumbnail Image")
-        st.image(thumbnail_image, use_column_width=True)
+        st.image(thumbnail_image, use_container_width=True)
 
         with st.spinner("🎨 Generating Background Images..."):
             image_paths, image_errors = generate_backgrounds(
