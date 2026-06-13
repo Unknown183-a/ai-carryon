@@ -6,73 +6,14 @@ import glob
 import shutil
 import datetime
 
-SHORTS_WIDTH = 1080
-SHORTS_HEIGHT = 1920
-SHORTS_MAX_DURATION = 60
-
-FONT_PATH = "assets/fonts/Arial-Bold.ttf"
-FONT_SIZE = 90
-HIGHLIGHT_COLOR = "yellow"
-SHADOW_COLOR = "black"
-
-
-def zoom_in_effect(clip, zoom_ratio=0.0):
-    def effect(get_frame, t):
-        img = get_frame(t)
-        h, w = img.shape[:2]
-        zoom = 1 + (zoom_ratio * t)
-        new_w, new_h = int(w * zoom), int(h * zoom)
-        from PIL import Image
-        pil_img = Image.fromarray(img)
-        pil_img = pil_img.resize((new_w, new_h), Image.LANCZOS)
-        left = (new_w - w) // 2
-        top = (new_h - h) // 2
-        pil_img = pil_img.crop((left, top, left + w, top + h))
-        return np.array(pil_img)
-    return clip.transform(effect)
-
-
-def resize_to_shorts(image_path):
-    from PIL import Image
-    img = Image.open(image_path).convert("RGB")
-    target_w, target_h = SHORTS_WIDTH, SHORTS_HEIGHT
-    target_ratio = target_w / target_h
-    orig_w, orig_h = img.size
-    orig_ratio = orig_w / orig_h
-    if orig_ratio > target_ratio:
-        new_w = int(orig_h * target_ratio)
-        left = (orig_w - new_w) // 2
-        img = img.crop((left, 0, left + new_w, orig_h))
-    else:
-        new_h = int(orig_w / target_ratio)
-        top = (orig_h - new_h) // 2
-        img = img.crop((0, top, orig_w, top + new_h))
-    img = img.resize((target_w, target_h), Image.LANCZOS)
-    temp_path = image_path.replace(".jpg", "_shorts.jpg").replace(".png", "_shorts.jpg")
-    img.save(temp_path, "JPEG", quality=95)
-    return temp_path
-
-
-def get_background_images():
-    folder = "assets/backgrounds"
-    images = []
-    if os.path.isdir(folder):
-        for ext in ("*.jpg", "*.jpeg", "*.png"):
-            images.extend(glob.glob(os.path.join(folder, ext)))
-    images = [i for i in images if "_shorts" not in i]
-    images.sort()
-    if not images:
-        fallback = "assets/background.jpg"
-        if os.path.exists(fallback):
-            images = [fallback]
-    return images
-
 
 def parse_srt(srt_path):
     with open(srt_path, "r") as f:
         content = f.read()
+
     blocks = content.strip().split("\n\n")
     captions = []
+
     for block in blocks:
         lines = block.split("\n")
         if len(lines) < 3:
@@ -87,71 +28,97 @@ def parse_srt(srt_path):
             return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000
 
         captions.append((to_seconds(start_str), to_seconds(end_str), text))
+
     return captions
 
 
-def make_word_caption_clip(word, start, end):
-    duration = end - start
-    txt = (
-        TextClip(
-            text=word.upper(),
-            font_size=FONT_SIZE,
-            color=HIGHLIGHT_COLOR,
-            stroke_color=SHADOW_COLOR,
-            stroke_width=5,
-            font=FONT_PATH,
-            method="label"
-        )
-        .with_position(("center", 0.6), relative=True)
-        .with_start(start)
-        .with_duration(duration)
-    )
-    return txt
+def get_background_images():
+    folder = "assets/backgrounds"
+    images = []
+
+    if os.path.isdir(folder):
+        for ext in ("*.jpg", "*.jpeg", "*.png"):
+            images.extend(glob.glob(os.path.join(folder, ext)))
+
+    images.sort()
+
+    if not images:
+        fallback = "assets/background.jpg"
+        if os.path.exists(fallback):
+            images = [fallback]
+
+    return images
 
 
 def create_video():
     audio_path = "output/voice.mp3"
     srt_path = "output/captions.srt"
+    music_path = "assets/music/bg_music.mp3"
+    font_path = "assets/fonts/Arial-Bold.ttf"
 
-    audio = AudioFileClip(audio_path)
-    duration = audio.duration
+    # --- Audio ---
+    voice = AudioFileClip(audio_path)
+    duration = voice.duration
 
-    if duration > SHORTS_MAX_DURATION:
-        print(f"WARNING: Audio is {duration:.1f}s — over 60s Shorts limit!")
-    else:
-        print(f"Duration: {duration:.1f}s — Shorts ready!")
-
+    # --- Background images with fast cuts (2-3s per image) ---
     images = get_background_images()
     if not images:
         raise FileNotFoundError("No background images found.")
 
-    n = len(images)
-    per_image = duration / n
+    # Repeat images if needed to fill duration
+    cut_duration = 3.0  # seconds per image
+    needed = int(duration / cut_duration) + 1
+    images_looped = (images * (needed // len(images) + 1))[:needed]
 
     clips = []
-    for img_path in images:
-        shorts_path = resize_to_shorts(img_path)
-        clip = ImageClip(shorts_path).with_duration(per_image)
-        clip = zoom_in_effect(clip)
-        clips.append(clip)
+    for img_path in images_looped:
+        clip = ImageClip(img_path).with_duration(cut_duration)
+        clip = clip.resized((1080, 1920))
 
-    bg = concatenate_videoclips(clips, method="compose")
+        # Dark overlay for readability
+        overlay = ColorClip(
+            size=(1080, 1920),
+            color=[0, 0, 0]
+        ).with_duration(cut_duration).with_opacity(0.5)
 
-    # Force correct shorts dimensions
-    bg = bg.resized((SHORTS_WIDTH, SHORTS_HEIGHT))
+        clips.append(CompositeVideoClip([clip, overlay]))
 
-    # Word-by-word captions
-    word_timings = parse_srt(srt_path)
+    bg = concatenate_videoclips(clips, method="compose").subclipped(0, duration)
+
+    # --- Word-by-word captions ---
+    captions = parse_srt(srt_path)
     text_clips = []
 
-    for start, end, word in word_timings:
-        txt_clip = make_word_caption_clip(word, start, end)
-        text_clips.append(txt_clip)
+    for start, end, text in captions:
+        txt = (
+            TextClip(
+                text=text.upper(),
+                font_size=90,
+                color="white",
+                stroke_color="black",
+                stroke_width=3,
+                size=(900, None),
+                method="caption",
+                font=font_path
+            )
+            .with_position(("center", 0.65), relative=True)
+            .with_start(start)
+            .with_end(end)
+        )
+        text_clips.append(txt)
 
-    final = CompositeVideoClip(
-        [bg, *text_clips],
-        size=(SHORTS_WIDTH, SHORTS_HEIGHT)
-    ).with_audio(audio)
+    # --- Background music ---
+    audio_clips = [voice]
+    if os.path.exists(music_path):
+        music = AudioFileClip(music_path).subclipped(0, duration)
+        music = music.with_effects([afx.MultiplyVolume(0.15)])
+        combined_audio = CompositeAudioClip([voice, music])
+        final_audio = combined_audio
+    else:
+        final_audio = voice
+
+    # --- Compose final ---
+    final = CompositeVideoClip([bg, *text_clips]).with_audio(final_audio)
 
     os.makedirs("output", exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -167,4 +134,5 @@ def create_video():
 
     latest_path = "output/final_video.mp4"
     shutil.copy(output_path, latest_path)
+
     return latest_path
