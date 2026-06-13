@@ -84,8 +84,7 @@ def generate_and_upload():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-# Test at 12:30 AM, then 9 AM daily
-schedule.every().day.at("00:30").do(generate_and_upload)
+# Run immediately on startup + every day at 9 AM
 schedule.every().day.at("09:00").do(generate_and_upload)
 
 if __name__ == "__main__":
@@ -93,6 +92,10 @@ if __name__ == "__main__":
     log(f"Timezone: Asia/Kolkata (IST)")
     log(f"Next run: {schedule.next_run()}")
 
+    # Run IMMEDIATELY on startup
+    log("Running immediately on startup for test...")
+    generate_and_upload()
+
     while True:
         schedule.run_pending()
-        time.sleep(30)  # check every 30 seconds instead of 60
+        time.sleep(30)
