@@ -16,7 +16,7 @@ HIGHLIGHT_COLOR = "yellow"
 SHADOW_COLOR = "black"
 
 
-def zoom_in_effect(clip, zoom_ratio=0.03):
+def zoom_in_effect(clip, zoom_ratio=0.0):
     def effect(get_frame, t):
         img = get_frame(t)
         h, w = img.shape[:2]
