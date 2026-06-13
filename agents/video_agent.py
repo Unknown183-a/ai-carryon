@@ -39,16 +39,12 @@ def resize_image(image_path, output_path):
 
 
 def get_audio_duration(audio_path):
-    """Get audio duration using ffprobe"""
-    cmd = [
-        "ffprobe", "-v", "quiet",
-        "-print_format", "json",
-        "-show_format",
-        audio_path
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    data = json.loads(result.stdout)
-    return float(data["format"]["duration"])
+    """Get audio duration using moviepy"""
+    from moviepy import AudioFileClip
+    audio = AudioFileClip(audio_path)
+    duration = audio.duration
+    audio.close()
+    return duration
 
 
 def parse_srt(srt_path):
