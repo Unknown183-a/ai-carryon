@@ -10,10 +10,8 @@ SHORTS_WIDTH = 1080
 SHORTS_HEIGHT = 1920
 SHORTS_MAX_DURATION = 60
 
-# Caption styling
 FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 FONT_SIZE = 90
-TEXT_COLOR = "white"
 HIGHLIGHT_COLOR = "yellow"
 SHADOW_COLOR = "black"
 
@@ -92,23 +90,23 @@ def parse_srt(srt_path):
     return captions
 
 
-def make_word_caption_clip(word, start, end, bg_width, is_highlight=True):
-    """Create a single word TextClip"""
-    color = HIGHLIGHT_COLOR if is_highlight else TEXT_COLOR
+def make_word_caption_clip(word, start, end):
+    """Create a single word TextClip — appears and disappears cleanly"""
+    duration = end - start
 
     txt = (
         TextClip(
             text=word.upper(),
             font_size=FONT_SIZE,
-            color=color,
+            color=HIGHLIGHT_COLOR,
             stroke_color=SHADOW_COLOR,
-            stroke_width=4,
+            stroke_width=5,
             font=FONT_PATH,
             method="label"
         )
-        .with_position(("center", "center"))
+        .with_position(("center", 0.6), relative=True)
         .with_start(start)
-        .with_end(end)
+        .with_duration(duration)
     )
     return txt
 
@@ -145,12 +143,9 @@ def create_video():
     word_timings = parse_srt(srt_path)
     text_clips = []
 
-    for i, (start, end, word) in enumerate(word_timings):
-        # Current word — highlighted in yellow
-        highlighted = make_word_caption_clip(
-            word, start, end, bg.w, is_highlight=True
-        )
-        text_clips.append(highlighted)
+    for start, end, word in word_timings:
+        txt_clip = make_word_caption_clip(word, start, end)
+        text_clips.append(txt_clip)
 
     final = CompositeVideoClip(
         [bg, *text_clips],
