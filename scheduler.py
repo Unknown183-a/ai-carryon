@@ -24,7 +24,7 @@ def log(message):
     os.makedirs("output", exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     entry = f"[{timestamp}] {message}"
-    print(entry)
+    print(entry, flush=True)
     with open(LOG_FILE, "a") as f:
         f.write(entry + "\n")
 
@@ -79,11 +79,13 @@ def generate_and_upload():
         log(f"SUCCESS: Uploaded — {video_url}")
 
     except Exception as e:
+        import traceback
         log(f"ERROR: {str(e)}")
+        log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-# Test run at 12:20 AM, then back to 9 AM daily
-schedule.every().day.at("00:20").do(generate_and_upload)
+# Test at 12:30 AM, then 9 AM daily
+schedule.every().day.at("00:30").do(generate_and_upload)
 schedule.every().day.at("09:00").do(generate_and_upload)
 
 if __name__ == "__main__":
@@ -93,4 +95,4 @@ if __name__ == "__main__":
 
     while True:
         schedule.run_pending()
-        time.sleep(60)
+        time.sleep(30)  # check every 30 seconds instead of 60
