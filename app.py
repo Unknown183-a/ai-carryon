@@ -23,19 +23,23 @@ st.markdown("Generate AI-powered YouTube Shorts automatically")
 
 topic = st.text_input(
     "Enter Topic",
-    placeholder="What is LangChain?"
+    placeholder="What is LangChain?",
+    value=st.session_state.get("trending_topic", "")
 )
 
 # Trending topic button
 if st.button("🔥 Use Trending Topic Instead"):
-    with st.spinner("Fetching trending YouTube topics..."):
+    with st.spinner("Fetching trending topic..."):
         from agents.trending_agent import get_trending_topic
         try:
             trending = get_trending_topic()
-            st.success(f"Trending topic selected: **{trending}**")
-            topic = trending
+            st.session_state["trending_topic"] = trending
         except Exception as e:
             st.error(str(e))
+
+if "trending_topic" in st.session_state:
+    topic = st.session_state["trending_topic"]
+    st.success(f"Trending topic: **{topic}**")
 
 # Upload toggle
 auto_upload = st.toggle("Auto-upload to YouTube after generation", value=False)
