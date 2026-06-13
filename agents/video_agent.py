@@ -106,14 +106,14 @@ def create_video():
                 TextClip(
                     text=display,
                     font_size=85,
-                    color="white",
+                    color="#FFD700",
                     stroke_color="black",
                     stroke_width=3,
                     size=(900, None),
                     method="caption",
                     font=FONT_PATH
                 )
-                .with_position(("center", 0.6), relative=True)
+                .with_position(("center", "center"))
                 .with_start(start)
                 .with_end(end)
             )
@@ -126,14 +126,14 @@ def create_video():
                 TextClip(
                     text=text.upper(),
                     font_size=85,
-                    color="white",
+                    color="#FFD700",
                     stroke_color="black",
                     stroke_width=3,
                     size=(900, None),
                     method="caption",
                     font=FONT_PATH
                 )
-                .with_position(("center", 0.6), relative=True)
+                .with_position(("center", "center"))
                 .with_start(start)
                 .with_end(end)
             )
