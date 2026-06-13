@@ -7,8 +7,8 @@ import glob
 THUMB_WIDTH = 1080
 THUMB_HEIGHT = 1920
 
-FONT_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
-FONT_REGULAR = "/System/Library/Fonts/Supplemental/Arial.ttf"
+FONT_BOLD = "assets/fonts/Arial-Bold.ttf"
+FONT_REGULAR = "assets/fonts/Arial-Bold.ttf"
 
 # Branding colors
 GRADIENT_TOP = (10, 10, 20)

@@ -10,7 +10,7 @@ SHORTS_WIDTH = 1080
 SHORTS_HEIGHT = 1920
 SHORTS_MAX_DURATION = 60
 
-FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+FONT_PATH = "assets/fonts/Arial-Bold.ttf"
 FONT_SIZE = 90
 HIGHLIGHT_COLOR = "yellow"
 SHADOW_COLOR = "black"
