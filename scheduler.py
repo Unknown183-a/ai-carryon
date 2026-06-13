@@ -135,8 +135,6 @@ if __name__ == "__main__":
     log("Scheduler started!")
     log(f"Next run: {schedule.next_run()}")
 
-    generate_and_upload()  # TEST RUN - remove after testing
-
     while True:
         schedule.run_pending()
         time.sleep(60)
