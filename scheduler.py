@@ -143,11 +143,11 @@ def generate_and_upload():
 
 
 # Run every hour
-schedule.every(1).hours.do(generate_and_upload)
+schedule.every(5).hours.do(generate_and_upload)
 
 if __name__ == "__main__":
     log("Scheduler started!")
-    log("Schedule: every 1 hour")
+    log("Schedule: every 5 hours")
 
     utc_now = datetime.datetime.utcnow()
     ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
