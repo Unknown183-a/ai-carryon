@@ -179,7 +179,6 @@ def create_video():
         print("FFMPEG STDOUT:", result.stdout)
         print("Return code:", result.returncode)
         # Check if frames exist
-        import glob
         frames = glob.glob("output/frames/*.jpg")
         print("Frames found:", len(frames))
         if frames:
