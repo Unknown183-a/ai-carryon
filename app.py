@@ -18,6 +18,9 @@ st.set_page_config(
     layout="wide"
 )
 
+# Sidebar navigation
+page = st.sidebar.selectbox("📂 Navigation", ["🎬 Generate Video", "📊 Analytics"])
+
 st.title("🤖 AI CarryON")
 st.markdown("Generate AI-powered YouTube Shorts automatically")
 
@@ -166,3 +169,54 @@ if st.button("Generate"):
 
     except Exception as e:
         st.error(str(e))
+
+def show_analytics():
+    st.title("📊 YouTube Analytics Dashboard")
+
+    with st.spinner("Fetching channel data..."):
+        from agents.analytics_agent import get_channel_stats, get_recent_videos
+        stats = get_channel_stats()
+        videos = get_recent_videos(20)
+
+    # Channel overview
+    st.subheader("📡 Channel Overview")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("👤 Subscribers", f"{stats['subscribers']:,}")
+    col2.metric("👁️ Total Views", f"{stats['total_views']:,}")
+    col3.metric("🎬 Videos", f"{stats['video_count']:,}")
+    if videos:
+        avg_views = sum(v['views'] for v in videos) // len(videos)
+        col4.metric("📈 Avg Views", f"{avg_views:,}")
+
+    st.divider()
+
+    if not videos:
+        st.info("No videos found.")
+        return
+
+    # Top performing videos bar chart
+    st.subheader("🏆 Top Videos by Views")
+    import pandas as pd
+    df = pd.DataFrame(videos)
+    df['short_title'] = df['title'].str[:30] + "..."
+    st.bar_chart(df.set_index('short_title')['views'])
+
+    st.divider()
+
+    # Video table
+    st.subheader("📋 All Videos")
+    for v in videos:
+        with st.container():
+            c1, c2, c3, c4, c5 = st.columns([4, 1, 1, 1, 1])
+            c1.markdown(f"[{v['title']}]({v['url']})")
+            c2.markdown(f"👁️ **{v['views']:,}**")
+            c3.markdown(f"👍 {v['likes']:,}")
+            c4.markdown(f"💬 {v['comments']:,}")
+            c5.markdown(f"📅 {v['published']}")
+        st.divider()
+
+
+# Page routing
+if page == "📊 Analytics":
+    show_analytics()
+    st.stop()
