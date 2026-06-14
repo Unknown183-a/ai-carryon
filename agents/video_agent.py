@@ -175,8 +175,16 @@ def create_video():
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        print("FFMPEG ERROR:", result.stderr[-500:])
-        raise RuntimeError("ffmpeg failed: " + result.stderr[-200:])
+        print("FFMPEG FULL ERROR:", result.stderr)
+        print("FFMPEG STDOUT:", result.stdout)
+        print("Return code:", result.returncode)
+        # Check if frames exist
+        import glob
+        frames = glob.glob("output/frames/*.jpg")
+        print("Frames found:", len(frames))
+        if frames:
+            print("First frame:", frames[0])
+        raise RuntimeError("ffmpeg failed")
 
     latest_path = "output/final_video.mp4"
     shutil.copy(output_path, latest_path)
