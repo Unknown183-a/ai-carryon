@@ -4,7 +4,11 @@ import glob
 import shutil
 import datetime
 import subprocess
+import imageio_ffmpeg
 from PIL import Image, ImageDraw, ImageFont
+
+# Use bundled ffmpeg from imageio-ffmpeg (works on Railway)
+FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 
 SHORTS_WIDTH = 1080
 SHORTS_HEIGHT = 1920
@@ -159,7 +163,7 @@ def create_video():
 
     # Combine frames into video
     cmd = [
-        "ffmpeg", "-y",
+        FFMPEG, "-y",
         "-framerate", str(fps),
         "-i", "/tmp/frames/%06d.jpg",
         "-i", audio_path,
