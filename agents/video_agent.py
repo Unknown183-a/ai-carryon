@@ -133,7 +133,7 @@ def draw_caption(frame_img, word, font_path=FONT_PATH):
     draw.text((x, y), word, font=font, fill=(255, 220, 0))
     return frame_img
 
-def create_video():
+def create_video(manim_path=None):
     audio_path = "output/voice.mp3"
     srt_path = "output/captions.srt"
     music_path = "assets/music/background.wav"

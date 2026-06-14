@@ -10,6 +10,7 @@ from agents.image_agent import generate_backgrounds
 from agents.voice_agent import generate_voice
 from agents.caption_agent import create_srt
 from agents.video_agent import create_video
+from agents.manim_agent import render_manim_animation
 from agents.upload_agent import upload_video
 
 st.set_page_config(
@@ -262,8 +263,16 @@ if st.button("Generate"):
         st.subheader("📄 Captions")
         st.code(open(caption_file).read())
 
-        with st.spinner("🎬 Creating Video..."):
-            video_file = create_video()
+        with st.spinner("🎨 Generating Manim Animation (this takes 2-3 min)..."):
+            manim_video = render_manim_animation(topic, script)
+            if manim_video:
+                st.subheader("🎨 Manim Animation")
+                st.video(manim_video)
+            else:
+                st.warning("Manim animation failed, using background images instead")
+
+        with st.spinner("🎬 Creating Final Video..."):
+            video_file = create_video(manim_path=manim_video if manim_video else None)
 
         # Shorts duration check
         from moviepy import AudioFileClip as AFC
