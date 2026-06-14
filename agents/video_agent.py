@@ -119,10 +119,10 @@ def create_video():
     captions = parse_srt(srt_path)
 
     os.makedirs("output", exist_ok=True)
-    os.makedirs("/tmp/frames", exist_ok=True)
+    os.makedirs("output/frames", exist_ok=True)
 
     # Clear old frames
-    for f in glob.glob("/tmp/frames/*.jpg"):
+    for f in glob.glob("output/frames/*.jpg"):
         os.remove(f)
 
     fps = 24
@@ -134,7 +134,7 @@ def create_video():
     # Resize background images
     resized_imgs = []
     for i, img_path in enumerate(images):
-        out = "/tmp/bg_" + str(i) + ".jpg"
+        out = "output/bg_" + str(i) + ".jpg"
         resize_image(img_path, out)
         resized_imgs.append(Image.open(out).convert("RGB"))
 
@@ -155,7 +155,7 @@ def create_video():
         if word:
             frame = draw_word_on_frame(frame, word)
 
-        frame.save("/tmp/frames/" + str(frame_idx).zfill(6) + ".jpg", "JPEG", quality=90)
+        frame.save("output/frames/" + str(frame_idx).zfill(6) + ".jpg", "JPEG", quality=90)
 
     print("Creating video from frames...")
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -165,7 +165,7 @@ def create_video():
     cmd = [
         FFMPEG, "-y",
         "-framerate", str(fps),
-        "-i", "/tmp/frames/%06d.jpg",
+        "-i", "output/frames/%06d.jpg",
         "-i", audio_path,
         "-c:v", "libx264",
         "-c:a", "aac",
