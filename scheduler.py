@@ -143,7 +143,7 @@ def generate_and_upload():
 
 
 # Run every hour
-schedule.every(5).hours.do(generate_and_upload)
+schedule.every().day.at("12:03").do(generate_and_upload)
 
 if __name__ == "__main__":
     log("Scheduler started!")
