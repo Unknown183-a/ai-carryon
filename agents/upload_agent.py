@@ -66,8 +66,24 @@ def upload_video(video_path, title, description, hashtags,
                  thumbnail_path=None, category_id="28"):
     youtube = authenticate_youtube()
 
-    tags = [tag.strip().replace("#", "") for tag in hashtags.split()]
-    full_description = description + "\n\n" + hashtags + "\n\n#Shorts"
+    # Handle both list and string hashtags
+    if isinstance(hashtags, list):
+        hashtag_str = " ".join(hashtags)
+        tags = [h.strip().replace("#", "") for h in hashtags]
+    else:
+        hashtag_str = hashtags
+        tags = [h.strip().replace("#", "") for h in hashtags.split()]
+
+    full_description = f'''{description}
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+🔔 Subscribe for daily AI & Tech Shorts!
+👍 Like if you learned something new!
+💬 Comment your thoughts below!
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+{hashtag_str} #Shorts #YouTubeShorts'''
+    tags = tags + ["Shorts", "YouTubeShorts", "AI", "Tech", "Technology"]
 
     body = {
         "snippet": {
