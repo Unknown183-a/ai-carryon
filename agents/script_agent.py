@@ -11,13 +11,13 @@ def create_script(research_data):
     {research_data}
 
     STRICT RULES:
-    - Total word count: 60 to 80 words MAXIMUM
-    - When spoken aloud at normal pace, this must be 20-35 seconds long
+    - Total word count: EXACTLY 80 to 100 words
+    - Must be 25-35 seconds when spoken aloud
     - Hook in first 5 words
     - Fast paced, Fireship style
     - End with "Follow for more wild tech facts"
     - Plain text only, NO symbols, NO hashtags, NO stage directions
-    - NO lines like "Hook:" or "CTA:" — just the words to be spoken
+    - NO labels like "Hook:" or "CTA:" — just spoken words
 
     Return ONLY the script text, nothing else.
     """
@@ -25,9 +25,23 @@ def create_script(research_data):
     response = llm.invoke(prompt)
     script = response.content.strip()
 
-    # Hard trim to 80 words if LLM ignores the limit
+    # Hard enforce minimum 80 words
     words = script.split()
-    if len(words) > 80:
-        script = " ".join(words[:80])
+    if len(words) < 80:
+        # Ask again with stricter prompt
+        prompt2 = f"""
+        Expand this script to exactly 90 words. Keep the same style and topic.
+        Add more interesting facts or details.
+        Return ONLY the expanded script, no labels.
+        
+        Current script ({len(words)} words):
+        {script}
+        """
+        script = llm.invoke(prompt2).content.strip()
+
+    # Hard trim to 100 words max
+    words = script.split()
+    if len(words) > 100:
+        script = " ".join(words[:100])
 
     return script
