@@ -1,3 +1,4 @@
+import os
 # agents/spy_agent.py
 from agents.analytics_agent import authenticate
 
@@ -10,6 +11,17 @@ TOP_CHANNELS = {
 }
 
 def get_trending_topics(max_per_channel=3):
+    import json, time
+    CACHE_FILE = "output/spy_cache.json"
+    
+    # Return cache if less than 6 hours old
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE) as f:
+            cache = json.load(f)
+        if time.time() - cache["timestamp"] < 21600:
+            print("Using cached trending topics")
+            return cache["topics"]
+
     yt = authenticate()
     trending = []
 
@@ -49,4 +61,12 @@ def get_trending_topics(max_per_channel=3):
             print(f"Error fetching {channel_name}: {e}")
             continue
 
-    return sorted(trending, key=lambda x: x['views'], reverse=True)
+    result = sorted(trending, key=lambda x: x['views'], reverse=True)
+    
+    # Save to cache
+    import json, time
+    os.makedirs("output", exist_ok=True)
+    with open("output/spy_cache.json", "w") as f:
+        json.dump({"timestamp": time.time(), "topics": result}, f)
+    
+    return result
