@@ -131,6 +131,22 @@ if st.button("Generate"):
 
         st.success("✅ Video Created Successfully!")
 
+        # Download button for Instagram
+        with open(video_file, "rb") as f:
+            st.download_button(
+                label="📱 Download for Instagram Reels",
+                data=f,
+                file_name="reel.mp4",
+                mime="video/mp4"
+            )
+
+        st.info("""**📱 Post to Instagram Reels manually:**
+1. Download the video above
+2. Open Instagram on your phone
+3. Tap **+** → **Reel**
+4. Select the downloaded video
+5. Add caption and post!""")
+
         # YouTube Upload
         if auto_upload:
             with st.spinner("📤 Uploading to YouTube..."):
