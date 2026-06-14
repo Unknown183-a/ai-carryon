@@ -5,18 +5,6 @@ import datetime
 
 os.environ['TZ'] = 'Asia/Kolkata'
 
-from agents.research_agent import research
-from agents.script_agent import create_script
-from agents.seo_agent import generate_seo
-from agents.thumbnail_agent import generate_thumbnail_text
-from agents.thumbnail_generator import generate_thumbnail
-from agents.image_agent import generate_backgrounds
-from agents.voice_agent import generate_voice
-from agents.caption_agent import create_srt
-from agents.video_agent import create_video
-from agents.upload_agent import upload_video
-from agents.trending_agent import get_trending_topic
-
 LOG_FILE = "output/scheduler_log.txt"
 
 
@@ -32,9 +20,21 @@ def log(message):
 def generate_and_upload():
     log("=== Starting scheduled video generation ===")
     try:
+        from agents.research_agent import research
+        from agents.script_agent import create_script
+        from agents.seo_agent import generate_seo
+        from agents.thumbnail_agent import generate_thumbnail_text
+        from agents.thumbnail_generator import generate_thumbnail
+        from agents.image_agent import generate_backgrounds
+        from agents.voice_agent import generate_voice
+        from agents.caption_agent import create_srt
+        from agents.video_agent import create_video
+        from agents.upload_agent import upload_video
+        from agents.trending_agent import get_trending_topic
+
         log("Fetching trending YouTube topic...")
         topic = get_trending_topic(region_code="US")
-        log(f"Trending topic selected: {topic}")
+        log(f"Trending topic: {topic}")
 
         log("Researching...")
         research_data = research(topic)
@@ -53,9 +53,8 @@ def generate_and_upload():
 
         log("Generating background images...")
         image_paths, image_errors = generate_backgrounds(topic, script, num_images=4)
-
         if not image_paths:
-            log(f"ERROR: No images generated — {image_errors}")
+            log(f"ERROR: No images — {image_errors}")
             return
 
         log("Generating voiceover...")
@@ -76,7 +75,7 @@ def generate_and_upload():
             thumbnail_path=thumbnail_image
         )
 
-        log(f"SUCCESS: Uploaded — {video_url}")
+        log(f"SUCCESS: {video_url}")
 
     except Exception as e:
         import traceback
@@ -84,7 +83,6 @@ def generate_and_upload():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-# Only run at 9 AM IST daily — no immediate run
 schedule.every().day.at("09:00").do(generate_and_upload)
 
 if __name__ == "__main__":

@@ -9,7 +9,12 @@ from PIL import Image, ImageDraw, ImageFont
 SHORTS_WIDTH = 1080
 SHORTS_HEIGHT = 1920
 SHORTS_MAX_DURATION = 60
-FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+import platform
+if platform.system() == "Darwin":
+    FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+else:
+    FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
 
 
 def get_background_images():
