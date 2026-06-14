@@ -98,7 +98,37 @@ def show_analytics():
         st.divider()
 
 # Sidebar navigation
-page = st.sidebar.selectbox("📂 Navigation", ["🎬 Generate Video", "📊 Analytics"])
+page = st.sidebar.selectbox("📂 Navigation", ["🎬 Generate Video", "📊 Analytics", "🕵️ Trending Spy"])
+
+if st.session_state.get("go_generate"):
+    st.session_state["go_generate"] = False
+    page = "🎬 Generate Video"
+
+if page == "🕵️ Trending Spy":
+    st.title("🕵️ Trending Spy")
+    st.markdown("Top performing Shorts from leading AI/Tech channels — click to generate your own version!")
+
+    with st.spinner("Fetching trending topics from top channels..."):
+        from agents.spy_agent import get_trending_topics
+        topics = get_trending_topics()
+
+    if not topics:
+        st.warning("No topics found.")
+        st.stop()
+
+    for t in topics:
+        with st.container():
+            c1, c2, c3, c4, c5 = st.columns([4, 1, 1, 1, 2])
+            c1.markdown(f"[{t['title']}]({t['url']})")
+            c2.markdown(f"📺 **{t['channel']}**")
+            c3.markdown(f"👁️ {t['views']:,}")
+            c4.markdown(f"👍 {t['likes']:,}")
+            if c5.button("🎬 Make This Video", key=t['url']):
+                st.session_state["trending_topic"] = t["topic"]
+                st.session_state["go_generate"] = True
+                st.rerun()
+        st.divider()
+    st.stop()
 
 if page == "📊 Analytics":
     show_analytics()
