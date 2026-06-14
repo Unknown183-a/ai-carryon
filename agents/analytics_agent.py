@@ -27,14 +27,21 @@ def get_client_secrets_path():
 def authenticate():
     creds = None
 
-    if os.path.exists(ANALYTICS_TOKEN):
+    # Try Railway environment variable first
+    token_b64 = os.getenv("YOUTUBE_ANALYTICS_TOKEN_B64")
+    if token_b64:
+        creds = pickle.loads(base64.b64decode(token_b64))
+
+    # Try local file
+    elif os.path.exists(ANALYTICS_TOKEN):
         with open(ANALYTICS_TOKEN, "rb") as f:
             creds = pickle.load(f)
 
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
-        with open(ANALYTICS_TOKEN, "wb") as f:
-            pickle.dump(creds, f)
+        if not token_b64:
+            with open(ANALYTICS_TOKEN, "wb") as f:
+                pickle.dump(creds, f)
         return build("youtube", "v3", credentials=creds)
 
     if not creds:
