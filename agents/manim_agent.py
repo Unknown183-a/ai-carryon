@@ -95,11 +95,14 @@ def render_manim_animation(topic, script, attempt=1):
                 return render_manim_animation(topic, script, attempt + 1)
             return None
 
-        # Find output file
-        for root, dirs, files in os.walk("output/manim"):
-            for f in files:
-                if f.endswith(".mp4") and "VideoScene" in f:
-                    return os.path.join(root, f)
+        # Find output file - search multiple locations
+        search_dirs = ["output/manim", "media", "."]
+        for search_dir in search_dirs:
+            if os.path.isdir(search_dir):
+                for root, dirs, files in os.walk(search_dir):
+                    for f in files:
+                        if f.endswith(".mp4") and "VideoScene" in f:
+                            return os.path.join(root, f)
 
         print("Could not find rendered video")
         return None
