@@ -14,3 +14,4 @@ imageio
 imageio-ffmpeg
 numpy
 soundfile
+streamlit
