@@ -10,21 +10,33 @@ PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 FONT_PATH = "assets/fonts/Arial-Bold.ttf"
 
 def get_thumbnail_image(topic):
-    headers = {"Authorization": PEXELS_API_KEY}
-    url = f"https://api.pexels.com/v1/search?query={topic}&orientation=portrait&per_page=1"
-    response = requests.get(url, headers=headers, timeout=30)
-    response.raise_for_status()
-    data = response.json()
-    if not data.get("photos"):
+    import re
+
+    # Clean topic - remove hashtags and special chars, keep plain words
+    clean_topic = re.sub(r"#\S+", "", topic)
+    clean_topic = re.sub(r"[^a-zA-Z0-9\s]", "", clean_topic).strip()
+    if not clean_topic:
+        clean_topic = "technology"
+
+    try:
+        headers = {"Authorization": PEXELS_API_KEY}
+        url = f"https://api.pexels.com/v1/search?query={clean_topic}&orientation=portrait&per_page=1"
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        if not data.get("photos"):
+            return None
+        image_url = data["photos"][0]["src"]["portrait"]
+        img_response = requests.get(image_url, timeout=30)
+        img_response.raise_for_status()
+        os.makedirs("assets/thumbnails", exist_ok=True)
+        path = "assets/thumbnails/bg.jpg"
+        with open(path, "wb") as f:
+            f.write(img_response.content)
+        return path
+    except Exception as e:
+        print(f"Thumbnail image fetch failed: {e}")
         return None
-    image_url = data["photos"][0]["src"]["portrait"]
-    img_response = requests.get(image_url, timeout=30)
-    img_response.raise_for_status()
-    os.makedirs("assets/thumbnails", exist_ok=True)
-    path = "assets/thumbnails/bg.jpg"
-    with open(path, "wb") as f:
-        f.write(img_response.content)
-    return path
 
 def generate_thumbnail(title, topic):
     os.makedirs("output", exist_ok=True)
