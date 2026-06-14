@@ -92,7 +92,7 @@ def generate_and_upload():
 
 
 # Schedule at 03:30 UTC = 09:00 IST
-schedule.every().day.at("06:19").do(generate_and_upload)
+schedule.every().day.at("06:26").do(generate_and_upload)
 
 if __name__ == "__main__":
     log("Scheduler started!")
