@@ -162,10 +162,15 @@ def create_video():
     vf = build_drawtext_filter(captions)
 
     output_path = "output/video_" + timestamp + ".mp4"
+    # Write filter to file to avoid shell escaping issues
+    filter_file = "/tmp/filter_" + timestamp + ".txt"
+    with open(filter_file, "w") as ff:
+        ff.write(vf)
+    
     cmd = [
         "ffmpeg", "-y",
         "-i", with_audio_path,
-        "-vf", vf,
+        "-filter_script:v", filter_file,
         "-c:v", "libx264",
         "-c:a", "copy",
         "-pix_fmt", "yuv420p",
