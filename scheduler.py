@@ -3,18 +3,26 @@ import time
 import os
 import datetime
 
-os.environ['TZ'] = 'Asia/Kolkata'
-
 LOG_FILE = "output/scheduler_log.txt"
 
 
 def log(message):
     os.makedirs("output", exist_ok=True)
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    entry = f"[{timestamp}] {message}"
+    # Show IST time in logs
+    utc_now = datetime.datetime.utcnow()
+    ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
+    timestamp = ist_now.strftime("%Y-%m-%d %H:%M:%S")
+    entry = f"[{timestamp} IST] {message}"
     print(entry, flush=True)
     with open(LOG_FILE, "a") as f:
         f.write(entry + "\n")
+
+
+def should_run():
+    """Check if current UTC time matches target IST time"""
+    utc_now = datetime.datetime.utcnow()
+    ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
+    return ist_now.hour == 9 and ist_now.minute == 0
 
 
 def generate_and_upload():
@@ -83,12 +91,17 @@ def generate_and_upload():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-schedule.every().day.at("10:40").do(generate_and_upload)
+# Schedule at 03:30 UTC = 09:00 IST
+schedule.every().day.at("03:30").do(generate_and_upload)
 
 if __name__ == "__main__":
     log("Scheduler started!")
-    log(f"Timezone: Asia/Kolkata (IST)")
-    log(f"Next run: {schedule.next_run()}")
+    log("Daily post time: 09:00 AM IST (03:30 UTC)")
+
+    utc_now = datetime.datetime.utcnow()
+    ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
+    log(f"Current IST time: {ist_now.strftime('%H:%M:%S')}")
+    log(f"Next run (UTC): {schedule.next_run()}")
 
     while True:
         schedule.run_pending()
