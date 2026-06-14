@@ -83,7 +83,7 @@ def generate_and_upload():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-schedule.every().day.at("09:00").do(generate_and_upload)
+schedule.every().day.at("10:40").do(generate_and_upload)
 
 if __name__ == "__main__":
     log("Scheduler started!")
