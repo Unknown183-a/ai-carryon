@@ -155,7 +155,7 @@ def create_video():
         if word:
             frame = draw_word_on_frame(frame, word)
 
-        frame.save("output/frames/" + str(frame_idx).zfill(6) + ".jpg", "JPEG", quality=90)
+        frame.save("output/frames/" + str(frame_idx).zfill(6) + ".jpg", "JPEG", quality=80)
 
     print("Creating video from frames...")
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -168,6 +168,8 @@ def create_video():
         "-i", "output/frames/%06d.jpg",
         "-i", audio_path,
         "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-threads", "1",
         "-c:a", "aac",
         "-pix_fmt", "yuv420p",
         "-shortest",
