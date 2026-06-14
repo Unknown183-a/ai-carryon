@@ -21,17 +21,19 @@ STRICT RULES — violations will cause crashes:
 - ALWAYS start with: from manim import *
 - Class MUST inherit Scene: class VideoScene(Scene):
 - Use dark background: self.camera.background_color = "#0a0a0a"
-- ONLY use: Write, FadeIn, FadeOut, Create
-- ONLY use objects: Text, Circle, Rectangle, Arrow, VGroup, Line
-- NO MathTex, NO Tex, NO LaTeX math
-- NO emojis anywhere
+- NO Text() objects at all — captions are handled separately
+- ONLY use: FadeIn, FadeOut, Create, GrowFromCenter
+- ONLY use visual objects: Circle, Rectangle, Arrow, Line, Dot, Square, Star, VGroup
+- Use colors and shapes to visually represent the topic (e.g. for AI: connected dots/nodes, for coding: rectangles representing code blocks)
+- NO MathTex, NO Tex, NO LaTeX, NO Text
 - Colors: YELLOW, WHITE, GREEN, BLUE, RED, ORANGE only
 - shift() takes ONLY direction: .shift(DOWN) or .shift(UP*2)
 - NO buff in shift(): WRONG: .shift(DOWN, buff=1) RIGHT: .shift(DOWN)
 - animate needs an animation: WRONG: self.play(group.animate) RIGHT: self.play(group.animate.shift(DOWN))
 - Always position objects BEFORE playing them
-- Keep simple — max 12 animations total
+- Keep simple — max 10 animations total
 - Total duration: 30-40 seconds
+- Make it look like a dynamic abstract tech background
 
 Return ONLY raw Python code, absolutely nothing else.
 No markdown, no backticks, no explanation.
