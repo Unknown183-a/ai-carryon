@@ -4,11 +4,11 @@ import os
 import datetime
 
 LOG_FILE = "output/scheduler_log.txt"
+POSTED_FILE = "output/posted_topics.txt"
 
 
 def log(message):
     os.makedirs("output", exist_ok=True)
-    # Show IST time in logs
     utc_now = datetime.datetime.utcnow()
     ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
     timestamp = ist_now.strftime("%Y-%m-%d %H:%M:%S")
@@ -18,11 +18,53 @@ def log(message):
         f.write(entry + "\n")
 
 
-def should_run():
-    """Check if current UTC time matches target IST time"""
-    utc_now = datetime.datetime.utcnow()
-    ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
-    return ist_now.hour == 9 and ist_now.minute == 0
+def get_recent_topics(hours=24):
+    """Return topics posted within the last `hours` hours"""
+    if not os.path.exists(POSTED_FILE):
+        return []
+
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
+    recent = []
+
+    with open(POSTED_FILE, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or "|" not in line:
+                continue
+            ts_str, topic = line.split("|", 1)
+            try:
+                ts = datetime.datetime.fromisoformat(ts_str)
+            except ValueError:
+                continue
+            if ts >= cutoff:
+                recent.append(topic.lower().strip())
+
+    return recent
+
+
+def mark_posted(topic):
+    os.makedirs("output", exist_ok=True)
+    ts = datetime.datetime.utcnow().isoformat()
+    with open(POSTED_FILE, "a") as f:
+        f.write(f"{ts}|{topic}\n")
+
+
+def get_fresh_trending_topic(region_code="US", max_attempts=5):
+    """Get a trending topic not posted in the last 24 hours"""
+    from agents.trending_agent import get_trending_topic
+
+    recent_topics = get_recent_topics(hours=24)
+
+    for attempt in range(max_attempts):
+        topic = get_trending_topic(region_code=region_code)
+
+        if topic.lower().strip() not in recent_topics:
+            return topic
+
+        log(f"Topic already posted in last 24h, retrying ({attempt+1}/{max_attempts}): {topic}")
+
+    # Exhausted retries — use the last topic anyway with a suffix to keep content unique
+    return topic + " - extra"
 
 
 def generate_and_upload():
@@ -38,10 +80,9 @@ def generate_and_upload():
         from agents.caption_agent import create_srt
         from agents.video_agent import create_video
         from agents.upload_agent import upload_video
-        from agents.trending_agent import get_trending_topic
 
         log("Fetching trending YouTube topic...")
-        topic = get_trending_topic(region_code="US")
+        topic = get_fresh_trending_topic(region_code="US")
         log(f"Trending topic: {topic}")
 
         log("Researching...")
@@ -83,6 +124,7 @@ def generate_and_upload():
             thumbnail_path=thumbnail_image
         )
 
+        mark_posted(topic)
         log(f"SUCCESS: {video_url}")
 
     except Exception as e:
@@ -91,12 +133,12 @@ def generate_and_upload():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-# Schedule at 03:30 UTC = 09:00 IST
+# Run every hour
 schedule.every(1).hours.do(generate_and_upload)
 
 if __name__ == "__main__":
     log("Scheduler started!")
-    log("Daily post time: 09:00 AM IST (03:30 UTC)")
+    log("Schedule: every 1 hour")
 
     utc_now = datetime.datetime.utcnow()
     ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
