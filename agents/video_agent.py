@@ -90,29 +90,52 @@ def apply_ken_burns(img, frame_idx, total_frames, direction="zoom_in"):
     cropped = img.crop((left, top, left + min(new_w, w), top + min(new_h, h)))
     return cropped.resize((SHORTS_WIDTH, SHORTS_HEIGHT), Image.LANCZOS)
 
-def draw_caption(frame_img, word, font_path=FONT_PATH):
+def draw_caption(frame_img, text, font_path=FONT_PATH):
     draw = ImageDraw.Draw(frame_img)
-    word = word.upper()
+    text = text.upper()
     max_width = int(SHORTS_WIDTH * 0.88)
-    font_size = 90
+    font_size = 95
     font = ImageFont.load_default()
     while font_size > 30:
         try:
             font = ImageFont.truetype(font_path, font_size)
-            bbox = draw.textbbox((0, 0), word, font=font)
+            bbox = draw.textbbox((0, 0), text, font=font)
             if (bbox[2] - bbox[0]) <= max_width:
                 break
         except:
             break
         font_size -= 5
-    bbox = draw.textbbox((0, 0), word, font=font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    x = (SHORTS_WIDTH - text_w) // 2
-    y = int(SHORTS_HEIGHT * 0.62) - text_h // 2
-    for dx, dy in [(-4,-4),(4,-4),(-4,4),(4,4),(-6,0),(6,0),(0,-6),(0,6)]:
-        draw.text((x+dx, y+dy), word, font=font, fill=(0, 0, 0))
-    draw.text((x, y), word, font=font, fill=(255, 220, 0))
+
+    # Word wrap if still too wide
+    words = text.split()
+    lines = []
+    current = ""
+    for w in words:
+        test = (current + " " + w).strip()
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] > max_width and current:
+            lines.append(current)
+            current = w
+        else:
+            current = test
+    if current:
+        lines.append(current)
+
+    line_height = font_size + 10
+    total_h = len(lines) * line_height
+    y = int(SHORTS_HEIGHT * 0.65) - total_h // 2
+
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        text_w = bbox[2] - bbox[0]
+        x = (SHORTS_WIDTH - text_w) // 2
+        # Black shadow
+        for dx, dy in [(-4,-4),(4,-4),(-4,4),(4,4),(-6,0),(6,0),(0,-6),(0,6)]:
+            draw.text((x+dx, y+dy), line, font=font, fill=(0, 0, 0))
+        # Yellow text
+        draw.text((x, y), line, font=font, fill=(255, 220, 0))
+        y += line_height
+
     return frame_img
 
 def extract_manim_frames(manim_path, total_frames, fps):
