@@ -124,8 +124,17 @@ def generate_and_upload():
             thumbnail_path=thumbnail_image
         )
 
+        log("Posting to Instagram Reels...")
+        try:
+            from agents.instagram_agent import post_reel
+            caption = f"{seo['title']}\n\n{seo['description']}\n\n{' '.join(['#' + h for h in seo['hashtags']])}"
+            insta_id = post_reel(video_file, caption)
+            log(f"Instagram posted! ID: {insta_id}")
+        except Exception as insta_err:
+            log(f"Instagram post failed (YouTube still uploaded): {insta_err}")
+
         mark_posted(topic)
-        log(f"SUCCESS: {video_url}")
+        log(f"SUCCESS: YouTube: {video_url}")
 
     except Exception as e:
         import traceback
