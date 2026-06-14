@@ -55,7 +55,9 @@ def generate_backgrounds(topic, script, num_images=4):
     PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
     if not PEXELS_API_KEY:
         return [], ["PEXELS_API_KEY not set"]
-    queries = generate_image_prompts(topic, script, num_images)
+    # Clean topic - remove hashtags before generating prompts
+    clean_topic = topic.replace("#", "").split()[0] if topic else "technology"
+    queries = generate_image_prompts(clean_topic, script, num_images)
     image_paths = []
     errors = []
     for i, query in enumerate(queries):
