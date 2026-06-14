@@ -1,9 +1,5 @@
 # agents/pipeline.py
-from langchain_core.runnables import RunnableLambda, RunnableSequence
-from langchain_groq import ChatGroq
-import os
-
-# ── Step functions ──────────────────────────────────────────────
+from langchain_core.runnables import RunnableLambda
 
 def step_research(inputs: dict) -> dict:
     from agents.research_agent import research
@@ -26,17 +22,13 @@ def step_seo(inputs: dict) -> dict:
 def step_thumbnail(inputs: dict) -> dict:
     from agents.thumbnail_generator import generate_thumbnail
     print("🖼️  Generating thumbnail...")
-    inputs["thumbnail"] = generate_thumbnail(
-        inputs["seo"]["title"], inputs["topic"]
-    )
+    inputs["thumbnail"] = generate_thumbnail(inputs["seo"]["title"], inputs["topic"])
     return inputs
 
 def step_images(inputs: dict) -> dict:
     from agents.image_agent import generate_backgrounds
     print("🌆 Fetching dark tech images...")
-    paths, errors = generate_backgrounds(
-        inputs["topic"], inputs["script"], num_images=4
-    )
+    paths, errors = generate_backgrounds(inputs["topic"], inputs["script"], num_images=4)
     if not paths:
         raise ValueError(f"Image generation failed: {errors}")
     inputs["image_paths"] = paths
@@ -76,8 +68,6 @@ def step_upload_youtube(inputs: dict) -> dict:
     print(f"✅ YouTube: {video_url}")
     return inputs
 
-# ── Build pipeline ───────────────────────────────────────────────
-
 def build_pipeline(upload=True):
     steps = [
         RunnableLambda(step_research),
@@ -89,19 +79,14 @@ def build_pipeline(upload=True):
         RunnableLambda(step_captions),
         RunnableLambda(step_video),
     ]
-
     if upload:
         steps.append(RunnableLambda(step_upload_youtube))
 
     pipeline = steps[0]
     for step in steps[1:]:
         pipeline = pipeline | step
-
     return pipeline
-
-# ── Run pipeline ─────────────────────────────────────────────────
 
 def run_pipeline(topic: str, upload: bool = True) -> dict:
     pipeline = build_pipeline(upload=upload)
-    result = pipeline.invoke({"topic": topic})
-    return result
+    return pipeline.invoke({"topic": topic})
