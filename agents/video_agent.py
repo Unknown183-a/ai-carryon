@@ -120,7 +120,7 @@ def build_drawtext_filter(captions):
             + ":borderw=5"
             + ":bordercolor=black"
             + ":x=(w-text_w)/2"
-            + ":y=" + y
+            + ":y=1152"
             + ":enable='between(t," + start_s + "," + end_s + ")'"
         )
         parts.append(part)
@@ -162,15 +162,10 @@ def create_video():
     vf = build_drawtext_filter(captions)
 
     output_path = "output/video_" + timestamp + ".mp4"
-    # Write filter to file to avoid shell escaping issues
-    filter_file = "/tmp/filter_" + timestamp + ".txt"
-    with open(filter_file, "w") as ff:
-        ff.write(vf)
-    
     cmd = [
         "ffmpeg", "-y",
         "-i", with_audio_path,
-        "-filter_script:v", filter_file,
+        "-vf", vf,
         "-c:v", "libx264",
         "-c:a", "copy",
         "-pix_fmt", "yuv420p",
