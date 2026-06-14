@@ -112,6 +112,21 @@ if not st.session_state["authenticated"]:
             st.error("Wrong password!")
     st.stop()
 
+# Password protection
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    st.title("🔐 AI CarryON - Login")
+    password = st.text_input("Enter Password", type="password")
+    if st.button("Login"):
+        if password == os.getenv("APP_PASSWORD", "aicarryon2026"):
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Wrong password!")
+    st.stop()
+
 # Sidebar navigation
 page = st.sidebar.selectbox("📂 Navigation", ["🎬 Generate Video", "📊 Analytics", "🕵️ Trending Spy"])
 
