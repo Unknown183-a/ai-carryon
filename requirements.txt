@@ -13,3 +13,4 @@ schedule
 imageio
 imageio-ffmpeg
 numpy
+edge-tts
