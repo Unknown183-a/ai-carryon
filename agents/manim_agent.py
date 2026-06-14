@@ -18,33 +18,48 @@ Topic: {topic}
 Script summary: {script[:300]}
 
 STRICT RULES — violations will cause crashes:
-- Class name must be EXACTLY: VideoScene
+- ALWAYS start with: from manim import *
+- Class MUST inherit Scene: class VideoScene(Scene):
 - Use dark background: self.camera.background_color = "#0a0a0a"
-- Total animation duration: 45-55 seconds
-- ONLY use these animations: Write, FadeIn, FadeOut, Create
-- ONLY use these objects: Text, Circle, Rectangle, Arrow, VGroup, Line
+- ONLY use: Write, FadeIn, FadeOut, Create
+- ONLY use objects: Text, Circle, Rectangle, Arrow, VGroup, Line
 - NO MathTex, NO Tex, NO LaTeX math
 - NO emojis anywhere
 - Colors: YELLOW, WHITE, GREEN, BLUE, RED, ORANGE only
-- shift() takes ONLY direction: .shift(DOWN) or .shift(UP*2) — NO buff argument
-- next_to() is fine: .next_to(obj, DOWN, buff=0.5)
-- animate.shift() takes ONLY direction: group.animate.shift(DOWN*2) — NO buff
+- shift() takes ONLY direction: .shift(DOWN) or .shift(UP*2)
+- NO buff in shift(): WRONG: .shift(DOWN, buff=1) RIGHT: .shift(DOWN)
+- animate needs an animation: WRONG: self.play(group.animate) RIGHT: self.play(group.animate.shift(DOWN))
 - Always position objects BEFORE playing them
-- Keep it simple — max 15 animations total
+- Keep simple — max 12 animations total
+- Total duration: 30-40 seconds
 
-Return ONLY the Python code, no explanation, no markdown backticks.
+Return ONLY raw Python code, absolutely nothing else.
+No markdown, no backticks, no explanation.
+Start directly with: from manim import *
 """
 
     response = llm.invoke(prompt).content
     code = response.strip()
+
+    # Remove markdown
     code = re.sub(r'^```python\n?', '', code)
     code = re.sub(r'^```\n?', '', code)
     code = re.sub(r'\n?```$', '', code)
+    code = code.strip()
 
-    # Auto-fix common Groq mistakes
-    # Fix shift with buff argument
+    # Auto-fix 1: Add missing import
+    if "from manim import" not in code:
+        code = "from manim import *\n\n" + code
+
+    # Auto-fix 2: Fix class missing (Scene)
+    code = re.sub(r'class VideoScene\s*:', 'class VideoScene(Scene):', code)
+
+    # Auto-fix 3: Fix shift with buff
     code = re.sub(r'\.shift\(([^,)]+),\s*buff=[^)]+\)', r'.shift(\1)', code)
     code = re.sub(r'animate\.shift\(([^,)]+),\s*buff=[^)]+\)', r'animate.shift(\1)', code)
+
+    # Auto-fix 4: Fix bare self.play(group.animate)
+    code = re.sub(r'self\.play\((\w+)\.animate\)', r'# removed bad animate call', code)
 
     return code.strip()
 
@@ -75,9 +90,7 @@ def render_manim_animation(topic, script, attempt=1):
         )
 
         if result.returncode != 0:
-            print(f"Manim error (attempt {attempt}):\n{result.stderr[-500:]}")
-
-            # Retry once with simpler prompt
+            print(f"Manim error (attempt {attempt}):\n{result.stderr[-800:]}")
             if attempt < 3:
                 return render_manim_animation(topic, script, attempt + 1)
             return None
