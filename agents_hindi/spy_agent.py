@@ -4,19 +4,10 @@ import json
 import time
 from datetime import datetime, timedelta, timezone
 
-HINDI_CHANNELS = {
-    'Technical Guruji': 'UCkadhFcMFsvfZDSBVGcJiZg',
-    'TechBurner': 'UCwfaAHy4zQUb2APNOGXUCCA',
-    'Trakin Tech': 'UCnUSMmloOB6MKxfqygPJfoA',
-    'Geeky Ranjit': 'UCHXeVVdHnfETFBB0WN1MHUw',
-    'Technical Dost': 'UCu3GNxPgKrq8Gg3gYqGQwkw',
-    'GadgetsToUse': 'UCbdp41UaYDKVlqhDqQ1UWEQ',
-}
-
-def get_hindi_trending_topics(max_per_channel=5):
+def get_hindi_trending_topics(max_results=20):
     CACHE_FILE = "output/spy_cache_hindi.json"
 
-    # Cache valid for 2 hours only
+    # Cache valid for 2 hours
     if os.path.exists(CACHE_FILE):
         with open(CACHE_FILE) as f:
             cache = json.load(f)
@@ -27,32 +18,52 @@ def get_hindi_trending_topics(max_per_channel=5):
     try:
         from agents.analytics_agent import authenticate
         yt = authenticate()
-        trending = []
 
-        # Last 24 hours timestamp in RFC 3339 format
         since_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
 
-        for channel_name, channel_id in HINDI_CHANNELS.items():
+        trending = []
+
+        # Search Hindi tech Shorts directly — no hardcoded channels
+        search_queries = [
+            "hindi tech shorts",
+            "hindi technology facts",
+            "hindi ai facts shorts",
+            "tech facts hindi viral",
+            "hindi gadgets shorts",
+            "technology hindi shorts viral",
+            "hindi science facts shorts",
+        ]
+
+        seen_ids = set()
+
+        for query in search_queries:
             try:
-                # Search only videos published in last 24 hours
                 results = yt.search().list(
                     part='snippet',
-                    channelId=channel_id,
+                    q=query,
                     type='video',
                     videoDuration='short',
-                    order='date',           # Most recent first
-                    publishedAfter=since_24h,  # Last 24 hours only
-                    maxResults=max_per_channel
+                    order='viewCount',
+                    relevanceLanguage='hi',
+                    regionCode='IN',
+                    publishedAfter=since_24h,
+                    maxResults=5
                 ).execute()
 
-                video_ids = [item['id']['videoId'] for item in results['items']
-                            if item['id'].get('videoId')]
+                video_ids = [
+                    item['id']['videoId']
+                    for item in results['items']
+                    if item['id'].get('videoId')
+                    and item['id']['videoId'] not in seen_ids
+                ]
 
                 if not video_ids:
-                    print(f"{channel_name}: No videos in last 24 hours")
                     continue
+
+                for vid in video_ids:
+                    seen_ids.add(vid)
 
                 stats = yt.videos().list(
                     part='statistics,snippet',
@@ -63,19 +74,28 @@ def get_hindi_trending_topics(max_per_channel=5):
                     snippet = item['snippet']
                     published = snippet['publishedAt']
 
-                    # Double-check published in last 24 hours
+                    # Verify last 24 hours
                     pub_time = datetime.fromisoformat(
                         published.replace("Z", "+00:00")
                     )
                     if pub_time < datetime.now(timezone.utc) - timedelta(hours=24):
                         continue
 
+                    # Filter: must have Hindi audio or Indian channel
+                    lang = snippet.get('defaultAudioLanguage', '')
+                    channel = snippet.get('channelTitle', '')
+                    views = int(item['statistics'].get('viewCount', 0))
+
+                    # Skip very low quality videos
+                    if views < 1000:
+                        continue
+
                     trending.append({
-                        'channel': channel_name,
+                        'channel': channel,
                         'title': snippet['title'],
-                        'description': snippet.get('description', '')[:200],
-                        'tags': snippet.get('tags', [])[:10],
-                        'views': int(item['statistics'].get('viewCount', 0)),
+                        'description': snippet.get('description', '')[:300],
+                        'tags': snippet.get('tags', [])[:15],
+                        'views': views,
                         'likes': int(item['statistics'].get('likeCount', 0)),
                         'published': published[:10],
                         'published_time': published,
@@ -84,16 +104,77 @@ def get_hindi_trending_topics(max_per_channel=5):
                     })
 
             except Exception as e:
-                print(f"Error fetching {channel_name}: {e}")
+                print(f"Query '{query}' error: {e}")
                 continue
 
-        # Sort by views (most viral first)
+        # Sort by views
         result = sorted(trending, key=lambda x: x['views'], reverse=True)
-        print(f"Found {len(result)} Hindi videos from last 24 hours")
+
+        # Remove duplicates by topic
+        seen_topics = set()
+        unique_result = []
+        for r in result:
+            if r['topic'] not in seen_topics:
+                seen_topics.add(r['topic'])
+                unique_result.append(r)
+
+        result = unique_result[:max_results]
+        print(f"Found {len(result)} Hindi trending videos from last 24 hours")
 
     except Exception as e:
         print(f"API error: {e}")
         result = []
+
+    # Fallback if nothing found in 24h — try last 7 days
+    if not result:
+        print("24h mein kuch nahi mila, 7 days try kar raha hai...")
+        try:
+            from agents.analytics_agent import authenticate
+            yt = authenticate()
+            since_7d = (datetime.now(timezone.utc) - timedelta(days=7)).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+            results = yt.search().list(
+                part='snippet',
+                q='hindi tech shorts viral',
+                type='video',
+                videoDuration='short',
+                order='viewCount',
+                relevanceLanguage='hi',
+                regionCode='IN',
+                publishedAfter=since_7d,
+                maxResults=10
+            ).execute()
+
+            video_ids = [item['id']['videoId'] for item in results['items']
+                        if item['id'].get('videoId')]
+
+            if video_ids:
+                stats = yt.videos().list(
+                    part='statistics,snippet',
+                    id=','.join(video_ids)
+                ).execute()
+
+                for item in stats['items']:
+                    snippet = item['snippet']
+                    result.append({
+                        'channel': snippet.get('channelTitle', ''),
+                        'title': snippet['title'],
+                        'description': snippet.get('description', '')[:300],
+                        'tags': snippet.get('tags', [])[:15],
+                        'views': int(item['statistics'].get('viewCount', 0)),
+                        'likes': int(item['statistics'].get('likeCount', 0)),
+                        'published': snippet['publishedAt'][:10],
+                        'published_time': snippet['publishedAt'],
+                        'url': f"https://youtube.com/watch?v={item['id']}",
+                        'topic': snippet['title'].split('#')[0].strip()
+                    })
+
+                result = sorted(result, key=lambda x: x['views'], reverse=True)[:max_results]
+                print(f"7-day fallback: {len(result)} videos mili")
+
+        except Exception as e:
+            print(f"7-day fallback error: {e}")
 
     # Save cache
     os.makedirs("output", exist_ok=True)
@@ -104,10 +185,9 @@ def get_hindi_trending_topics(max_per_channel=5):
 
 
 def get_best_hindi_topic():
-    """Get the single best trending Hindi topic for scheduler"""
+    """Get single best trending Hindi topic for scheduler"""
     topics = get_hindi_trending_topics()
     if topics:
-        # Return the most viewed video from last 24 hours
         best = topics[0]
         print(f"Best Hindi topic: {best['topic']} ({best['views']:,} views)")
         return best
