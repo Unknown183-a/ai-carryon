@@ -298,11 +298,11 @@ with hindi_tab:
             for i, t in enumerate(topics):
                 with st.container():
                     c1, c2, c3, c4, c5 = st.columns([4, 1, 1, 1, 2])
-                    c1.markdown(f"[{t['title']}]({t['url']})")
-                    c2.markdown(f"📺 **{t['channel']}**")
+                    c1.markdown(f"**{t['title']}**")
+                    c2.markdown(f"📺 {t['channel']}")
                     c3.markdown(f"👁️ {t['views']:,}")
-                    c4.markdown(f"👍 {t['likes']:,}")
-                    if c5.button("🎬 Ye Video Banao", key=f"hindi_{i}_{t['topic'][:20]}"):
+                    c4.markdown(f"🔥 {t.get('why_trending', 'Viral')[:30]}")
+                    if c5.button("🎬 Banao", key=f"hindi_{i}_{t['topic'][:20]}"):
                         st.session_state["hindi_topic"] = t["topic"]
                         st.session_state["hindi_competitor"] = t
                         st.session_state["hindi_go_generate"] = True
