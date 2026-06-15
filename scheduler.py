@@ -145,9 +145,28 @@ def generate_and_upload():
 # Run every hour
 schedule.every(5).hours.do(generate_and_upload)
 
+
+def track_views_job():
+    log("=== Tracking video view history ===")
+    try:
+        from agents.view_tracker_agent import track_views
+        history = track_views()
+        log(f"Tracked {len(history)} videos")
+    except Exception as e:
+        import traceback
+        log(f"ERROR (view tracking): {str(e)}")
+        log(f"TRACEBACK: {traceback.format_exc()}")
+
+
+schedule.every(1).hours.do(track_views_job)
+
 if __name__ == "__main__":
     log("Scheduler started!")
     log("Schedule: every 5 hours")
+    log("View tracking: every 1 hour")
+
+    # Run an initial view-tracking snapshot at startup
+    track_views_job()
 
     utc_now = datetime.datetime.utcnow()
     ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
