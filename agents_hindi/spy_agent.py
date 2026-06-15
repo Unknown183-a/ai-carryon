@@ -2,9 +2,15 @@
 import os
 import json
 import time
-from datetime import datetime, timedelta, timezone
+import re
+from langchain_groq import ChatGroq
+from dotenv import load_dotenv
 
-def get_hindi_trending_topics(max_results=20):
+load_dotenv()
+
+llm = ChatGroq(model="llama-3.3-70b-versatile")
+
+def get_hindi_trending_topics():
     CACHE_FILE = "output/spy_cache_hindi.json"
 
     # Cache valid for 2 hours
@@ -15,166 +21,152 @@ def get_hindi_trending_topics(max_results=20):
             print("Using cached Hindi trending topics")
             return cache["topics"]
 
-    try:
-        from agents.analytics_agent import authenticate
-        yt = authenticate()
+    from groq import Groq
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-        since_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+    # Use Groq with web search to find trending Hindi tech Shorts
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "user",
+                "content": """Search the web and find the TOP 10 trending Hindi tech YouTube Shorts 
+                from the last 24 hours. 
 
-        trending = []
+                Look for:
+                - Hindi tech YouTube Shorts that went viral today
+                - Indian tech channels posting trending Shorts
+                - Topics like AI, smartphones, gadgets, apps in Hindi
 
-        # Search Hindi tech Shorts directly — no hardcoded channels
-        search_queries = [
-            "hindi tech shorts",
-            "hindi technology facts",
-            "hindi ai facts shorts",
-            "tech facts hindi viral",
-            "hindi gadgets shorts",
-            "technology hindi shorts viral",
-            "hindi science facts shorts",
-        ]
+                For each video return:
+                1. Channel name
+                2. Video title
+                3. Topic (in English, 5-8 words)
+                4. Why it's trending
+                5. Suggested tags (10 Hindi+English tags)
+                6. Suggested description (50 words in Hindi)
 
-        seen_ids = set()
-
-        for query in search_queries:
-            try:
-                results = yt.search().list(
-                    part='snippet',
-                    q=query,
-                    type='video',
-                    videoDuration='short',
-                    order='viewCount',
-                    relevanceLanguage='hi',
-                    regionCode='IN',
-                    publishedAfter=since_24h,
-                    maxResults=5
-                ).execute()
-
-                video_ids = [
-                    item['id']['videoId']
-                    for item in results['items']
-                    if item['id'].get('videoId')
-                    and item['id']['videoId'] not in seen_ids
+                Return as JSON array:
+                [
+                  {
+                    "channel": "channel name",
+                    "title": "original video title",
+                    "topic": "topic in english",
+                    "why_trending": "reason",
+                    "tags": ["tag1", "tag2"],
+                    "description": "hindi description",
+                    "views": 50000,
+                    "url": "youtube url if known"
+                  }
                 ]
+                Return ONLY the JSON array, nothing else."""
+            }
+        ],
+        tools=[{
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": "Search the web for current information",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query"
+                        }
+                    },
+                    "required": ["query"]
+                }
+            }
+        }],
+        tool_choice="auto",
+        temperature=0.3
+    )
 
-                if not video_ids:
-                    continue
+    # Get the response content
+    content = response.choices[0].message.content or ""
+    
+    # Clean JSON
+    content = content.strip()
+    content = re.sub(r'^```json\n?', '', content)
+    content = re.sub(r'^```\n?', '', content)
+    content = re.sub(r'\n?```$', '', content)
 
-                for vid in video_ids:
-                    seen_ids.add(vid)
+    try:
+        topics = json.loads(content)
+        if not isinstance(topics, list):
+            topics = []
+    except:
+        # If JSON fails, use Groq without tools to generate trending topics
+        topics = []
 
-                stats = yt.videos().list(
-                    part='statistics,snippet',
-                    id=','.join(video_ids)
-                ).execute()
-
-                for item in stats['items']:
-                    snippet = item['snippet']
-                    published = snippet['publishedAt']
-
-                    # Verify last 24 hours
-                    pub_time = datetime.fromisoformat(
-                        published.replace("Z", "+00:00")
-                    )
-                    if pub_time < datetime.now(timezone.utc) - timedelta(hours=24):
-                        continue
-
-                    # Filter: must have Hindi audio or Indian channel
-                    lang = snippet.get('defaultAudioLanguage', '')
-                    channel = snippet.get('channelTitle', '')
-                    views = int(item['statistics'].get('viewCount', 0))
-
-                    # Skip very low quality videos
-                    if views < 1000:
-                        continue
-
-                    trending.append({
-                        'channel': channel,
-                        'title': snippet['title'],
-                        'description': snippet.get('description', '')[:300],
-                        'tags': snippet.get('tags', [])[:15],
-                        'views': views,
-                        'likes': int(item['statistics'].get('likeCount', 0)),
-                        'published': published[:10],
-                        'published_time': published,
-                        'url': f"https://youtube.com/watch?v={item['id']}",
-                        'topic': snippet['title'].split('#')[0].strip()
-                    })
-
-            except Exception as e:
-                print(f"Query '{query}' error: {e}")
-                continue
-
-        # Sort by views
-        result = sorted(trending, key=lambda x: x['views'], reverse=True)
-
-        # Remove duplicates by topic
-        seen_topics = set()
-        unique_result = []
-        for r in result:
-            if r['topic'] not in seen_topics:
-                seen_topics.add(r['topic'])
-                unique_result.append(r)
-
-        result = unique_result[:max_results]
-        print(f"Found {len(result)} Hindi trending videos from last 24 hours")
-
-    except Exception as e:
-        print(f"API error: {e}")
-        result = []
-
-    # Fallback if nothing found in 24h — try last 7 days
-    if not result:
-        print("24h mein kuch nahi mila, 7 days try kar raha hai...")
+    # If web search didn't work, use Groq knowledge
+    if not topics:
+        print("Web search failed, using Groq knowledge...")
+        response2 = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "user",
+                    "content": """Based on your knowledge, what are the TOP 10 most trending 
+                    Hindi tech topics RIGHT NOW in India for YouTube Shorts?
+                    
+                    Think about:
+                    - Latest smartphone launches in India
+                    - AI tools Indians are using
+                    - Latest apps trending in India
+                    - Tech news from last few days in India
+                    - Viral tech facts in Hindi
+                    
+                    Return as JSON array:
+                    [
+                      {
+                        "channel": "suggested channel type",
+                        "title": "catchy hindi title for this topic",
+                        "topic": "topic in english",
+                        "why_trending": "reason its trending in India",
+                        "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8", "tag9", "tag10"],
+                        "description": "50 word hindi description for youtube",
+                        "views": 100000,
+                        "url": "https://youtube.com"
+                      }
+                    ]
+                    Return ONLY valid JSON array, nothing else."""
+                }
+            ],
+            temperature=0.5
+        )
+        
+        content2 = response2.choices[0].message.content or ""
+        content2 = content2.strip()
+        content2 = re.sub(r'^```json\n?', '', content2)
+        content2 = re.sub(r'^```\n?', '', content2)
+        content2 = re.sub(r'\n?```$', '', content2)
+        
         try:
-            from agents.analytics_agent import authenticate
-            yt = authenticate()
-            since_7d = (datetime.now(timezone.utc) - timedelta(days=7)).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            )
-            results = yt.search().list(
-                part='snippet',
-                q='hindi tech shorts viral',
-                type='video',
-                videoDuration='short',
-                order='viewCount',
-                relevanceLanguage='hi',
-                regionCode='IN',
-                publishedAfter=since_7d,
-                maxResults=10
-            ).execute()
+            topics = json.loads(content2)
+            if not isinstance(topics, list):
+                topics = []
+        except:
+            topics = []
 
-            video_ids = [item['id']['videoId'] for item in results['items']
-                        if item['id'].get('videoId')]
+    # Normalize format
+    result = []
+    for t in topics:
+        result.append({
+            'channel': t.get('channel', 'Hindi Tech'),
+            'title': t.get('title', t.get('topic', '')),
+            'topic': t.get('topic', ''),
+            'why_trending': t.get('why_trending', ''),
+            'tags': t.get('tags', ['hindi', 'tech', 'shorts', 'viral', 'india']),
+            'description': t.get('description', ''),
+            'views': t.get('views', 0),
+            'likes': t.get('likes', 0),
+            'published': t.get('published', 'Today'),
+            'url': t.get('url', 'https://youtube.com'),
+        })
 
-            if video_ids:
-                stats = yt.videos().list(
-                    part='statistics,snippet',
-                    id=','.join(video_ids)
-                ).execute()
-
-                for item in stats['items']:
-                    snippet = item['snippet']
-                    result.append({
-                        'channel': snippet.get('channelTitle', ''),
-                        'title': snippet['title'],
-                        'description': snippet.get('description', '')[:300],
-                        'tags': snippet.get('tags', [])[:15],
-                        'views': int(item['statistics'].get('viewCount', 0)),
-                        'likes': int(item['statistics'].get('likeCount', 0)),
-                        'published': snippet['publishedAt'][:10],
-                        'published_time': snippet['publishedAt'],
-                        'url': f"https://youtube.com/watch?v={item['id']}",
-                        'topic': snippet['title'].split('#')[0].strip()
-                    })
-
-                result = sorted(result, key=lambda x: x['views'], reverse=True)[:max_results]
-                print(f"7-day fallback: {len(result)} videos mili")
-
-        except Exception as e:
-            print(f"7-day fallback error: {e}")
+    print(f"Found {len(result)} Hindi trending topics via Groq")
 
     # Save cache
     os.makedirs("output", exist_ok=True)
@@ -189,6 +181,6 @@ def get_best_hindi_topic():
     topics = get_hindi_trending_topics()
     if topics:
         best = topics[0]
-        print(f"Best Hindi topic: {best['topic']} ({best['views']:,} views)")
+        print(f"Best Hindi topic: {best['topic']}")
         return best
     return None

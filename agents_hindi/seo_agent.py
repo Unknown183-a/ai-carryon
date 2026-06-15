@@ -8,42 +8,42 @@ load_dotenv()
 llm = ChatGroq(model="llama-3.3-70b-versatile")
 
 def generate_seo(topic, script, competitor_data=None):
-    # Build competitor context if available
     competitor_context = ""
     if competitor_data:
         competitor_context = f"""
-    Competitor inspiration (sirf reference ke liye, copy mat karo):
-    - Channel: {competitor_data.get('channel', '')}
-    - Unka title: {competitor_data.get('title', '')}
-    - Unke tags: {', '.join(competitor_data.get('tags', []))}
-    - Unka description: {competitor_data.get('description', '')}
+Trending reference (inspiration only - rewrite everything originally):
+- Trending topic: {competitor_data.get('topic', '')}
+- Why trending: {competitor_data.get('why_trending', '')}
+- Suggested tags: {', '.join(competitor_data.get('tags', []))}
+- Suggested description: {competitor_data.get('description', '')}
 
-    In se INSPIRATION lo but APNA ORIGINAL content banao.
-    Same words mat use karo — sirf topic aur angle ka idea lo.
-    """
+In tags aur description se INSPIRATION lo.
+Exact words COPY mat karo — copyright claim aayega.
+Apne original words mein likho same topic par.
+"""
 
     prompt = f"""
-    Is YouTube Shorts video ke liye Hindi SEO content banao.
+Is YouTube Shorts video ke liye ORIGINAL Hindi SEO banao.
 
-    Topic: {topic}
-    Script: {script[:300]}
-    {competitor_context}
+Topic: {topic}
+Script: {script[:300]}
+{competitor_context}
 
-    Rules:
-    - Title pure Hindi ya Hinglish mein ho (max 60 chars)
-    - Title curiosity jagaye — "ye sun ke hairan ho jaoge", "kya aap jaante hain" jaisa
-    - Description 100-150 words, Hindi mein, keywords include karo
-    - 15 hashtags do — Hindi + English tech mix
-    - Competitor ke exact words COPY mat karo — apna style rakho
-    - Copyright claim se bachne ke liye original phrasing use karo
+Rules:
+- Title Hindi/Hinglish mein (max 60 chars)
+- Title curiosity jagaye — shocking, surprising angle lo
+- Description 100-150 words, Hindi mein, original likho
+- 15 hashtags — Hindi + English tech mix
+- Competitor ke exact words BILKUL copy mat karo
+- Copyright se bachne ke liye apna unique angle lo
 
-    Ye EXACT JSON format mein return karo, kuch aur nahi:
-    {{
-        "title": "your hindi title here",
-        "description": "your hindi description here",
-        "hashtags": ["tag1", "tag2", "tag3"]
-    }}
-    """
+Ye EXACT JSON format mein return karo:
+{{
+    "title": "your original hindi title",
+    "description": "your original hindi description",
+    "hashtags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8", "tag9", "tag10", "tag11", "tag12", "tag13", "tag14", "tag15"]
+}}
+"""
 
     response = llm.invoke(prompt).content.strip()
     response = re.sub(r'^```json\n?', '', response)
@@ -51,11 +51,18 @@ def generate_seo(topic, script, competitor_data=None):
     response = re.sub(r'\n?```$', '', response)
 
     try:
-        return json.loads(response)
+        data = json.loads(response)
+        # Use competitor tags as additional tags if available
+        if competitor_data and competitor_data.get('tags'):
+            existing = data.get('hashtags', [])
+            extra = [t for t in competitor_data['tags'] if t not in existing]
+            data['hashtags'] = (existing + extra)[:20]
+        return data
     except:
         return {
             "title": f"{topic} - Hindi Facts",
             "description": f"{topic} ke baare mein amazing facts. {script[:100]}",
             "hashtags": ["hindi", "technology", "facts", "shorts", "viral",
-                        "india", "tech", "trending", "ai", "techtips"]
+                        "india", "tech", "trending", "ai", "techtips",
+                        "hinditech", "indiantech", "techshorts", "viralshorts", "techfacts"]
         }
