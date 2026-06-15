@@ -57,7 +57,7 @@ def step_video(inputs: dict) -> dict:
     return inputs
 
 def step_upload_youtube(inputs: dict) -> dict:
-    from agents.upload_agent import upload_video  # Reuse English upload agent
+    from agents_hindi.upload_agent import upload_video  # Hindi upload agent
     print("📤 YouTube par upload ho raha hai...")
     seo = inputs["seo"]
     video_id, video_url = upload_video(

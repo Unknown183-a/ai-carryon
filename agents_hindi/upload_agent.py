@@ -1,0 +1,71 @@
+# agents_hindi/upload_agent.py
+import os
+import json
+import google.oauth2.credentials
+import googleapiclient.discovery
+import googleapiclient.http
+
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+
+def get_youtube_client():
+    token_json = os.getenv("YOUTUBE_TOKEN_JSON")
+    if not token_json:
+        raise ValueError("YOUTUBE_TOKEN_JSON not set")
+    
+    token_data = json.loads(token_json)
+    credentials = google.oauth2.credentials.Credentials(
+        token=token_data["token"],
+        refresh_token=token_data["refresh_token"],
+        token_uri=token_data["token_uri"],
+        client_id=token_data["client_id"],
+        client_secret=token_data["client_secret"],
+        scopes=token_data["scopes"]
+    )
+    return googleapiclient.discovery.build("youtube", "v3", credentials=credentials)
+
+def upload_video(video_path, title, description, hashtags, thumbnail_path=None):
+    youtube = get_youtube_client()
+    
+    tags = hashtags if isinstance(hashtags, list) else hashtags.split(",")
+    
+    body = {
+        "snippet": {
+            "title": title[:100],
+            "description": description[:5000],
+            "tags": tags[:30],
+            "categoryId": "28",
+            "defaultLanguage": "hi",
+            "defaultAudioLanguage": "hi"
+        },
+        "status": {
+            "privacyStatus": "public",
+            "selfDeclaredMadeForKids": False
+        }
+    }
+    
+    media = googleapiclient.http.MediaFileUpload(
+        video_path, mimetype="video/mp4", resumable=True
+    )
+    
+    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+    
+    response = None
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            print(f"Upload progress: {int(status.progress() * 100)}%")
+    
+    video_id = response["id"]
+    video_url = f"https://www.youtube.com/watch?v={video_id}"
+    
+    if thumbnail_path and os.path.exists(thumbnail_path):
+        try:
+            youtube.thumbnails().set(
+                videoId=video_id,
+                media_body=googleapiclient.http.MediaFileUpload(thumbnail_path)
+            ).execute()
+        except Exception as e:
+            print(f"Thumbnail upload failed: {e}")
+    
+    print(f"Uploaded! {video_url}")
+    return video_id, video_url
