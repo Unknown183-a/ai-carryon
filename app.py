@@ -138,7 +138,8 @@ with english_tab:
         topic = st.text_input(
             "Enter Topic",
             placeholder="What is LangChain?",
-            value=st.session_state.get("trending_topic", "")
+            value=st.session_state.get("trending_topic", ""),
+            key="english_topic_input"
         )
 
         if st.button("🔥 Use Trending Topic Instead"):
