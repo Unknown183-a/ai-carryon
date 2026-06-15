@@ -282,14 +282,12 @@ with hindi_tab:
     # ── Trending Spy ─────────────────────────────────────────────
     if hindi_page == "🕵️ Trending Spy":
         st.title("🕵️ Hindi Trending Spy")
-        st.markdown("India ke top trending tech topics!")
+        st.markdown("Top Hindi Tech channels ke viral topics — click karo apna version banane ke liye!")
 
-        with st.spinner("India ke trending topics fetch ho rahe hain..."):
-            from agents_hindi.trending_agent import get_trending_topic
-            import random
+        with st.spinner("Hindi channels ke trending topics fetch ho rahe hain..."):
             try:
-                from agents.spy_agent import get_trending_topics
-                topics = get_trending_topics()
+                from agents_hindi.spy_agent import get_hindi_trending_topics
+                topics = get_hindi_trending_topics()
             except Exception as e:
                 st.error(str(e))
                 topics = []
@@ -306,6 +304,7 @@ with hindi_tab:
                     c4.markdown(f"👍 {t['likes']:,}")
                     if c5.button("🎬 Ye Video Banao", key=f"hindi_{t['url']}"):
                         st.session_state["hindi_topic"] = t["topic"]
+                        st.session_state["hindi_competitor"] = t
                         st.session_state["hindi_go_generate"] = True
                         st.rerun()
                 st.divider()
@@ -371,7 +370,8 @@ with hindi_tab:
                     st.write(script)
 
                     with st.spinner("📈 Hindi SEO generate ho raha hai..."):
-                        seo = hindi_generate_seo(hindi_topic, script)
+                        competitor_data = st.session_state.get("hindi_competitor", None)
+                        seo = hindi_generate_seo(hindi_topic, script, competitor_data=competitor_data)
                     st.subheader("📈 SEO")
                     st.markdown(f"**Title:** {seo['title']}")
                     st.markdown(f"**Description:** {seo['description']}")
