@@ -161,6 +161,106 @@ if page == "🕵️ Trending Spy":
         st.divider()
     st.stop()
 
+if page == "🇮🇳 Hindi Channel":
+    st.title("🇮🇳 AI CarryON - Hindi Channel")
+    st.markdown("Hindi YouTube Shorts ke liye AI-powered video banao!")
+
+    hindi_topic = st.text_input(
+        "Topic daalo (Hindi ya English mein)",
+        placeholder="Artificial Intelligence kya hai?"
+    )
+
+    if st.button("🔥 Trending Topic Lo (India)"):
+        with st.spinner("India ka trending topic fetch ho raha hai..."):
+            try:
+                from agents_hindi.trending_agent import get_trending_topic
+                t = get_trending_topic(region_code="IN")
+                st.session_state["hindi_topic"] = t
+            except Exception as e:
+                st.error(str(e))
+
+    if "hindi_topic" in st.session_state:
+        hindi_topic = st.session_state["hindi_topic"]
+        st.success(f"Trending topic: **{hindi_topic}**")
+
+    hindi_upload = st.toggle("Auto-upload to Hindi YouTube Channel", value=False)
+
+    if st.button("🎬 Hindi Video Banao"):
+        if not hindi_topic.strip():
+            st.warning("Pehle topic daalo!")
+            st.stop()
+
+        try:
+            with st.spinner("🔍 Research ho raha hai..."):
+                from agents.research_agent import research
+                research_data = research(hindi_topic)
+            st.success("Research done!")
+
+            with st.spinner("✍️ Hindi script likh raha hai..."):
+                from agents_hindi.script_agent import create_script
+                script = create_script(research_data)
+            st.success("Script ready!")
+            with st.expander("📝 Script dekho"):
+                st.write(script)
+
+            with st.spinner("📈 Hindi SEO generate ho raha hai..."):
+                from agents_hindi.seo_agent import generate_seo
+                seo = generate_seo(hindi_topic, script)
+            st.success(f"SEO ready: **{seo['title']}**")
+
+            with st.spinner("🖼️ Thumbnail ban raha hai..."):
+                from agents.thumbnail_generator import generate_thumbnail
+                thumbnail = generate_thumbnail(seo["title"], hindi_topic)
+
+            with st.spinner("🌆 Dark tech images fetch ho rahi hain..."):
+                from agents.image_agent import generate_backgrounds
+                image_paths, _ = generate_backgrounds(hindi_topic, script, num_images=4)
+
+            with st.spinner("🎙️ Hindi awaaz generate ho rahi hai..."):
+                from agents_hindi.voice_agent import generate_voice
+                voice = generate_voice(script)
+            st.success("Awaaz ready!")
+
+            with st.spinner("💬 Captions ban rahe hain..."):
+                from agents.caption_agent import create_srt
+                create_srt(script, voice)
+
+            with st.spinner("🎬 Video ban raha hai..."):
+                from agents.video_agent import create_video
+                video_file = create_video()
+            st.success("Video ready!")
+
+            st.subheader("🎥 Generated Hindi Video")
+            st.video(video_file)
+
+            with open(video_file, "rb") as f:
+                st.download_button(
+                    label="📱 Download for Instagram Reels",
+                    data=f,
+                    file_name="hindi_reel.mp4",
+                    mime="video/mp4"
+                )
+
+            if hindi_upload:
+                with st.spinner("📤 YouTube par upload ho raha hai..."):
+                    from agents_hindi.upload_agent import upload_video
+                    video_id, video_url = upload_video(
+                        video_path=video_file,
+                        title=seo["title"],
+                        description=seo["description"],
+                        hashtags=seo["hashtags"],
+                        thumbnail_path=thumbnail
+                    )
+                st.success("✅ YouTube par upload ho gaya!")
+                st.markdown(f"**Yahan dekho:** [{video_url}]({video_url})")
+            else:
+                st.info("Auto-upload OFF hai. Toggle on karo YouTube par upload karne ke liye.")
+
+        except Exception as e:
+            st.error(str(e))
+
+    st.stop()
+
 if page == "📊 Analytics":
     show_analytics()
     st.stop()
