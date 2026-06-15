@@ -274,11 +274,14 @@ with english_tab:
 # HINDI CHANNEL
 # ════════════════════════════════════════════════════════════════
 with hindi_tab:
-    hindi_nav_options = ["🎬 Video Banao", "📊 Analytics", "🕵️ Trending Spy"]
-    hindi_nav_default = 0
+    # Handle redirect from Banao button
     if st.session_state.get("hindi_nav_override"):
-        hindi_nav_default = hindi_nav_options.index(st.session_state["hindi_nav_override"])
+        st.session_state["hindi_page_current"] = st.session_state["hindi_nav_override"]
         st.session_state["hindi_nav_override"] = None
+
+    hindi_nav_options = ["🎬 Video Banao", "📊 Analytics", "🕵️ Trending Spy"]
+    current_page = st.session_state.get("hindi_page_current", "🎬 Video Banao")
+    hindi_nav_default = hindi_nav_options.index(current_page) if current_page in hindi_nav_options else 0
 
     hindi_page = st.sidebar.selectbox(
         "📂 Hindi Navigation",
@@ -286,6 +289,8 @@ with hindi_tab:
         index=hindi_nav_default,
         key="hindi_nav"
     )
+    # Update current page on manual selection
+    st.session_state["hindi_page_current"] = hindi_page
 
     # ── Trending Spy ─────────────────────────────────────────────
     if hindi_page == "🕵️ Trending Spy":
