@@ -273,9 +273,16 @@ with english_tab:
 # HINDI CHANNEL
 # ════════════════════════════════════════════════════════════════
 with hindi_tab:
+    hindi_nav_options = ["🎬 Video Banao", "📊 Analytics", "🕵️ Trending Spy"]
+    hindi_nav_default = 0
+    if st.session_state.get("hindi_nav_override"):
+        hindi_nav_default = hindi_nav_options.index(st.session_state["hindi_nav_override"])
+        st.session_state["hindi_nav_override"] = None
+
     hindi_page = st.sidebar.selectbox(
         "📂 Hindi Navigation",
-        ["🎬 Video Banao", "📊 Analytics", "🕵️ Trending Spy"],
+        hindi_nav_options,
+        index=hindi_nav_default,
         key="hindi_nav"
     )
 
@@ -305,7 +312,7 @@ with hindi_tab:
                     if c5.button("🎬 Banao", key=f"hindi_{i}_{t['topic'][:20]}"):
                         st.session_state["hindi_topic"] = t["topic"]
                         st.session_state["hindi_competitor"] = t
-                        st.session_state["hindi_go_generate"] = True
+                        st.session_state["hindi_nav_override"] = "🎬 Video Banao"
                         st.rerun()
                 st.divider()
 
@@ -327,25 +334,36 @@ with hindi_tab:
         if st.session_state.get("hindi_go_generate"):
             st.session_state["hindi_go_generate"] = False
 
+        # Auto-fill from trending spy or trending button
+        prefilled = st.session_state.get("hindi_topic", "")
         hindi_topic = st.text_input(
             "Topic daalo (Hindi ya English mein)",
             placeholder="Artificial Intelligence kya hai?",
-            value=st.session_state.get("hindi_topic", ""),
+            value=prefilled,
             key="hindi_topic_input"
         )
 
-        if st.button("🔥 Trending Topic Lo (India)", key="hindi_trending_btn"):
-            with st.spinner("India ka trending topic fetch ho raha hai..."):
-                try:
-                    t = hindi_get_trending(region_code="IN")
-                    st.session_state["hindi_topic"] = t
-                    st.rerun()
-                except Exception as e:
-                    st.error(str(e))
+        col_trend, col_clear = st.columns([2, 1])
+        with col_trend:
+            if st.button("🔥 Trending Topic Lo (India)", key="hindi_trending_btn"):
+                with st.spinner("India ka trending topic fetch ho raha hai..."):
+                    try:
+                        t = hindi_get_trending(region_code="IN")
+                        st.session_state["hindi_topic"] = t
+                        st.session_state["hindi_competitor"] = None
+                        st.rerun()
+                    except Exception as e:
+                        st.error(str(e))
+        with col_clear:
+            if st.button("🗑️ Clear", key="hindi_clear_btn"):
+                st.session_state.pop("hindi_topic", None)
+                st.session_state.pop("hindi_competitor", None)
+                st.rerun()
 
         if st.session_state.get("hindi_topic"):
-            hindi_topic = st.session_state["hindi_topic"]
-            st.success(f"Trending topic: **{hindi_topic}**")
+            st.success(f"✅ Topic ready: **{st.session_state['hindi_topic']}**")
+            if st.session_state.get("hindi_competitor"):
+                st.caption(f"📺 Source: {st.session_state['hindi_competitor'].get('channel', '')} — {st.session_state['hindi_competitor'].get('why_trending', '')}")
 
         hindi_upload = st.toggle(
             "Auto-upload to Hindi YouTube Channel",
@@ -434,7 +452,7 @@ with hindi_tab:
                         )
 
                     if hindi_upload:
-                        with st.spinner("📤 YouTube par upload ho raha hai..."):
+                        with st.spinner("📤 YouTube Hindi channel par upload ho raha hai..."):
                             from agents_hindi.upload_agent import upload_video as hindi_upload_fn
                             video_id, video_url = hindi_upload_fn(
                                 video_path=video_file,
@@ -444,9 +462,13 @@ with hindi_tab:
                                 thumbnail_path=thumbnail
                             )
                         st.success("✅ YouTube par upload ho gaya!")
-                        st.markdown(f"**Yahan dekho:** [{video_url}]({video_url})")
+                        st.balloons()
+                        st.markdown(f"**▶️ Yahan dekho:** [{video_url}]({video_url})")
+                        # Clear topic after successful upload
+                        st.session_state.pop("hindi_topic", None)
+                        st.session_state.pop("hindi_competitor", None)
                     else:
-                        st.info("Auto-upload OFF hai. Toggle on karo YouTube par upload karne ke liye.")
+                        st.info("💡 Auto-upload OFF hai. Toggle on karo YouTube par seedha upload karne ke liye.")
 
                 except Exception as e:
                     st.error(str(e))
