@@ -1,78 +1,149 @@
-# scheduler_hindi.py - Hindi Channel Scheduler
+# scheduler_hindi.py
 import schedule
 import time
 import os
 import datetime
 
 LOG_FILE = "output/scheduler_hindi_log.txt"
-POSTED_FILE = "output/posted_topics_hindi.txt"
+POSTED_TODAY_FILE = "output/posted_today_hindi.txt"
+
 
 def log(message):
     os.makedirs("output", exist_ok=True)
-    utc_now = datetime.datetime.utcnow()
-    ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
-    timestamp = ist_now.strftime("%Y-%m-%d %H:%M:%S")
-    entry = f"[{timestamp} IST] {message}"
-    print(entry, flush=True)
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = f"[{timestamp}] {message}"
+    print(entry)
     with open(LOG_FILE, "a") as f:
         f.write(entry + "\n")
 
-def get_recent_topics(hours=24):
-    if not os.path.exists(POSTED_FILE):
-        return []
-    cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
-    recent = []
-    with open(POSTED_FILE, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line or "|" not in line:
-                continue
-            ts_str, topic = line.split("|", 1)
-            try:
-                ts = datetime.datetime.fromisoformat(ts_str)
-            except ValueError:
-                continue
-            if ts >= cutoff:
-                recent.append(topic.lower().strip())
-    return recent
 
-def mark_posted(topic):
+def get_posted_today():
+    today = datetime.date.today().isoformat()
+    posted = []
+    if os.path.exists(POSTED_TODAY_FILE):
+        with open(POSTED_TODAY_FILE, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith(today):
+                    posted.append(line.split("|", 1)[1])
+    return posted
+
+
+def mark_posted_today(topic):
+    today = datetime.date.today().isoformat()
     os.makedirs("output", exist_ok=True)
-    ts = datetime.datetime.utcnow().isoformat()
-    with open(POSTED_FILE, "a") as f:
-        f.write(f"{ts}|{topic}\n")
+    with open(POSTED_TODAY_FILE, "a") as f:
+        f.write(f"{today}|{topic}\n")
 
-def generate_and_upload():
-    log("=== Hindi video generation shuru ho raha hai ===")
+
+def generate_and_upload_hindi():
+    log("=== Hindi video generation shuru hua ===")
+
     try:
+        # Step 1: Get best trending Hindi topic from last 24 hours
+        log("Hindi trending topic dhundh raha hai...")
+        from agents_hindi.spy_agent import get_best_hindi_topic
         from agents_hindi.trending_agent import get_trending_topic
-        from agents_hindi.pipeline import run_pipeline
 
-        log("Trending topic fetch ho raha hai (India)...")
-        recent = get_recent_topics(hours=24)
+        best = get_best_hindi_topic()
 
-        for _ in range(5):
+        if best:
+            topic = best['topic']
+            competitor_data = best
+            log(f"Spy agent se topic mila: {topic} ({best['views']:,} views)")
+        else:
+            # Fallback to trending agent if no 24h videos found
+            log("24 ghante mein koi video nahi mili, trending agent use kar raha hai...")
             topic = get_trending_topic(region_code="IN")
-            if topic.lower().strip() not in recent:
-                break
+            competitor_data = None
+            log(f"Trending topic: {topic}")
 
-        log(f"Topic: {topic}")
-        log("Hindi pipeline chal raha hai...")
-        result = run_pipeline(topic, upload=True)
+        # Check if already posted today
+        posted_today = get_posted_today()
+        if topic in posted_today:
+            log(f"Ye topic aaj already post ho chuka hai: {topic}")
+            # Try next best topic
+            from agents_hindi.spy_agent import get_hindi_trending_topics
+            all_topics = get_hindi_trending_topics()
+            for t in all_topics:
+                if t['topic'] not in posted_today:
+                    topic = t['topic']
+                    competitor_data = t
+                    log(f"Alternative topic: {topic}")
+                    break
 
-        mark_posted(topic)
-        log(f"SUCCESS: {result.get('youtube_url', 'N/A')}")
+        # Step 2: Research
+        log("Research ho raha hai...")
+        from agents.research_agent import research
+        research_data = research(topic)
+
+        # Step 3: Hindi Script
+        log("Hindi script ban rahi hai...")
+        from agents_hindi.script_agent import create_script
+        script = create_script(research_data)
+
+        # Step 4: Hindi SEO (with competitor data)
+        log("Hindi SEO generate ho raha hai...")
+        from agents_hindi.seo_agent import generate_seo
+        seo = generate_seo(topic, script, competitor_data=competitor_data)
+        log(f"Title: {seo['title']}")
+
+        # Step 5: Thumbnail
+        log("Thumbnail ban raha hai...")
+        from agents.thumbnail_generator import generate_thumbnail
+        thumbnail = generate_thumbnail(seo["title"], topic)
+
+        # Step 6: Background images
+        log("Background images fetch ho rahi hain...")
+        from agents.image_agent import generate_backgrounds
+        image_paths, errors = generate_backgrounds(topic, script, num_images=4)
+        if not image_paths:
+            log(f"Images nahi bani: {errors}")
+            return
+
+        # Step 7: Hindi Voice
+        log("Hindi awaaz generate ho rahi hai...")
+        from agents_hindi.voice_agent import generate_voice
+        voice = generate_voice(script)
+
+        # Step 8: Captions
+        log("Captions ban rahe hain...")
+        from agents.caption_agent import create_srt
+        create_srt(script, voice)
+
+        # Step 9: Video
+        log("Video ban raha hai...")
+        from agents.video_agent import create_video
+        video = create_video()
+
+        # Step 10: Upload to Hindi YouTube
+        log("YouTube Hindi channel par upload ho raha hai...")
+        from agents_hindi.upload_agent import upload_video
+        video_id, video_url = upload_video(
+            video_path=video,
+            title=seo["title"],
+            description=seo["description"],
+            hashtags=seo["hashtags"],
+            thumbnail_path=thumbnail
+        )
+
+        mark_posted_today(topic)
+        log(f"SUCCESS: Upload ho gaya! {video_url}")
 
     except Exception as e:
-        import traceback
         log(f"ERROR: {str(e)}")
-        log(f"TRACEBACK: {traceback.format_exc()}")
 
-schedule.every(1).hours.do(generate_and_upload)
+
+# Post 3 times per day
+schedule.every().day.at("08:00").do(generate_and_upload_hindi)
+schedule.every().day.at("13:00").do(generate_and_upload_hindi)
+schedule.every().day.at("19:00").do(generate_and_upload_hindi)
 
 if __name__ == "__main__":
     log("Hindi Scheduler shuru hua!")
-    log("Schedule: har 1 ghante mein")
+    log(f"Schedule: 8 AM, 1 PM, 7 PM")
+    log(f"Next run: {schedule.next_run()}")
+
     while True:
         schedule.run_pending()
-        time.sleep(30)
+        time.sleep(60)
