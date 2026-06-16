@@ -152,6 +152,12 @@ def track_views_job():
         from agents.view_tracker_agent import track_views
         history = track_views()
         log(f"Tracked {len(history)} videos")
+        # Backup to GitHub for persistence across redeploys
+        try:
+            from agents.data_persistence import backup_view_history
+            backup_view_history()
+        except Exception as be:
+            log(f"Backup skipped: {be}")
     except Exception as e:
         import traceback
         log(f"ERROR (view tracking): {str(e)}")
@@ -164,6 +170,13 @@ if __name__ == "__main__":
     log("Scheduler started!")
     log("Schedule: every 5 hours")
     log("View tracking: every 1 hour")
+
+    # Restore view history from GitHub on startup
+    try:
+        from agents.data_persistence import restore_view_history
+        restore_view_history()
+    except Exception as e:
+        log(f"View history restore skipped: {e}")
 
     # Run an initial view-tracking snapshot at startup
     track_views_job()
