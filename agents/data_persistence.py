@@ -1,23 +1,28 @@
 # agents/data_persistence.py
-# Backs up and restores view_history.json to/from GitHub
 import os
 import json
-import subprocess
+import base64
+import urllib.request
+import urllib.error
 
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+REPO = "Unknown183-a/ai-carryon"
+BRANCH = "data"
+FILE_PATH = "view_history.json"
 HISTORY_FILE = "output/view_history.json"
-GITHUB_RAW_URL = "https://raw.githubusercontent.com/Unknown183-a/ai-carryon/data/view_history.json"
+API_BASE = f"https://api.github.com/repos/{REPO}/contents/{FILE_PATH}"
+RAW_URL = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{FILE_PATH}"
 
 
 def restore_view_history():
     """Pull latest view_history.json from GitHub data branch on startup"""
     try:
-        import urllib.request
         print("Restoring view history from GitHub...")
         os.makedirs("output", exist_ok=True)
-        urllib.request.urlretrieve(GITHUB_RAW_URL, HISTORY_FILE)
+        urllib.request.urlretrieve(f"{RAW_URL}?nocache={os.urandom(4).hex()}", HISTORY_FILE)
         data = json.load(open(HISTORY_FILE))
-        total_snapshots = sum(len(v["snapshots"]) for v in data.values())
-        print(f"Restored {len(data)} videos, {total_snapshots} total snapshots")
+        total = sum(len(v["snapshots"]) for v in data.values())
+        print(f"Restored {len(data)} videos, {total} total snapshots")
         return True
     except Exception as e:
         print(f"No existing backup found (starting fresh): {e}")
@@ -25,59 +30,70 @@ def restore_view_history():
 
 
 def backup_view_history():
-    """Push view_history.json to GitHub data branch after each tracking run"""
+    """Push view_history.json to GitHub data branch via API"""
+    if not GITHUB_TOKEN:
+        print("No GITHUB_TOKEN — skipping backup")
+        return False
+
     if not os.path.exists(HISTORY_FILE):
         print("No view history file to backup")
         return False
 
     try:
-        # Configure git
-        subprocess.run(["git", "config", "user.email", "railway@aicarryon.com"], 
-                      capture_output=True)
-        subprocess.run(["git", "config", "user.name", "AI CarryON Bot"], 
-                      capture_output=True)
+        # Read current file content
+        with open(HISTORY_FILE, "r") as f:
+            content = f.read()
 
-        # Switch to data branch, copy file, commit, push, switch back
-        result = subprocess.run(
-            ["git", "stash"], capture_output=True, text=True
-        )
+        # Encode to base64
+        content_b64 = base64.b64encode(content.encode("utf-8")).decode("utf-8")
 
-        subprocess.run(
-            ["git", "checkout", "data"], capture_output=True
-        )
-
-        # Copy the history file
-        import shutil
-        shutil.copy(HISTORY_FILE, "view_history.json")
-
-        subprocess.run(["git", "add", "view_history.json"], capture_output=True)
-
-        result = subprocess.run(
-            ["git", "commit", "-m", "Auto: update view history"],
-            capture_output=True, text=True
-        )
-
-        if "nothing to commit" in result.stdout:
-            print("View history unchanged, no backup needed")
-        else:
-            # Get GitHub token from env for push auth
-            github_token = os.getenv("GITHUB_TOKEN", "")
-            if github_token:
-                remote = f"https://{github_token}@github.com/Unknown183-a/ai-carryon.git"
-                subprocess.run(
-                    ["git", "push", remote, "data"],
-                    capture_output=True
-                )
-                print("View history backed up to GitHub")
+        # Get current file SHA (needed for update)
+        sha = None
+        try:
+            req = urllib.request.Request(
+                f"{API_BASE}?ref={BRANCH}",
+                headers={
+                    "Authorization": f"Bearer {GITHUB_TOKEN}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28"
+                }
+            )
+            with urllib.request.urlopen(req) as resp:
+                file_info = json.loads(resp.read())
+                sha = file_info.get("sha")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                sha = None  # File doesn't exist yet, will create
             else:
-                print("No GITHUB_TOKEN — skipping push (data saved locally only)")
+                raise
 
-        subprocess.run(["git", "checkout", "main"], capture_output=True)
-        subprocess.run(["git", "stash", "pop"], capture_output=True)
-        return True
+        # Prepare payload
+        payload = {
+            "message": "Auto: update view history",
+            "content": content_b64,
+            "branch": BRANCH
+        }
+        if sha:
+            payload["sha"] = sha
+
+        # Push to GitHub
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            API_BASE,
+            data=data,
+            method="PUT",
+            headers={
+                "Authorization": f"Bearer {GITHUB_TOKEN}",
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json",
+                "X-GitHub-Api-Version": "2022-11-28"
+            }
+        )
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read())
+            print(f"View history backed up to GitHub ✅ ({len(content)} bytes)")
+            return True
 
     except Exception as e:
         print(f"Backup failed: {e}")
-        # Make sure we're back on main
-        subprocess.run(["git", "checkout", "main"], capture_output=True)
         return False
