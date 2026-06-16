@@ -1,111 +1,112 @@
-# 🤖 AI CarryON — Autonomous YouTube Channel Intelligence System
+# AI CarryON — Autonomous YouTube Channel Intelligence System
 
-> **Vision**: A self-learning AI brain that autonomously manages, optimizes, and grows any YouTube channel — from content generation to upload scheduling to performance analysis.
+An autonomous AI system that researches trending topics, generates video scripts, creates YouTube Shorts, and uploads them automatically — while learning from channel performance data to improve over time.
 
----
-
-## 📌 Current Status (June 16, 2026)
-
-**Stage**: Build → Deploy → Observe → Improve
-
-The system is live, autonomous, and actively collecting data on Railway cloud infrastructure.
-
-- **Channel**: AI CarryON (Tech/AI niche)
-- **Live URL**: https://ai-carryon-production.up.railway.app
-- **GitHub**: https://github.com/Unknown183-a/ai-carryon
-- **Deployment**: Railway (2 services: `worker` + `ai-carryon` Streamlit app)
+**Live**: https://ai-carryon-production.up.railway.app  
+**Repo**: https://github.com/Unknown183-a/ai-carryon  
+**Channel**: AI CarryON (Tech/AI niche)
 
 ---
 
-## 🏗️ Current Architecture
+## What This Does
 
-### Pipeline (Fully Automated)
+Every 5 hours, without any human input, the system:
+
+1. Fetches a trending AI/tech topic (with niche guard to reject off-topic content)
+2. Researches it and writes a 30-45 second script
+3. Generates SEO-optimized title, description, and hashtags
+4. Creates a thumbnail using Pexels images
+5. Generates a human-sounding voiceover (Edge TTS)
+6. Renders a 1080x1920 Shorts video with word-by-word captions and Ken Burns zoom
+7. Uploads to YouTube with thumbnail
+8. Records a timestamped view snapshot for intelligence analysis
+
+Every hour, it tracks view/like/comment counts for the 20 most recent videos and backs up this data to GitHub for persistence across redeployments.
+
+---
+
+## Current Architecture
+
+### Pipeline
+
 ```
-Trending Topic
-    ↓ (niche guard: AI/tech only)
-Research Agent (Groq LLaMA 3.3-70B)
-    ↓
-Script Agent (30-45 second script)
-    ↓
-SEO Agent (title diversity: 6 rotating patterns)
-    ↓
-Thumbnail Agent (text + Pexels image)
-    ↓
-Image Agent (background images via Pexels)
-    ↓
-Voice Agent (Edge TTS: en-US-AndrewMultilingualNeural)
-    ↓
-Caption Agent (word-by-word SRT)
-    ↓
-Video Agent (Pillow frames + Ken Burns zoom + ffmpeg)
-    ↓
-Upload Agent (YouTube API + thumbnail)
-    ↓
-View Tracker (hourly snapshots → GitHub backup)
+Trending Topic (niche-filtered)
+    -> Research (Groq LLaMA 3.3-70B)
+    -> Script (30-45s)
+    -> SEO (title pattern rotation, 15 hashtags)
+    -> Thumbnail (Pexels + text overlay)
+    -> Background Images (Pexels)
+    -> Voiceover (Edge TTS: en-US-AndrewMultilingualNeural)
+    -> Captions (word-by-word SRT, auto-fit font)
+    -> Video (Pillow frames + Ken Burns + ffmpeg)
+    -> YouTube Upload (with thumbnail)
+    -> View Snapshot (backed up to GitHub)
 ```
 
-### Services on Railway
-| Service | Function | Schedule |
+### Services (Railway)
+
+| Service | Role | Schedule |
 |---|---|---|
-| `worker` | Scheduler (video generation + view tracking) | Video: every 5h / Tracking: every 1h |
-| `ai-carryon` | Streamlit web app (manual generation + analytics) | Always on |
+| worker | Scheduler — video generation + view tracking | Video: every 5h, Tracking: every 1h |
+| ai-carryon | Streamlit web dashboard | Always on |
 
-### Key Agents (`/agents/`)
-| Agent | Purpose |
+### Agents
+
+| File | Purpose |
 |---|---|
-| `trending_agent.py` | Fetch trending topics, niche filter, LLM fallback |
-| `research_agent.py` | Research topic via LLM |
-| `script_agent.py` | Generate 30-45s video script |
-| `seo_agent.py` | Generate title (6 patterns), description, 15 hashtags |
-| `thumbnail_generator.py` | Create 1080x1920 thumbnail |
-| `image_agent.py` | Fetch background images from Pexels |
-| `voice_agent.py` | Generate voiceover (Edge TTS + gTTS fallback) |
-| `caption_agent.py` | Generate word-by-word SRT captions |
-| `video_agent.py` | Render final video (Ken Burns + captions + ffmpeg) |
-| `upload_agent.py` | Upload to YouTube with SEO metadata |
-| `analytics_agent.py` | Fetch channel stats and video performance |
-| `view_tracker_agent.py` | Hourly view/likes/comments snapshots |
-| `spy_agent.py` | Monitor top AI/tech channels (6h cache) |
-| `data_persistence.py` | Backup/restore view_history.json via GitHub API |
+| trending_agent.py | Trending topics with niche guard and LLM fallback |
+| research_agent.py | Topic research via LLM |
+| script_agent.py | 30-45s video script generation |
+| seo_agent.py | Title (6 rotating patterns), description, hashtags |
+| thumbnail_generator.py | 1080x1920 thumbnail with Pexels background |
+| image_agent.py | Background images from Pexels |
+| voice_agent.py | Edge TTS voiceover with gTTS fallback |
+| caption_agent.py | Word-by-word SRT caption generation |
+| video_agent.py | Video rendering — Pillow frames, Ken Burns, ffmpeg stitch |
+| upload_agent.py | YouTube upload with SEO metadata and thumbnail |
+| analytics_agent.py | Channel stats and video performance via YouTube API |
+| view_tracker_agent.py | Hourly view/likes/comments snapshots |
+| spy_agent.py | Monitor top AI/tech channels (6h cache) |
+| data_persistence.py | Backup and restore view_history.json via GitHub API |
 
-### Environment Variables (Railway)
-| Variable | Service | Purpose |
-|---|---|---|
-| `GROQ_API_KEY` | both | LLM inference |
-| `PEXELS_API_KEY` | both | Background images |
-| `YOUTUBE_API_KEY` | both | YouTube Data API |
-| `YOUTUBE_TOKEN_B64` | both | OAuth upload token |
-| `YOUTUBE_CLIENT_SECRETS_B64` | both | OAuth client secrets |
-| `YOUTUBE_ANALYTICS_TOKEN_B64` | both | Analytics OAuth token |
-| `ELEVENLABS_API_KEY` | both | (reserved, not active) |
-| `GITHUB_TOKEN` | worker | View history backup |
-| `APP_PASSWORD` | ai-carryon | Streamlit login |
+### Environment Variables
 
----
-
-## 📊 Streamlit Dashboard Pages
-
-1. **🎬 Generate Video** — manual topic input, trending topic button, auto-upload toggle
-2. **📊 Analytics** — channel stats, video performance table, bar chart, auto-refresh
-3. **🕵️ Trending Spy** — top videos from Fireship, MKBHD, Two Minute Papers, Computerphile, AI Explained
+| Variable | Purpose |
+|---|---|
+| GROQ_API_KEY | LLM inference |
+| PEXELS_API_KEY | Background and thumbnail images |
+| YOUTUBE_API_KEY | YouTube Data API |
+| YOUTUBE_TOKEN_B64 | OAuth upload token (base64) |
+| YOUTUBE_CLIENT_SECRETS_B64 | OAuth client secrets (base64) |
+| YOUTUBE_ANALYTICS_TOKEN_B64 | Analytics OAuth token (base64) |
+| GITHUB_TOKEN | View history backup to data branch |
+| APP_PASSWORD | Streamlit dashboard login |
 
 ---
 
-## 🧠 Brain Intelligence Roadmap
+## Dashboard
 
-The core vision: a self-improving AI that learns from channel data, adapts content strategy, and autonomously grows any YouTube channel.
+The Streamlit app at ai-carryon-production.up.railway.app has three pages:
+
+- **Generate Video** — manual topic input, trending topic button, optional auto-upload toggle
+- **Analytics** — channel stats, video performance table, bar chart, auto-refresh every 30 minutes
+- **Trending Spy** — top Shorts from Fireship, MKBHD, Two Minute Papers, Computerphile, AI Explained with one-click "Make This Video" button
 
 ---
 
-### Phase 0 — Data Collection ✅ COMPLETE (Jun 16, 2026)
-**What**: Hourly snapshots of views/likes/comments for 20 most recent videos, stored with timestamps.
+## Intelligence Roadmap
 
-**Files**:
-- `agents/view_tracker_agent.py` — collects snapshots
-- `agents/data_persistence.py` — backs up to GitHub `data` branch
-- `output/view_history.json` — local data store
+The system is designed to evolve from a simple auto-uploader into a self-improving channel intelligence brain. Each phase builds on the previous one and requires real channel data to function meaningfully.
 
-**Data structure**:
+---
+
+### Phase 0 — Data Collection
+**Status: Complete (June 16, 2026)**
+
+Hourly snapshots of views, likes, and comments for the 20 most recent videos. Each snapshot includes a UTC timestamp, enabling view velocity calculation over time.
+
+Data is stored in `output/view_history.json` and automatically backed up to the `data` branch on GitHub after every tracking run, making it safe across Railway redeployments.
+
 ```json
 {
   "video_id": {
@@ -119,284 +120,237 @@ The core vision: a self-improving AI that learns from channel data, adapts conte
 }
 ```
 
-**Status**: Running. Backed up to GitHub `data` branch after every hourly run.
+---
+
+### Phase 1 — Velocity Analysis and Peak Hour Detection
+**Target: June 19-20, 2026**
+
+Calculate view velocity (views gained per hour) for each video at each snapshot interval. Aggregate velocity by hour of day across all videos to identify peak engagement windows for the channel.
+
+Build a "Peak Hours" tab in the Streamlit dashboard showing average view velocity per hour of day as a chart. This becomes the data foundation for adaptive scheduling in Phase 5.
+
+Requires: 48-72 hourly snapshots per video (2-3 days of data).
+
+New file: `agents/velocity_agent.py`
 
 ---
 
-### Phase 1 — Velocity Analysis & Peak Hour Detection
-**Target date**: June 19-20, 2026
+### Phase 1.5 — Saturation Engine
+**Target: June 20, 2026**
 
-**What to build**:
-- `agents/velocity_agent.py` — compute views-gained-per-hour for each video at each snapshot
-- Aggregate velocity by hour-of-day (IST) across all videos
-- Identify peak engagement windows (e.g., "6-9 PM IST: high velocity")
-- Add "📈 Peak Hours" tab to Streamlit dashboard with hourly velocity chart
+Before researching a topic, check how saturated it is. Score each candidate topic by how many similar videos were uploaded in the last 24 hours and how many high-authority channels have already covered it.
 
-**Implementation**:
-```python
-# For each video, for each consecutive snapshot pair:
-velocity = (views_t2 - views_t1) / hours_between
+Only proceed with topics that have an opportunity score above a threshold. This prevents producing content that is competing against dozens of identical videos on the same day.
 
-# Aggregate by hour of day:
-peak_hours[hour_of_day].append(velocity)
-
-# Output: ranked list of hours by average velocity
-```
-
-**Needs**: 48-72 hourly snapshots per video (2-3 days of data)
+Pipeline becomes: Trend -> Saturation Check -> Research
 
 ---
 
 ### Phase 2 — Comparison Engine
-**Target date**: June 20-21, 2026
+**Target: June 20-21, 2026**
 
-**What to build**:
-- Group videos uploaded within similar time windows (±2 hours)
-- Rank by view velocity within each group
-- Extract metadata for top vs. bottom performers:
-  - Title, description, hashtags, topic, upload hour, pattern used
-- Output structured comparison pairs
+Group videos uploaded within similar time windows (within 2 hours of each other). Rank each group by view velocity. For the top and bottom performers in each group, extract their stored metadata: title, description, hashtags, topic, upload hour, and title pattern used.
 
-**Implementation**:
-```python
-# For each group of videos uploaded close together:
-top_video = max(group, key=lambda v: v['velocity'])
-bottom_video = min(group, key=lambda v: v['velocity'])
+Output is structured comparison pairs that feed directly into Phase 3.
 
-comparison = {
-    "top": {"title": ..., "topic": ..., "tags": ..., "velocity": ...},
-    "bottom": {"title": ..., "topic": ..., "tags": ..., "velocity": ...}
-}
-```
-
-**Needs**: Phase 1 complete + at least 10 videos with velocity data
+Requires: Phase 1 complete, at least 10 videos with velocity data.
 
 ---
 
-### Phase 3 — LLM-Powered Insight Generation (The Brain)
-**Target date**: June 21-22, 2026
+### Phase 3 — LLM Insight Generation
+**Target: June 21-22, 2026**
 
-**What to build**:
-- `agents/insight_agent.py` — feed comparison pairs to LLM
-- Prompt: "Video A got 3x more views than Video B uploaded same evening. Here's both titles/descriptions/tags/topics/hooks. What caused the difference? Give 3 actionable improvements."
-- Store insights in `output/insights.json` with timestamps
-- Build "🧠 Channel Insights" tab in Streamlit dashboard
+Feed comparison pairs from Phase 2 into an LLM with a structured prompt: given two videos uploaded at the same time, one performing 3x better than the other, analyze the differences in title, hook, topic specificity, and tags, and produce three concrete improvement actions.
 
-**Also build**:
-- **Hook Analyzer** — score first line of every new script (1-10) before video generation
-- **Retention Predictor** — score full script for predicted watch time, rewrite if score < 7
+Store insights in `output/insights.json` with timestamps. Build a "Channel Insights" tab in the Streamlit dashboard.
 
-**Implementation**:
-```python
-# Hook scoring
-hook_score = llm.invoke(f"Score this YouTube Short opening line 1-10: '{first_line}'")
-if hook_score < 7:
-    first_line = llm.invoke(f"Rewrite this hook to be more compelling: '{first_line}'")
-```
+Also build at this stage:
+- **Hook Analyzer** — score the opening line of every new script before video generation. Rewrite if score is below 7/10.
+- **Failure Intelligence** — track why videos underperform (weak hook, over-saturated topic, bad upload time) so these patterns are not repeated.
 
-**Needs**: Phase 2 complete
+New files: `agents/insight_agent.py`, `agents/failure_agent.py`
 
 ---
 
-### Phase 4 — Feedback Loop into SEO Generation
-**Target date**: June 22-23, 2026
+### Phase 3.5 — Narrative Intelligence
+**Target: June 22, 2026**
 
-**What to build**:
-- Modify `seo_agent.py` to inject recent insights from `insights.json`
-- Add "viral pattern memory" — track which title patterns, topics, and hooks historically performed best
-- `agents/pattern_memory_agent.py` — stores and retrieves best performing patterns
+The current script agent generates content but does not optimize for retention structure. Add a narrative scoring layer that evaluates each script for curiosity density, tension curve, open loops, and surprise pacing.
 
-**Implementation**:
-```python
-# In seo_agent.py prompt:
-recent_insights = load_top_insights(n=3)
-prompt += f"\nChannel learnings from past performance:\n{recent_insights}"
-prompt += f"\nBest performing title pattern historically: {best_pattern}"
-prompt += f"\nTopics that drove highest velocity: {top_topics}"
-```
+Score each script before rendering. If the score is below threshold, regenerate with explicit narrative instructions.
 
-**Needs**: Phase 3 complete + insights.json with at least 5 entries
+New file: `agents/narrative_agent.py`
+
+---
+
+### Phase 4 — Feedback into SEO Generation
+**Target: June 22-23, 2026**
+
+Modify `seo_agent.py` to inject recent insights from `insights.json` into the generation prompt. Add viral pattern memory that tracks which title patterns, hooks, and topic angles historically drove the highest velocity on this channel.
+
+Future videos are generated with awareness of what has actually worked, not just general best practices.
+
+New file: `agents/pattern_memory_agent.py`
+
+---
+
+### Phase 4.5 — Persona Engine
+**Target: June 23, 2026**
+
+Before audience intelligence data is available from YouTube Analytics, manually define audience personas (Developer, Beginner, Student, Founder). Script style adapts per persona: developer persona gets technical, fast, high-density content; beginner persona gets simple, relatable, slower explanation.
+
+This can later be replaced by data-driven persona detection from Phase 6.
 
 ---
 
 ### Phase 5 — Adaptive Scheduling
-**Target date**: June 23-24, 2026
+**Target: June 23-24, 2026**
 
-**What to build**:
-- Replace fixed `schedule.every(5).hours` with dynamic peak-hour scheduling
-- Read peak hours from Phase 1 analysis
-- Distribute 5 daily uploads across identified peak windows
-- Re-evaluate schedule weekly as more data accumulates
+Replace the fixed 5-hour interval with a dynamic schedule built from Phase 1 peak hour data. Distribute 5 daily uploads across the identified peak engagement windows. Re-evaluate the schedule weekly as more data accumulates.
 
-**Implementation**:
-```python
-# Instead of fixed 5-hour intervals:
-peak_windows = get_peak_hours()  # e.g., [8, 13, 18, 20, 22] IST
-for hour in peak_windows:
-    schedule.every().day.at(f"{hour:02d}:00").do(generate_and_upload)
-```
+---
 
-**Needs**: Phase 1 complete (peak hour data)
+### Phase 5.5 — Channel DNA Engine
+**Target: June 24, 2026**
+
+Store the channel's identity: best title patterns, best video durations, best hooks, best tones, best thumbnail styles. This becomes channel identity memory — distinct from viral pattern memory because it tracks consistent brand attributes rather than one-off wins.
+
+Critical for later multi-channel support, where each channel needs its own DNA profile.
+
+New file: `agents/channel_dna_agent.py`
 
 ---
 
 ### Phase 6 — Audience Intelligence
-**Target date**: July 1+, 2026
+**Target: July 1+, 2026**
 
-**What to build**:
-- Analyze YouTube Analytics for audience demographics (age, country, watch time)
-- Build audience personas: "US developers", "Indian students", "AI founders"
-- Adapt script style, hook style, and topic selection per dominant persona
-- `agents/audience_agent.py`
+Pull YouTube Analytics audience data: demographics, watch time, traffic sources, viewer geography. Build audience personas from real data rather than manual definitions. Script style, hook style, and topic selection adapt to the dominant audience segment.
 
-**Needs**: 2-4 weeks of channel data + YouTube Analytics API (yt-analytics.readonly scope)
+Requires: 2-4 weeks of channel data, yt-analytics.readonly OAuth scope.
 
 ---
 
 ### Phase 7 — Opportunity Intelligence
-**Target date**: July 7+, 2026
+**Target: July 7+, 2026**
 
-**What to build**:
-- Predict what will trend NEXT (not just what's trending now)
-- Signal sources: GitHub stars rising, Reddit mentions, X/Twitter mentions, Google Trends
-- `agents/opportunity_agent.py` — aggregates signals, scores topics by "about to trend" probability
-- Makes your channel a first-mover on emerging topics
+Predict what will trend next rather than reacting to what is already trending. Aggregate signals from GitHub star velocity, Reddit mention growth, Google Trends acceleration, and Product Hunt launches. Score topics by "about to trend" probability and make the channel a consistent first mover.
 
-**Needs**: External API integrations (GitHub API, Reddit API, Google Trends)
+New file: `agents/opportunity_agent.py`
 
 ---
 
 ### Phase 8 — Vision Intelligence
-**Target date**: July 14+, 2026
+**Target: July 14+, 2026**
 
-**What to build**:
-- Analyze top-performing thumbnails visually (text density, color, contrast, face presence)
-- Use OpenCV/CLIP to extract visual features
-- Generate thumbnail recommendations based on what works for your niche
-- `agents/vision_agent.py`
+Analyze top-performing thumbnails visually using OpenCV and CLIP. Extract features: text density, color intensity, contrast, face presence, emotion. Generate thumbnail recommendations based on what visual patterns perform best in the AI/tech niche specifically.
 
-**Needs**: OpenCV, CLIP library, collection of thumbnail performance data
+New file: `agents/vision_agent.py`
 
 ---
 
 ### Phase 9 — Monetization Intelligence
-**Target date**: July 21+, 2026
+**Target: July 21+, 2026**
 
-**What to build**:
-- Track which video topics/niches attract higher RPM (revenue per mille)
-- Identify which topics drive affiliate clicks, sponsorship inquiries
-- Optimize topic selection for revenue, not just views
-- `agents/monetization_agent.py`
+Track which video topics and niches correlate with higher RPM, affiliate engagement, and sponsorship interest. Optimize topic selection for revenue quality, not just view count. Not all views are equal — developer tools content consistently outperforms general tech content on revenue per view.
 
-**Needs**: Channel monetization data, 4+ weeks of history
+New file: `agents/monetization_agent.py`
 
 ---
 
-## 🌐 Future Vision: Multi-Channel SaaS Product
+### LangGraph Migration
+**Target: After Phase 3 is complete**
 
-**Target**: August 2026+
+The current pipeline uses sequential function calls. After Phase 3 stabilizes the workflow, migrate to LangGraph for proper agent orchestration. LangGraph works best when the workflow is stable — migrating while it is still changing adds unnecessary complexity.
 
-After the brain is proven on AI CarryON, generalize into a product any YouTube channel can use.
+---
 
-### What changes for multi-channel:
+## Future: Multi-Channel Product
+
+After the brain is proven on AI CarryON, the system generalizes into a product any YouTube channel can connect to.
+
+What changes:
+
 ```python
-# Channel config (per customer):
 channel_config = {
     "channel_id": "UC...",
     "niche_keywords": ["cooking", "recipes", "food"],
     "reject_keywords": ["gaming", "tech", "finance"],
     "tone": "friendly and educational",
-    "upload_frequency": 4,  # per day
+    "upload_frequency": 4,
     "target_audience": "home cooks aged 25-45"
 }
 ```
 
-### Architecture evolution:
-```
-Single channel (now)          Multi-channel SaaS (Aug+)
-──────────────────            ─────────────────────────
-Hardcoded tokens         →    Per-customer OAuth
-Hardcoded niche          →    Auto-detected from channel history  
-Single view_history.json →    Per-channel database
-Fixed scheduling         →    Per-channel adaptive schedule
-One Streamlit app        →    Multi-tenant dashboard
-```
+Each customer connects their channel via OAuth. The brain analyzes their last 50 videos to detect niche, tone, and patterns automatically. It then configures itself and starts learning from their data independently.
 
-### Customer onboarding flow:
-1. Customer connects their YouTube channel (OAuth)
-2. Brain analyzes their last 50 videos to detect niche/tone/patterns
-3. Brain configures itself automatically for their channel
-4. Starts generating and uploading content
-5. Learns and improves from their data independently
+The Channel DNA Engine (Phase 5.5) is the critical foundation for this — without per-channel identity memory, the multi-channel product cannot maintain brand consistency across different channels.
+
+**Human Override Layer** (needed for SaaS): allow customers to force topic, reject topic, force upload time, force title style, force script style. Autonomous does not mean uncontrollable.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 AI carryON/
 ├── agents/
-│   ├── analytics_agent.py       # YouTube Analytics
-│   ├── caption_agent.py         # SRT caption generation
-│   ├── data_persistence.py      # GitHub backup/restore
-│   ├── image_agent.py           # Pexels background images
-│   ├── research_agent.py        # Topic research (LLM)
-│   ├── script_agent.py          # Video script (LLM)
-│   ├── seo_agent.py             # Title/description/tags (LLM)
-│   ├── spy_agent.py             # Competitor channel monitoring
-│   ├── thumbnail_agent.py       # Thumbnail text generation
-│   ├── thumbnail_generator.py   # Thumbnail image creation
-│   ├── trending_agent.py        # Trending topic + niche guard
-│   ├── upload_agent.py          # YouTube upload
-│   ├── video_agent.py           # Video rendering (Pillow + ffmpeg)
-│   ├── view_tracker_agent.py    # Hourly view snapshots
-│   └── voice_agent.py           # TTS voiceover
+│   ├── analytics_agent.py
+│   ├── caption_agent.py
+│   ├── data_persistence.py
+│   ├── image_agent.py
+│   ├── research_agent.py
+│   ├── script_agent.py
+│   ├── seo_agent.py
+│   ├── spy_agent.py
+│   ├── thumbnail_agent.py
+│   ├── thumbnail_generator.py
+│   ├── trending_agent.py
+│   ├── upload_agent.py
+│   ├── video_agent.py
+│   ├── view_tracker_agent.py
+│   └── voice_agent.py
 ├── assets/
-│   ├── fonts/Arial-Bold.ttf     # Caption font
-│   ├── music/background.wav     # Background music
-│   └── thumbnails/              # Thumbnail assets
-├── output/                      # Generated files (gitignored)
-│   ├── view_history.json        # View tracking data
-│   ├── insights.json            # Brain learnings (Phase 3+)
-│   ├── posted_topics.txt        # Deduplication log
-│   └── spy_cache.json           # Competitor data cache
-├── app.py                       # Streamlit web dashboard
-├── scheduler.py                 # Main automation scheduler
+│   ├── fonts/Arial-Bold.ttf
+│   ├── music/background.wav
+│   └── thumbnails/
+├── output/                      # gitignored
+│   ├── view_history.json
+│   ├── insights.json            # Phase 3+
+│   ├── posted_topics.txt
+│   └── spy_cache.json
+├── app.py
+├── scheduler.py
 ├── requirements.txt
-├── Procfile                     # Railway process definitions
-└── runtime.txt                  # Python version
+├── Procfile
+└── runtime.txt
 ```
 
 ---
 
-## 🔧 Local Development
+## Local Setup
 
 ```bash
-# Clone and setup
 git clone https://github.com/Unknown183-a/ai-carryon.git
 cd ai-carryon
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Copy environment variables
-cp .env.example .env  # fill in your API keys
-
-# Run locally
+# Run dashboard
 streamlit run app.py
 
-# Run scheduler locally
+# Run scheduler
 python scheduler.py
 ```
 
 ---
 
-## 🚀 Deployment (Railway)
+## Deployment
 
 ```bash
-# Push to deploy (auto-deploys both services)
+# Deploy
 git add .
-git commit -m "your message"
+git commit -m "description"
 git push
 
 # Force redeploy without code changes
@@ -404,43 +358,43 @@ git commit --allow-empty -m "Trigger redeploy"
 git push
 ```
 
-**Railway services**:
-- `worker` → runs `python scheduler.py`
-- `ai-carryon` → runs `streamlit run app.py --server.port $PORT --server.address 0.0.0.0`
+Railway auto-deploys both services on every push to main.
 
 ---
 
-## ⚠️ Important Notes
+## Important Notes
 
-1. **YouTube API Quota**: 10,000 units/day. Each upload ~1,650 units → max ~6 uploads/day. Current schedule: every 5 hours (~4-5/day) ✅
-2. **View history persistence**: Backed up to GitHub `data` branch after every hourly tracking run. Safe across redeployments.
-3. **Token rotation**: `YOUTUBE_TOKEN_B64` and `YOUTUBE_ANALYTICS_TOKEN_B64` may expire. Re-authenticate locally and update Railway variables if uploads start failing.
-4. **Railway budget**: Monitor "days or $ left" in Railway dashboard. Current: ~$4.50 left on free plan.
-5. **Niche guard**: Only AI/tech topics allowed. Off-niche topics are rejected and replaced with LLM-generated AI/tech topics.
+**YouTube API quota**: 10,000 units per day. Each upload costs approximately 1,650 units. Maximum sustainable upload rate is 6 per day. Current schedule of every 5 hours produces 4-5 uploads per day, staying safely within quota.
+
+**View history**: Backed up to the `data` branch on GitHub after every hourly tracking run. Safe across redeployments. Do not push code changes that restart the worker unnecessarily while accumulating data for Phase 1.
+
+**OAuth tokens**: YOUTUBE_TOKEN_B64 and YOUTUBE_ANALYTICS_TOKEN_B64 may expire. Re-authenticate locally and update Railway variables if uploads start failing with authentication errors.
+
+**Railway budget**: Monitor remaining balance in the Railway dashboard. Current plan: hobby tier.
 
 ---
 
-## 📅 Development Timeline Summary
+## Development Timeline
 
 | Date | Milestone |
 |---|---|
 | Jun 13, 2026 | Project started, basic pipeline built |
-| Jun 14, 2026 | Railway deployment, OOM fix, full pipeline working |
-| Jun 14, 2026 | Analytics dashboard, Trending Spy, SEO upgrade |
-| Jun 14, 2026 | Password protection, Railway Streamlit hosting |
-| Jun 15, 2026 | Ken Burns effect, caption quality fix |
-| Jun 16, 2026 | Niche guard, title diversity, view tracker, GitHub persistence |
-| Jun 19-20, 2026 | **Phase 1**: Velocity analysis + peak hour dashboard |
-| Jun 20-21, 2026 | **Phase 2**: Comparison engine |
-| Jun 21-22, 2026 | **Phase 3**: LLM insights + Hook Analyzer |
-| Jun 22-23, 2026 | **Phase 4**: SEO feedback loop + Pattern Memory |
-| Jun 23-24, 2026 | **Phase 5**: Adaptive scheduling |
-| Jul 1+, 2026 | **Phase 6**: Audience Intelligence |
-| Jul 7+, 2026 | **Phase 7**: Opportunity Intelligence |
-| Jul 14+, 2026 | **Phase 8**: Vision Intelligence |
-| Jul 21+, 2026 | **Phase 9**: Monetization Intelligence |
-| Aug+, 2026 | **Multi-channel SaaS** productization |
+| Jun 14, 2026 | Railway deployment, OOM fix, full pipeline working end-to-end |
+| Jun 14, 2026 | Analytics dashboard, Trending Spy, SEO upgrade, password protection |
+| Jun 15, 2026 | Ken Burns zoom effect, caption quality improvements |
+| Jun 16, 2026 | Niche guard, title diversity patterns, view tracker, GitHub data persistence |
+| Jun 19-20, 2026 | Phase 1 — velocity analysis, peak hour dashboard |
+| Jun 20-21, 2026 | Phase 1.5 + Phase 2 — saturation engine, comparison engine |
+| Jun 21-22, 2026 | Phase 3 — LLM insights, hook analyzer, failure intelligence |
+| Jun 22-23, 2026 | Phase 3.5 + Phase 4 — narrative intelligence, SEO feedback loop |
+| Jun 23-24, 2026 | Phase 4.5 + Phase 5 — persona engine, adaptive scheduling |
+| Jun 24, 2026 | Phase 5.5 — channel DNA engine |
+| Jul 1+, 2026 | Phase 6 — audience intelligence |
+| Jul 7+, 2026 | Phase 7 — opportunity intelligence |
+| Jul 14+, 2026 | Phase 8 — vision intelligence |
+| Jul 21+, 2026 | Phase 9 — monetization intelligence |
+| Aug+, 2026 | Multi-channel SaaS productization |
 
 ---
 
-*Built by Amit Kumar | AI CarryON | Autonomous YouTube Intelligence System*
+*AI CarryON — Built by Amit Kumar*
