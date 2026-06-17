@@ -12,22 +12,23 @@ PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 
 
 def generate_image_queries(topic, script, num_images=4):
-    prompt = f"""You are a visual director for YouTube Shorts videos.
+    prompt = f"""You are a visual director for YouTube Shorts.
+
+The video topic is EXACTLY: "{topic}"
+
+Generate {num_images} Pexels stock photo search queries that are DIRECTLY and SPECIFICALLY about this exact topic.
+
+STRICT RULES:
+- If topic is "What is LangChain?" → search for: "Python code chain", "API chain workflow diagram", "chatbot building blocks", "software pipeline automation"
+- If topic is "OpenAI fires safety team" → search for: "corporate office meeting tension", "engineer leaving office", "AI ethics protest sign", "Silicon Valley office exit"
+- If topic is "Bitcoin price crash" → search for: "stock market red graph", "crypto trader stressed", "bitcoin coin falling", "financial market crash"
+- NEVER use generic queries like "technology", "AI robot", "circuit board", "server rack" unless the topic is literally about those things
+- Each query must be something a video editor would pick SPECIFICALLY for THIS topic
+- Queries must be 3-6 words, concrete and searchable on Pexels
 
 Topic: {topic}
-Script: {script}
 
-Your job: extract {num_images} highly specific, visual search queries for stock photos that will appear as background images in this video.
-
-Rules:
-- Each query must directly relate to the topic — if the topic is about OpenAI, search for "AI neural network visualization", "tech company office", "robot hand keyboard" etc.
-- Queries must describe something VISUALLY interesting and attention-grabbing
-- Do NOT use generic queries like "technology background" or "abstract digital"
-- Think like a video editor — what image would make a viewer stop scrolling?
-- Each query: 3-5 words, concrete and specific
-- Vary the queries — different visual angles of the same topic
-
-Return ONLY a numbered list, one query per line, nothing else:
+Return ONLY a numbered list, nothing else, no explanation:
 1. <query>
 2. <query>
 3. <query>
@@ -97,6 +98,11 @@ def generate_backgrounds(topic, script, num_images=4):
     clean_topic = topic.split("||PATTERN:")[0].strip()
 
     queries = generate_image_queries(clean_topic, script, num_images)
+
+    print(f"\n Generated image queries for topic: '{clean_topic}'")
+    for i, q in enumerate(queries):
+        print(f"  Query {i+1}: {q}")
+    print()
 
     image_paths = []
     errors = []
