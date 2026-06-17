@@ -12,18 +12,19 @@ llm = ChatGroq(model="llama-3.3-70b-versatile")
 
 def generate_image_prompts(topic, script, num_images=4):
     prompt = (
-        f"You are a visual director for YouTube Shorts videos.\n\n"
+        f"You are a visual director for YouTube Shorts.\n\n"
         f"Topic: {topic}\n"
         f"Script excerpt: {script[:300]}\n\n"
-        "Generate 4 AI image generation prompts for background images.\n\n"
+        "Generate 4 photorealistic image prompts for background images.\n\n"
         "RULES:\n"
-        "- Each prompt DIRECTLY matches the topic\n"
-        "- Style: cinematic, dramatic lighting, 9:16 vertical\n"
-        "- Example: Apple Siri AI -> holographic Siri interface glowing blue futuristic\n"
-        "- Example: LangChain -> Python code chains connecting AI models neon glow dark\n"
-        "- Example: Bitcoin crash -> bitcoin coin falling red graph dramatic lighting\n"
-        "- NO generic tech images, NO random people\n"
-        "- Each prompt: 10-15 words, vivid and specific\n\n"
+        "- Prompts must be DIRECTLY about the topic\n"
+        "- ALWAYS end every prompt with: photorealistic, DSLR photo, 4K, real photograph, no illustration, no art\n"
+        "- Example: Claude AI coding assistant -> developer typing on laptop screen showing chatbot, photorealistic, DSLR photo, 4K\n"
+        "- Example: Apple Siri -> person using iPhone voice assistant, photorealistic, DSLR photo, 4K\n"
+        "- Example: Bitcoin crash -> trader watching red stock charts on monitor, photorealistic, DSLR photo, 4K\n"
+        "- Example: LangChain -> software engineer coding Python on MacBook, photorealistic, DSLR photo, 4K\n"
+        "- NO robots, NO neon, NO sci-fi, NO illustrations, NO anime\n"
+        "- Show REAL people, REAL offices, REAL devices, REAL situations\n\n"
         "Return ONLY a numbered list:\n"
         "1. <prompt>\n"
         "2. <prompt>\n"
@@ -43,7 +44,7 @@ def generate_image_prompts(topic, script, num_images=4):
 
     if not lines:
         words = topic.replace("||PATTERN:", "").split()[:4]
-        lines = [" ".join(words) + " cinematic dramatic"] * num_images
+        lines = [" ".join(words) + " photorealistic DSLR 4K"] * num_images
 
     return lines[:num_images]
 
@@ -52,7 +53,7 @@ def download_generated_image(prompt, output_path):
     import re as _re
     clean_prompt = _re.sub(r"[^a-zA-Z0-9 ,]", "", prompt).strip()
     encoded = requests.utils.quote(clean_prompt)
-    url = f"https://image.pollinations.ai/prompt/{encoded}?width=720&height=1280&nologo=true&enhance=true"
+    url = f"https://image.pollinations.ai/prompt/{encoded}?width=720&height=1280&nologo=true&enhance=true&model=flux"
     response = requests.get(url, timeout=60)
     response.raise_for_status()
     with open(output_path, "wb") as f:
