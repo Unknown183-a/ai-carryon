@@ -15,16 +15,18 @@ def generate_image_prompts(topic, script, num_images=4):
         f"You are a visual director for YouTube Shorts.\n\n"
         f"Topic: {topic}\n"
         f"Script excerpt: {script[:300]}\n\n"
-        "Generate 4 photorealistic image prompts for background images.\n\n"
+        "Generate 4 photorealistic image prompts showing ACTIVE DYNAMIC scenes directly about the topic.\n\n"
         "RULES:\n"
-        "- Prompts must be DIRECTLY about the topic\n"
-        "- ALWAYS end every prompt with: photorealistic, DSLR photo, 4K, real photograph, no illustration, no art\n"
-        "- Example: Claude AI coding assistant -> developer typing on laptop screen showing chatbot, photorealistic, DSLR photo, 4K\n"
-        "- Example: Apple Siri -> person using iPhone voice assistant, photorealistic, DSLR photo, 4K\n"
-        "- Example: Bitcoin crash -> trader watching red stock charts on monitor, photorealistic, DSLR photo, 4K\n"
-        "- Example: LangChain -> software engineer coding Python on MacBook, photorealistic, DSLR photo, 4K\n"
-        "- NO robots, NO neon, NO sci-fi, NO illustrations, NO anime\n"
-        "- Show REAL people, REAL offices, REAL devices, REAL situations\n\n"
+        "- Show people ACTIVELY DOING things: typing fast, laughing, pointing at screen, arguing, celebrating\n"
+        "- Use motion words: leaning forward, gesturing, mid-sentence, hands moving, eyes focused\n"
+        "- Each prompt must be DIRECTLY about the topic\n"
+        "- ALWAYS end with: photorealistic, DSLR photo, 4K, motion blur, candid shot, natural lighting\n"
+        "- Example: Claude AI coding -> software engineer leaning forward intensely typing Python code, multiple monitors glowing, photorealistic DSLR 4K candid\n"
+        "- Example: Apple Siri -> person laughing while speaking to iPhone held up, Siri waveform visible on screen, photorealistic DSLR 4K candid\n"
+        "- Example: team meeting -> executives pointing at whiteboard mid-discussion, engaged expressions, photorealistic DSLR 4K candid\n"
+        "- Example: Bitcoin crash -> trader hands on head staring at red charts, shocked expression, photorealistic DSLR 4K candid\n"
+        "- NO static poses, NO stock photo smiles, NO robots, NO neon sci-fi\n"
+        "- Make it feel like a documentary photographer caught the moment\n\n"
         "Return ONLY a numbered list:\n"
         "1. <prompt>\n"
         "2. <prompt>\n"
@@ -44,7 +46,7 @@ def generate_image_prompts(topic, script, num_images=4):
 
     if not lines:
         words = topic.replace("||PATTERN:", "").split()[:4]
-        lines = [" ".join(words) + " photorealistic DSLR 4K"] * num_images
+        lines = [" ".join(words) + " photorealistic DSLR 4K candid"] * num_images
 
     return lines[:num_images]
 
