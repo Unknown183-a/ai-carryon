@@ -177,77 +177,136 @@ def extract_manim_frames(manim_path, total_frames, fps):
 
 
 def _create_video_from_clips(clip_paths, audio_path, srt_path, manim_path=None):
-    """Stitch Flow/Veo MP4 clips together with audio and captions"""
+    """Stitch Flow/Veo MP4 clips — use clips' own audio, no captions"""
+    ffmpeg = get_ffmpeg()
+    os.makedirs("output", exist_ok=True)
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = f"output/video_{timestamp}.mp4"
+
+    # Step 1 — get total duration from TTS audio (to know how long to loop)
+    audio_duration = get_audio_duration(audio_path)
+    print(f"Target duration: {audio_duration:.1f}s, clips: {len(clip_paths)}")
+
+    # Step 2 — use clips once each, no looping
+    looped_clips = clip_paths
+
+    # Step 3 — write a concat file for ffmpeg
+    concat_path = "output/flow_concat.txt"
+    with open(concat_path, "w") as f:
+        for cp in looped_clips:
+            abs_path = os.path.abspath(cp)
+            f.write("file '" + abs_path + "'\n")
+
+    # Step 4 — concat clips into one silent video trimmed to audio_duration
+    concat_video = "output/flow_concat_raw.mp4"
+    concat_cmd = [
+        ffmpeg, "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", concat_path,
+        "-vf", f"scale={SHORTS_WIDTH}:{SHORTS_HEIGHT}:force_original_aspect_ratio=increase,crop={SHORTS_WIDTH}:{SHORTS_HEIGHT}",
+        "-t", str(audio_duration),
+        "-an",  # drop original audio from clips
+        "-c:v", "libx264", "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p",
+        concat_video
+    ]
+    result = subprocess.run(concat_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"Concat failed: {result.stderr[-500:]}")
+
+    # Step 5 — mix concat video with clips' own audio track
+    # Extract and concat audio from the original clips
+    clip_audio_parts = []
+    audio_concat_path = "output/audio_concat.txt"
+    for i, cp in enumerate(looped_clips):
+        part = f"output/clip_audio_{i}.aac"
+        subprocess.run([
+            ffmpeg, "-y", "-i", cp,
+            "-t", "8",
+            "-vn", "-c:a", "aac", part
+        ], capture_output=True)
+        if os.path.exists(part):
+            clip_audio_parts.append(part)
+
+    # Write audio concat list
+    with open(audio_concat_path, "w") as f:
+        for ap in clip_audio_parts:
+            f.write("file '" + os.path.abspath(ap) + "'\n")
+
+    concat_audio = "output/flow_audio_merged.aac"
+    subprocess.run([
+        ffmpeg, "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", audio_concat_path,
+        "-t", str(audio_duration),
+        "-c:a", "aac",
+        concat_audio
+    ], capture_output=True)
+
+    # Step 6 — merge video + clips audio into final output
+    cmd = [
+        ffmpeg, "-y",
+        "-i", concat_video,
+        "-i", concat_audio,
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-shortest",
+        output_path
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"Final merge failed: {result.stderr[-500:]}")
+
+    latest = "output/final_video.mp4"
+    import shutil
+    shutil.copy(output_path, latest)
+    print(f"Flow video ready (clips audio, no captions): {output_path}")
+    return latest
+
+
+def _create_video_from_clips_UNUSED(clip_paths, audio_path, srt_path, manim_path=None):
+    """OLD — frame-by-frame method, kept for reference"""
     ffmpeg = get_ffmpeg()
     os.makedirs("output/frames", exist_ok=True)
-
-    # Clear old frames
     for f in glob.glob("output/frames/*.jpg"):
         os.remove(f)
-
     audio_duration = get_audio_duration(audio_path)
     fps = 24
     total_frames = int(audio_duration * fps)
-
     captions = parse_srt(srt_path) if os.path.exists(srt_path) else []
-
-    # Loop clips to fill full audio duration (e.g. 2 clips × looped = 30+ sec)
     frames_needed = total_frames
     looped_clips = []
     while len(looped_clips) < frames_needed // (fps * 8) + len(clip_paths):
         looped_clips.extend(clip_paths)
     frames_per_clip = total_frames // len(clip_paths)
-
-    print(f"Extracting frames from {len(clip_paths)} Flow clips (looped to fill {audio_duration:.1f}s)...")
     frame_idx = 0
-
     for clip_i, clip_path in enumerate(looped_clips):
         if frame_idx >= total_frames:
             break
-        # Extract frames from this clip
         clip_frames_dir = f"output/frames/clip_{clip_i}"
         os.makedirs(clip_frames_dir, exist_ok=True)
-
         extract_cmd = [
             ffmpeg, "-y", "-i", clip_path,
             "-vf", f"fps={fps},scale={SHORTS_WIDTH}:{SHORTS_HEIGHT}:force_original_aspect_ratio=increase,crop={SHORTS_WIDTH}:{SHORTS_HEIGHT}",
-            "-q:v", "2",
-            f"{clip_frames_dir}/frame_%04d.jpg"
+            "-q:v", "2", f"{clip_frames_dir}/frame_%04d.jpg"
         ]
         subprocess.run(extract_cmd, capture_output=True)
-
-        # Get extracted frames
         extracted = sorted(glob.glob(f"{clip_frames_dir}/frame_*.jpg"))
         if not extracted:
             continue
-
-        # How many frames to use from this clip
         remaining = total_frames - frame_idx
         n_frames = min(frames_per_clip, remaining)
-
         for i in range(n_frames):
             src_frame = extracted[i % len(extracted)]
             img = Image.open(src_frame).convert("RGB")
             img = img.resize((SHORTS_WIDTH, SHORTS_HEIGHT), Image.LANCZOS)
-
-            # Draw captions
-            t = frame_idx / fps
-            for start, end, text in captions:
-                if start <= t <= end:
-                    img = draw_caption(img, text)
-                    break
-
             out_path = f"output/frames/{frame_idx:06d}.jpg"
             img.save(out_path, "JPEG", quality=85)
             frame_idx += 1
-
-    print(f"Rendered {frame_idx} frames from Flow clips")
-
-    # Build video
     os.makedirs("output", exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = f"output/video_{timestamp}.mp4"
-
     cmd = [
         ffmpeg, "-y",
         "-framerate", str(fps),

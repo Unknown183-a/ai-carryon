@@ -297,32 +297,56 @@ with english_tab:
             st.info("🖼️ Pexels backgrounds will be generated automatically — no upload needed")
         st.markdown("---")
 
-        if st.button("Generate", type="primary"):
+        col_gen, col_clear = st.columns([3, 1])
+        with col_gen:
+            generate_clicked = st.button("Generate", type="primary")
+        with col_clear:
+            if st.button("🔄 New Topic"):
+                for k in ["eng_research","eng_script","eng_seo","eng_prompts","eng_thumb_text","eng_thumb_img","eng_topic_done"]:
+                    st.session_state.pop(k, None)
+                st.rerun()
+
+        if generate_clicked:
             if not topic.strip():
                 st.warning("Please enter a topic.")
                 st.stop()
+            st.session_state["eng_topic_done"] = topic
             try:
                 with st.spinner("🔍 Researching..."):
-                    research_data = research(topic)
+                    st.session_state["eng_research"] = research(topic)
+                with st.spinner("✍️ Generating Script..."):
+                    st.session_state["eng_script"] = create_script(st.session_state["eng_research"])
+                with st.spinner("📈 Generating SEO..."):
+                    st.session_state["eng_seo"] = generate_seo(topic, st.session_state["eng_script"])
+                with st.spinner("🎬 Generating Flow/Veo Prompts..."):
+                    from agents.flow_prompt_agent import generate_flow_prompts
+                    st.session_state["eng_prompts"] = generate_flow_prompts(topic, st.session_state["eng_script"], num_clips=2)
+                with st.spinner("🎯 Generating Thumbnail Text..."):
+                    st.session_state["eng_thumb_text"] = generate_thumbnail_text(topic)
+                with st.spinner("🖼️ Generating Thumbnail Image..."):
+                    st.session_state["eng_thumb_img"] = generate_thumbnail(st.session_state["eng_seo"]["title"], topic)
+
+            except Exception as e:
+                st.error(f"Generation failed: {e}")
+                st.stop()
+
+        if st.session_state.get("eng_topic_done"):
+            research_data = st.session_state["eng_research"]
+            script = st.session_state["eng_script"]
+            seo = st.session_state["eng_seo"]
+            flow_prompts = st.session_state["eng_prompts"]
+            thumbnail_text = st.session_state["eng_thumb_text"]
+            thumbnail_image = st.session_state["eng_thumb_img"]
+
+            try:
                 st.subheader("📚 Research")
                 st.write(research_data)
-
-                with st.spinner("✍️ Generating Script..."):
-                    script = create_script(research_data)
                 st.subheader("📝 YouTube Script")
                 st.write(script)
-
-                with st.spinner("📈 Generating SEO..."):
-                    seo = generate_seo(topic, script)
                 st.subheader("📈 SEO")
                 st.markdown(f"**Title:** {seo['title']}")
                 st.markdown(f"**Description:** {seo['description']}")
                 st.markdown(f"**Hashtags:** {seo['hashtags']}")
-
-                # ── Flow Prompt Generator ──────────────────────────
-                with st.spinner("🎬 Generating Flow/Veo Prompts..."):
-                    from agents.flow_prompt_agent import generate_flow_prompts
-                    flow_prompts = generate_flow_prompts(topic, script, num_clips=2)
 
                 use_flow_clips = "Flow clips" in st.session_state.get("video_mode_radio", "")
 
@@ -365,28 +389,20 @@ with english_tab:
                         for f in glob.glob("assets/flow_clips/*.mp4"):
                             os.remove(f)
 
-                # ── End Flow Prompt Generator ───────────────────────
-
-                with st.spinner("🎯 Generating Thumbnail Text..."):
-                    thumbnail_text = generate_thumbnail_text(topic)
                 st.subheader("🖼️ Thumbnail Text")
                 st.success(thumbnail_text)
-
-                with st.spinner("🖼️ Generating Thumbnail Image..."):
-                    thumbnail_image = generate_thumbnail(seo["title"], topic)
                 st.subheader("🖼️ Thumbnail Image")
                 st.image(thumbnail_image, use_container_width=True)
 
                 # Skip Pexels if Flow clips mode is active
                 _flow_clips_exist = bool(glob.glob("assets/flow_clips/*.mp4"))
                 _use_flow = "Flow clips" in st.session_state.get("video_mode_radio", "")
-                if _use_flow or _flow_clips_exist:
+                if _use_flow and not _flow_clips_exist:
+                    st.warning("⏸️ Flow clips mode is ON — upload your 3 clips above first, then click Generate Video below")
+                    st.stop()
+                elif _flow_clips_exist:
                     image_paths, image_errors = [], []
-                    if _flow_clips_exist:
-                        st.success("🎥 Flow clips detected — skipping Pexels, using cinematic clips")
-                    else:
-                        st.info("🎥 Flow clips mode selected — upload clips above to use cinematic video")
-                        image_paths, image_errors = [], []
+                    st.success("🎥 Flow clips detected — using cinematic clips")
                 else:
                     with st.spinner("🎨 Generating Background Images..."):
                         image_paths, image_errors = generate_backgrounds(topic, script, num_images=4)
