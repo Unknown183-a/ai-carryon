@@ -8,6 +8,129 @@ st.set_page_config(
     layout="wide"
 )
 
+st.markdown("""
+<style>
+/* ── Base ── */
+[data-testid="stAppViewContainer"] { background: #0a0a0f; }
+[data-testid="stSidebar"] { background: #0f0f1a; border-right: 1px solid #1e1e2e; }
+section.main > div { padding-top: 1.5rem; }
+
+/* ── Typography ── */
+h1, h2, h3 { color: #e2e8f0 !important; font-family: 'Inter', sans-serif; letter-spacing: -0.5px; }
+p, label, .stMarkdown { color: #94a3b8 !important; }
+
+/* ── Tabs ── */
+[data-testid="stTabs"] button {
+    color: #64748b !important;
+    font-weight: 600;
+    border-bottom: 2px solid transparent;
+    padding: 0.5rem 1.5rem;
+}
+[data-testid="stTabs"] button[aria-selected="true"] {
+    color: #38bdf8 !important;
+    border-bottom: 2px solid #38bdf8 !important;
+    background: transparent !important;
+}
+
+/* ── Primary button ── */
+[data-testid="stButton"] > button[kind="primary"] {
+    background: linear-gradient(135deg, #0ea5e9, #6366f1) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 0.6rem 2rem !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    letter-spacing: 0.5px !important;
+    box-shadow: 0 0 20px rgba(14,165,233,0.3) !important;
+    transition: all 0.2s ease !important;
+}
+[data-testid="stButton"] > button[kind="primary"]:hover {
+    box-shadow: 0 0 30px rgba(14,165,233,0.5) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* ── Secondary buttons ── */
+[data-testid="stButton"] > button {
+    background: #1e1e2e !important;
+    color: #94a3b8 !important;
+    border: 1px solid #2d2d3d !important;
+    border-radius: 8px !important;
+}
+
+/* ── Input ── */
+[data-testid="stTextInput"] input {
+    background: #1e1e2e !important;
+    border: 1px solid #2d2d3d !important;
+    color: #e2e8f0 !important;
+    border-radius: 8px !important;
+    font-size: 1rem !important;
+}
+[data-testid="stTextInput"] input:focus {
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 0 2px rgba(56,189,248,0.15) !important;
+}
+
+/* ── Radio ── */
+[data-testid="stRadio"] label { color: #94a3b8 !important; }
+[data-testid="stRadio"] [data-testid="stMarkdownContainer"] p { color: #e2e8f0 !important; }
+
+/* ── Toggle ── */
+[data-testid="stToggle"] label { color: #94a3b8 !important; }
+
+/* ── Info / Success / Warning boxes ── */
+[data-testid="stAlert"] {
+    border-radius: 8px !important;
+    border-left-width: 3px !important;
+}
+
+/* ── Code blocks (prompts) ── */
+[data-testid="stCode"] {
+    background: #1e1e2e !important;
+    border: 1px solid #2d2d3d !important;
+    border-radius: 8px !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+}
+[data-testid="stCode"] code {
+    color: #7dd3fc !important;
+    font-size: 0.85rem !important;
+    line-height: 1.6 !important;
+}
+
+/* ── Divider ── */
+hr { border-color: #1e1e2e !important; }
+
+/* ── Selectbox ── */
+[data-testid="stSelectbox"] > div > div {
+    background: #1e1e2e !important;
+    border: 1px solid #2d2d3d !important;
+    color: #e2e8f0 !important;
+    border-radius: 8px !important;
+}
+
+/* ── File uploader ── */
+[data-testid="stFileUploader"] {
+    background: #1e1e2e !important;
+    border: 1px dashed #2d2d3d !important;
+    border-radius: 8px !important;
+    padding: 1rem !important;
+}
+
+/* ── Metrics ── */
+[data-testid="stMetric"] {
+    background: #1e1e2e;
+    border: 1px solid #2d2d3d;
+    border-radius: 10px;
+    padding: 1rem;
+}
+[data-testid="stMetricValue"] { color: #38bdf8 !important; }
+
+/* ── Spinner ── */
+[data-testid="stSpinner"] { color: #38bdf8 !important; }
+</style>
+""", unsafe_allow_html=True)
+
 def show_analytics():
     st.title("📊 YouTube Analytics Dashboard")
     col_refresh, col_auto, col_last = st.columns([1, 2, 3])
@@ -159,7 +282,22 @@ with english_tab:
 
         auto_upload = st.toggle("Auto-upload to YouTube after generation", value=False)
 
-        if st.button("Generate"):
+        st.markdown("---")
+        st.markdown("**🎬 Video Background Mode**")
+        video_mode_pre = st.radio(
+            "",
+            ["🎥 Flow clips — cinematic AI video (recommended)", "🖼️ Auto image backgrounds — no upload needed"],
+            index=0,
+            key="video_mode_radio",
+            horizontal=True
+        )
+        if "Flow clips" in video_mode_pre:
+            st.info("📋 After generating, copy the Veo prompts → go to [labs.google/flow](https://labs.google/flow) → generate VIDEO clips → download MP4s → upload them back here")
+        else:
+            st.info("🖼️ Pexels backgrounds will be generated automatically — no upload needed")
+        st.markdown("---")
+
+        if st.button("Generate", type="primary"):
             if not topic.strip():
                 st.warning("Please enter a topic.")
                 st.stop()
@@ -184,40 +322,48 @@ with english_tab:
                 # ── Flow Prompt Generator ──────────────────────────
                 with st.spinner("🎬 Generating Flow/Veo Prompts..."):
                     from agents.flow_prompt_agent import generate_flow_prompts
-                    flow_prompts = generate_flow_prompts(topic, script, num_clips=3)
+                    flow_prompts = generate_flow_prompts(topic, script, num_clips=2)
 
-                st.subheader("🎬 Flow Video Prompts")
-                st.info("Copy each prompt below → paste in **labs.google/flow** → download the clip → upload below")
+                use_flow_clips = "Flow clips" in st.session_state.get("video_mode_radio", "")
+
+                # ── Flow Prompts ──────────────────────────────────
+                st.divider()
+                st.subheader("🎬 Flow / Veo 3 Cinematic Prompts")
+                if use_flow_clips:
+                    st.info("📋 **Step 1:** Copy prompt → **Step 2:** Paste in [labs.google/flow](https://labs.google/flow) → Generate VIDEO → **Step 3:** Download MP4 → **Step 4:** Upload below")
+                else:
+                    st.caption("💡 Reference prompts — auto image mode is active")
 
                 for i, fp in enumerate(flow_prompts):
-                    col_prompt, col_copy = st.columns([5, 1])
-                    with col_prompt:
-                        st.code(fp, language=None)
-                    st.session_state[f"flow_prompt_{i}"] = fp
+                    st.markdown(f"**Clip {i+1}**")
+                    st.code(fp, language=None)
 
-                uploaded_clips = st.file_uploader(
-                    "📤 Upload your Flow clips (MP4) — upload all clips then click Generate Video",
-                    type=["mp4", "mov"],
-                    accept_multiple_files=True,
-                    key="flow_clips_uploader"
-                )
-
-                if uploaded_clips:
-                    os.makedirs("assets/flow_clips", exist_ok=True)
-                    # Clear old clips
-                    for f in glob.glob("assets/flow_clips/*.mp4"):
-                        os.remove(f)
-                    for i, clip in enumerate(uploaded_clips):
-                        clip_path = f"assets/flow_clips/clip_{i:02d}.mp4"
-                        with open(clip_path, "wb") as f:
-                            f.write(clip.read())
-                    st.success(f"✅ {len(uploaded_clips)} clip(s) uploaded — ready for video generation")
+                if use_flow_clips:
+                    st.subheader("📤 Upload Your Flow Clips")
+                    uploaded_clips = st.file_uploader(
+                        "Upload all MP4 clips here, then scroll down to Generate Video",
+                        type=["mp4", "mov"],
+                        accept_multiple_files=True,
+                        key="flow_clips_uploader"
+                    )
+                    if uploaded_clips:
+                        os.makedirs("assets/flow_clips", exist_ok=True)
+                        for f in glob.glob("assets/flow_clips/*.mp4"):
+                            os.remove(f)
+                        for i, clip in enumerate(uploaded_clips):
+                            clip_path = f"assets/flow_clips/clip_{i:02d}.mp4"
+                            with open(clip_path, "wb") as f:
+                                f.write(clip.read())
+                        st.success(f"✅ {len(uploaded_clips)} clip(s) ready — cinematic video mode active")
+                    else:
+                        if os.path.isdir("assets/flow_clips"):
+                            for f in glob.glob("assets/flow_clips/*.mp4"):
+                                os.remove(f)
+                        st.warning("⬆️ Upload your downloaded Flow clips above to proceed with cinematic mode")
                 else:
-                    # Clear flow clips so it falls back to Pexels images
                     if os.path.isdir("assets/flow_clips"):
                         for f in glob.glob("assets/flow_clips/*.mp4"):
                             os.remove(f)
-                    st.warning("⚠️ No Flow clips uploaded — will use auto-generated backgrounds instead")
 
                 # ── End Flow Prompt Generator ───────────────────────
 
@@ -231,8 +377,19 @@ with english_tab:
                 st.subheader("🖼️ Thumbnail Image")
                 st.image(thumbnail_image, use_container_width=True)
 
-                with st.spinner("🎨 Generating Background Images..."):
-                    image_paths, image_errors = generate_backgrounds(topic, script, num_images=4)
+                # Skip Pexels if Flow clips mode is active
+                _flow_clips_exist = bool(glob.glob("assets/flow_clips/*.mp4"))
+                _use_flow = "Flow clips" in st.session_state.get("video_mode_radio", "")
+                if _use_flow or _flow_clips_exist:
+                    image_paths, image_errors = [], []
+                    if _flow_clips_exist:
+                        st.success("🎥 Flow clips detected — skipping Pexels, using cinematic clips")
+                    else:
+                        st.info("🎥 Flow clips mode selected — upload clips above to use cinematic video")
+                        image_paths, image_errors = [], []
+                else:
+                    with st.spinner("🎨 Generating Background Images..."):
+                        image_paths, image_errors = generate_backgrounds(topic, script, num_images=4)
                 if image_errors:
                     st.warning("Some images failed to generate:")
                     for err in image_errors:
@@ -242,7 +399,7 @@ with english_tab:
                     cols = st.columns(len(image_paths))
                     for col, img_path in zip(cols, image_paths):
                         col.image(img_path)
-                else:
+                elif not (_use_flow or _flow_clips_exist):
                     st.error("No background images were generated. Cannot continue.")
                     st.stop()
 

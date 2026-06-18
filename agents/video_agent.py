@@ -188,14 +188,22 @@ def _create_video_from_clips(clip_paths, audio_path, srt_path, manim_path=None):
     audio_duration = get_audio_duration(audio_path)
     fps = 24
     total_frames = int(audio_duration * fps)
-    frames_per_clip = total_frames // len(clip_paths)
 
     captions = parse_srt(srt_path) if os.path.exists(srt_path) else []
 
-    print(f"Extracting frames from {len(clip_paths)} Flow clips...")
+    # Loop clips to fill full audio duration (e.g. 2 clips × looped = 30+ sec)
+    frames_needed = total_frames
+    looped_clips = []
+    while len(looped_clips) < frames_needed // (fps * 8) + len(clip_paths):
+        looped_clips.extend(clip_paths)
+    frames_per_clip = total_frames // len(clip_paths)
+
+    print(f"Extracting frames from {len(clip_paths)} Flow clips (looped to fill {audio_duration:.1f}s)...")
     frame_idx = 0
 
-    for clip_i, clip_path in enumerate(clip_paths):
+    for clip_i, clip_path in enumerate(looped_clips):
+        if frame_idx >= total_frames:
+            break
         # Extract frames from this clip
         clip_frames_dir = f"output/frames/clip_{clip_i}"
         os.makedirs(clip_frames_dir, exist_ok=True)
@@ -214,10 +222,8 @@ def _create_video_from_clips(clip_paths, audio_path, srt_path, manim_path=None):
             continue
 
         # How many frames to use from this clip
-        if clip_i == len(clip_paths) - 1:
-            n_frames = total_frames - frame_idx
-        else:
-            n_frames = frames_per_clip
+        remaining = total_frames - frame_idx
+        n_frames = min(frames_per_clip, remaining)
 
         for i in range(n_frames):
             src_frame = extracted[i % len(extracted)]
