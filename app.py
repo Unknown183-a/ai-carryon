@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import glob
 
 st.set_page_config(
     page_title="AI CarryON",
@@ -179,6 +180,46 @@ with english_tab:
                 st.markdown(f"**Title:** {seo['title']}")
                 st.markdown(f"**Description:** {seo['description']}")
                 st.markdown(f"**Hashtags:** {seo['hashtags']}")
+
+                # ── Flow Prompt Generator ──────────────────────────
+                with st.spinner("🎬 Generating Flow/Veo Prompts..."):
+                    from agents.flow_prompt_agent import generate_flow_prompts
+                    flow_prompts = generate_flow_prompts(topic, script, num_clips=3)
+
+                st.subheader("🎬 Flow Video Prompts")
+                st.info("Copy each prompt below → paste in **labs.google/flow** → download the clip → upload below")
+
+                for i, fp in enumerate(flow_prompts):
+                    col_prompt, col_copy = st.columns([5, 1])
+                    with col_prompt:
+                        st.code(fp, language=None)
+                    st.session_state[f"flow_prompt_{i}"] = fp
+
+                uploaded_clips = st.file_uploader(
+                    "📤 Upload your Flow clips (MP4) — upload all clips then click Generate Video",
+                    type=["mp4", "mov"],
+                    accept_multiple_files=True,
+                    key="flow_clips_uploader"
+                )
+
+                if uploaded_clips:
+                    os.makedirs("assets/flow_clips", exist_ok=True)
+                    # Clear old clips
+                    for f in glob.glob("assets/flow_clips/*.mp4"):
+                        os.remove(f)
+                    for i, clip in enumerate(uploaded_clips):
+                        clip_path = f"assets/flow_clips/clip_{i:02d}.mp4"
+                        with open(clip_path, "wb") as f:
+                            f.write(clip.read())
+                    st.success(f"✅ {len(uploaded_clips)} clip(s) uploaded — ready for video generation")
+                else:
+                    # Clear flow clips so it falls back to Pexels images
+                    if os.path.isdir("assets/flow_clips"):
+                        for f in glob.glob("assets/flow_clips/*.mp4"):
+                            os.remove(f)
+                    st.warning("⚠️ No Flow clips uploaded — will use auto-generated backgrounds instead")
+
+                # ── End Flow Prompt Generator ───────────────────────
 
                 with st.spinner("🎯 Generating Thumbnail Text..."):
                     thumbnail_text = generate_thumbnail_text(topic)

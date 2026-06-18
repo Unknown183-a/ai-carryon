@@ -32,6 +32,17 @@ def get_background_images():
             images = [fallback]
     return images
 
+def get_background_clips():
+    """Get uploaded Flow/Veo MP4 clips from assets/flow_clips/"""
+    folder = "assets/flow_clips"
+    clips = []
+    if os.path.isdir(folder):
+        for ext in ("*.mp4", "*.mov", "*.webm"):
+            clips.extend(glob.glob(os.path.join(folder, ext)))
+    clips.sort()
+    return clips
+
+
 def get_audio_duration(audio_path):
     from moviepy import AudioFileClip
     audio = AudioFileClip(audio_path)
@@ -164,9 +175,123 @@ def extract_manim_frames(manim_path, total_frames, fps):
         looped.extend(extracted)
     return looped[:total_frames]
 
+
+def _create_video_from_clips(clip_paths, audio_path, srt_path, manim_path=None):
+    """Stitch Flow/Veo MP4 clips together with audio and captions"""
+    ffmpeg = get_ffmpeg()
+    os.makedirs("output/frames", exist_ok=True)
+
+    # Clear old frames
+    for f in glob.glob("output/frames/*.jpg"):
+        os.remove(f)
+
+    audio_duration = get_audio_duration(audio_path)
+    fps = 24
+    total_frames = int(audio_duration * fps)
+    frames_per_clip = total_frames // len(clip_paths)
+
+    captions = parse_srt(srt_path) if os.path.exists(srt_path) else []
+
+    print(f"Extracting frames from {len(clip_paths)} Flow clips...")
+    frame_idx = 0
+
+    for clip_i, clip_path in enumerate(clip_paths):
+        # Extract frames from this clip
+        clip_frames_dir = f"output/frames/clip_{clip_i}"
+        os.makedirs(clip_frames_dir, exist_ok=True)
+
+        extract_cmd = [
+            ffmpeg, "-y", "-i", clip_path,
+            "-vf", f"fps={fps},scale={SHORTS_WIDTH}:{SHORTS_HEIGHT}:force_original_aspect_ratio=increase,crop={SHORTS_WIDTH}:{SHORTS_HEIGHT}",
+            "-q:v", "2",
+            f"{clip_frames_dir}/frame_%04d.jpg"
+        ]
+        subprocess.run(extract_cmd, capture_output=True)
+
+        # Get extracted frames
+        extracted = sorted(glob.glob(f"{clip_frames_dir}/frame_*.jpg"))
+        if not extracted:
+            continue
+
+        # How many frames to use from this clip
+        if clip_i == len(clip_paths) - 1:
+            n_frames = total_frames - frame_idx
+        else:
+            n_frames = frames_per_clip
+
+        for i in range(n_frames):
+            src_frame = extracted[i % len(extracted)]
+            img = Image.open(src_frame).convert("RGB")
+            img = img.resize((SHORTS_WIDTH, SHORTS_HEIGHT), Image.LANCZOS)
+
+            # Draw captions
+            t = frame_idx / fps
+            for start, end, text in captions:
+                if start <= t <= end:
+                    img = draw_caption(img, text)
+                    break
+
+            out_path = f"output/frames/{frame_idx:06d}.jpg"
+            img.save(out_path, "JPEG", quality=85)
+            frame_idx += 1
+
+    print(f"Rendered {frame_idx} frames from Flow clips")
+
+    # Build video
+    os.makedirs("output", exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = f"output/video_{timestamp}.mp4"
+
+    cmd = [
+        ffmpeg, "-y",
+        "-framerate", str(fps),
+        "-i", "output/frames/%06d.jpg",
+        "-i", audio_path,
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-threads", "1",
+        "-c:a", "aac",
+        "-pix_fmt", "yuv420p",
+        "-shortest",
+        output_path
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")
+
+    latest = "output/final_video.mp4"
+    shutil.copy(output_path, latest)
+    print(f"Video ready: {output_path}")
+    return latest
+
+
+def extract_frames_from_clip(clip_path, target_fps=24):
+    """Extract frames from an MP4 clip using ffmpeg"""
+    import tempfile, json
+    ffmpeg = get_ffmpeg()
+
+    # Get clip duration
+    probe_cmd = [ffmpeg.replace("ffmpeg", "ffprobe"), "-v", "quiet",
+                 "-print_format", "json", "-show_streams", clip_path]
+    try:
+        result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        info = json.loads(result.stdout)
+        duration = float(info["streams"][0]["duration"])
+    except Exception:
+        duration = 8.0
+
+    return duration
+
+
 def create_video(manim_path=None):
     audio_path = "output/voice.mp3"
     srt_path = "output/captions.srt"
+
+    # Check for Flow/Veo MP4 clips first
+    flow_clips = get_background_clips()
+    if flow_clips:
+        print(f"Using {len(flow_clips)} Flow clips as background")
+        return _create_video_from_clips(flow_clips, audio_path, srt_path, manim_path)
     music_path = "assets/music/background.wav"
 
     duration = get_audio_duration(audio_path)
