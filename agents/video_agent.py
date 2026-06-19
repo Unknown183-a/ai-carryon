@@ -177,7 +177,7 @@ def extract_manim_frames(manim_path, total_frames, fps):
 
 
 def _create_video_from_clips(clip_paths, audio_path, srt_path, manim_path=None):
-    """Stitch Flow/Veo MP4 clips with voiceover audio"""
+    """Stitch Flow/Veo MP4 clips with clips own audio"""
     ffmpeg = get_ffmpeg()
     os.makedirs("output", exist_ok=True)
 
@@ -193,36 +193,39 @@ def _create_video_from_clips(clip_paths, audio_path, srt_path, manim_path=None):
         for cp in clip_paths:
             f.write("file '" + os.path.abspath(cp) + "'\n")
 
-    # Step 2 — concat + scale clips to silent video, write to file directly
+    # Step 2 — concat clips with audio intact (no re-encode video, copy streams)
     concat_video = "output/flow_concat_raw.mp4"
+    log1 = open("output/ffmpeg_step1.log", "w")
     ret = subprocess.call([
         ffmpeg, "-y",
         "-f", "concat", "-safe", "0",
         "-i", concat_path,
-        "-vf", f"scale={SHORTS_WIDTH}:{SHORTS_HEIGHT}:force_original_aspect_ratio=increase,crop={SHORTS_WIDTH}:{SHORTS_HEIGHT}",
         "-t", str(audio_duration),
-        "-an",
-        "-c:v", "libx264", "-preset", "ultrafast",
-        "-pix_fmt", "yuv420p",
+        "-c", "copy",
         concat_video
-    ])
+    ], stdout=log1, stderr=log1)
+    log1.close()
     if ret != 0:
-        raise RuntimeError("Concat clips failed")
+        raise RuntimeError("Concat clips failed: " + open("output/ffmpeg_step1.log").read()[-300:])
 
-    # Step 3 — merge silent video with voiceover (not clips audio)
+    # Step 3 — scale video to shorts dimensions
+    scaled_video = "output/flow_scaled.mp4"
+    log2 = open("output/ffmpeg_step2.log", "w")
     ret = subprocess.call([
         ffmpeg, "-y",
         "-i", concat_video,
-        "-i", audio_path,
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-shortest",
-        output_path
-    ])
+        "-vf", f"scale={SHORTS_WIDTH}:{SHORTS_HEIGHT}:force_original_aspect_ratio=increase,crop={SHORTS_WIDTH}:{SHORTS_HEIGHT}",
+        "-c:v", "libx264", "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "copy",
+        scaled_video
+    ], stdout=log2, stderr=log2)
+    log2.close()
     if ret != 0:
-        raise RuntimeError("Final merge with voiceover failed")
+        raise RuntimeError("Scale failed: " + open("output/ffmpeg_step2.log").read()[-300:])
 
     import shutil
+    shutil.copy(scaled_video, output_path)
     latest = "output/final_video.mp4"
     shutil.copy(output_path, latest)
     print(f"Flow video ready: {output_path}")
