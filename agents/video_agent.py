@@ -202,9 +202,12 @@ def _create_video_from_clips(clip_paths, audio_path, srt_path, manim_path=None):
         "-vf", f"scale={SHORTS_WIDTH}:{SHORTS_HEIGHT}:force_original_aspect_ratio=increase,crop={SHORTS_WIDTH}:{SHORTS_HEIGHT}",
         "-t", str(audio_duration),
         "-c:v", "libx264", "-preset", "ultrafast",
+        "-crf", "28",
+        "-threads", "1",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "-ar", "44100",
+        "-b:a", "64k",
         output_path
     ], stdout=log1, stderr=log1)
     log1.close()
