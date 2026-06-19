@@ -193,39 +193,25 @@ def _create_video_from_clips(clip_paths, audio_path, srt_path, manim_path=None):
         for cp in clip_paths:
             f.write("file '" + os.path.abspath(cp) + "'\n")
 
-    # Step 2 — concat clips with audio intact (no re-encode video, copy streams)
-    concat_video = "output/flow_concat_raw.mp4"
-    log1 = open("output/ffmpeg_step1.log", "w")
+    # Step 2 — concat + scale in one pass, re-encode everything
+    log1 = open("output/ffmpeg_concat.log", "w")
     ret = subprocess.call([
         ffmpeg, "-y",
         "-f", "concat", "-safe", "0",
         "-i", concat_path,
+        "-vf", f"scale={SHORTS_WIDTH}:{SHORTS_HEIGHT}:force_original_aspect_ratio=increase,crop={SHORTS_WIDTH}:{SHORTS_HEIGHT}",
         "-t", str(audio_duration),
-        "-c", "copy",
-        concat_video
+        "-c:v", "libx264", "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-ar", "44100",
+        output_path
     ], stdout=log1, stderr=log1)
     log1.close()
     if ret != 0:
-        raise RuntimeError("Concat clips failed: " + open("output/ffmpeg_step1.log").read()[-300:])
-
-    # Step 3 — scale video to shorts dimensions
-    scaled_video = "output/flow_scaled.mp4"
-    log2 = open("output/ffmpeg_step2.log", "w")
-    ret = subprocess.call([
-        ffmpeg, "-y",
-        "-i", concat_video,
-        "-vf", f"scale={SHORTS_WIDTH}:{SHORTS_HEIGHT}:force_original_aspect_ratio=increase,crop={SHORTS_WIDTH}:{SHORTS_HEIGHT}",
-        "-c:v", "libx264", "-preset", "ultrafast",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "copy",
-        scaled_video
-    ], stdout=log2, stderr=log2)
-    log2.close()
-    if ret != 0:
-        raise RuntimeError("Scale failed: " + open("output/ffmpeg_step2.log").read()[-300:])
+        raise RuntimeError("Concat+scale failed: " + open("output/ffmpeg_concat.log").read()[-500:])
 
     import shutil
-    shutil.copy(scaled_video, output_path)
     latest = "output/final_video.mp4"
     shutil.copy(output_path, latest)
     print(f"Flow video ready: {output_path}")
