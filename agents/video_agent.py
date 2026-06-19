@@ -177,91 +177,55 @@ def extract_manim_frames(manim_path, total_frames, fps):
 
 
 def _create_video_from_clips(clip_paths, audio_path, srt_path, manim_path=None):
-    """Stitch Flow/Veo MP4 clips — use clips' own audio, no captions"""
+    """Stitch Flow/Veo MP4 clips with voiceover audio"""
     ffmpeg = get_ffmpeg()
     os.makedirs("output", exist_ok=True)
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = f"output/video_{timestamp}.mp4"
 
-    # Step 1 — get total duration from TTS audio (to know how long to loop)
     audio_duration = get_audio_duration(audio_path)
     print(f"Target duration: {audio_duration:.1f}s, clips: {len(clip_paths)}")
 
-    # Step 2 — use clips once each, no looping
-    looped_clips = clip_paths
-
-    # Step 3 — write a concat file for ffmpeg
+    # Step 1 — write concat file
     concat_path = "output/flow_concat.txt"
     with open(concat_path, "w") as f:
-        for cp in looped_clips:
-            abs_path = os.path.abspath(cp)
-            f.write("file '" + abs_path + "'\n")
+        for cp in clip_paths:
+            f.write("file '" + os.path.abspath(cp) + "'\n")
 
-    # Step 4 — concat clips into one silent video trimmed to audio_duration
+    # Step 2 — concat + scale clips to silent video, write to file directly
     concat_video = "output/flow_concat_raw.mp4"
-    concat_cmd = [
+    ret = subprocess.call([
         ffmpeg, "-y",
         "-f", "concat", "-safe", "0",
         "-i", concat_path,
         "-vf", f"scale={SHORTS_WIDTH}:{SHORTS_HEIGHT}:force_original_aspect_ratio=increase,crop={SHORTS_WIDTH}:{SHORTS_HEIGHT}",
         "-t", str(audio_duration),
-        "-an",  # drop original audio from clips
+        "-an",
         "-c:v", "libx264", "-preset", "ultrafast",
         "-pix_fmt", "yuv420p",
         concat_video
-    ]
-    result = subprocess.run(concat_cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"Concat failed: {result.stderr[-500:]}")
+    ])
+    if ret != 0:
+        raise RuntimeError("Concat clips failed")
 
-    # Step 5 — mix concat video with clips' own audio track
-    # Extract and concat audio from the original clips
-    clip_audio_parts = []
-    audio_concat_path = "output/audio_concat.txt"
-    for i, cp in enumerate(looped_clips):
-        part = f"output/clip_audio_{i}.aac"
-        subprocess.run([
-            ffmpeg, "-y", "-i", cp,
-            "-t", "8",
-            "-vn", "-c:a", "aac", part
-        ], capture_output=True)
-        if os.path.exists(part):
-            clip_audio_parts.append(part)
-
-    # Write audio concat list
-    with open(audio_concat_path, "w") as f:
-        for ap in clip_audio_parts:
-            f.write("file '" + os.path.abspath(ap) + "'\n")
-
-    concat_audio = "output/flow_audio_merged.aac"
-    subprocess.run([
-        ffmpeg, "-y",
-        "-f", "concat", "-safe", "0",
-        "-i", audio_concat_path,
-        "-t", str(audio_duration),
-        "-c:a", "aac",
-        concat_audio
-    ], capture_output=True)
-
-    # Step 6 — merge video + clips audio into final output
-    cmd = [
+    # Step 3 — merge silent video with voiceover (not clips audio)
+    ret = subprocess.call([
         ffmpeg, "-y",
         "-i", concat_video,
-        "-i", concat_audio,
+        "-i", audio_path,
         "-c:v", "copy",
         "-c:a", "aac",
         "-shortest",
         output_path
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"Final merge failed: {result.stderr[-500:]}")
+    ])
+    if ret != 0:
+        raise RuntimeError("Final merge with voiceover failed")
 
-    latest = "output/final_video.mp4"
     import shutil
+    latest = "output/final_video.mp4"
     shutil.copy(output_path, latest)
-    print(f"Flow video ready (clips audio, no captions): {output_path}")
+    print(f"Flow video ready: {output_path}")
     return latest
 
 
