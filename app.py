@@ -429,16 +429,8 @@ with english_tab:
                 st.subheader("📄 Captions")
                 st.code(open(caption_file).read())
 
-                with st.spinner("🎨 Generating Manim Animation (this takes 2-3 min)..."):
-                    manim_video = render_manim_animation(topic, script)
-                    if manim_video:
-                        st.subheader("🎨 Manim Animation")
-                        st.video(manim_video)
-                    else:
-                        st.warning("Manim animation failed, using background images instead")
-
                 with st.spinner("🎬 Creating Final Video..."):
-                    video_file = create_video(manim_path=manim_video if manim_video else None)
+                    video_file = create_video(manim_path=None)
 
                 from moviepy import AudioFileClip as AFC
                 duration = AFC("output/voice.mp3").duration
