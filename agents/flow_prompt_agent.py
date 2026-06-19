@@ -36,8 +36,13 @@ CLIP 3 — CTA CLOSE (final 8-10 seconds):
 - Action: he looks directly into camera, gestures as if recommending to viewer
 - Background: holographic text floats in foreground, dark background with subtle glow
 
+CHARACTER SEED (use EXACTLY this description for the presenter in ALL 3 clips — same person, same look):
+"26-year-old Indian male, short neat black hair, light stubble, sharp jawline, wearing a dark navy crew-neck t-shirt, slim build, natural skin tone, no glasses"
+
+CRITICAL: Every clip must describe this EXACT same person. Do not change hair, clothing, face, or age between clips.
+
 For each clip write ONE rich paragraph combining: scene objective, character emotion+action, camera movement, lighting, background, motion elements.
-Always end each prompt with: "9:16 vertical, 8 seconds, photorealistic, cinematic UGC style"
+Always end each prompt with: "9:16 vertical, 8 seconds, photorealistic, cinematic UGC style, consistent character: 26-year-old Indian male short black hair dark navy t-shirt"
 
 Return EXACTLY:
 CLIP 1: <paragraph>
@@ -57,9 +62,9 @@ CLIP 3: <paragraph>
 
     if len(clips) < 3:
         clips = [
-            f"Viral hook — handheld UGC close-up of young Indian male tech presenter with shocked expression, eyes wide, fast punch-in zoom in first 2 seconds, he leans forward as if revealing a secret about {topic}, dark futuristic studio with glowing cyan holographic panels flickering, moody blue rim lighting, floating code symbols drift past camera, 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style",
-            f"Feature showcase — smooth gimbal medium shot of young Indian male tech presenter gesturing confidently at large glowing holographic display showing {topic} visuals, rack focus from display to his face, dark studio with blue ambient lighting, holographic data pulses and animates around him, confident explaining expression, 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style",
-            f"CTA close — slow push-in on young Indian male tech presenter turning to face camera directly with a knowing smile, direct eye contact as if recommending to viewer, holographic text floats in foreground, premium soft cyan rim lighting, dark background with subtle glow, he gestures toward camera, 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style"
+            f"Viral hook — handheld UGC close-up of 26-year-old Indian male, short neat black hair, light stubble, dark navy t-shirt, shocked expression, eyes wide, fast punch-in zoom in first 2 seconds, leans forward revealing secret about {topic}, dark futuristic studio, glowing cyan holographic panels flickering, moody blue rim lighting, 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style, consistent character: 26-year-old Indian male, short neat black hair, light stubble, dark navy t-shirt",
+            f"Feature showcase — smooth gimbal medium shot of 26-year-old Indian male, short neat black hair, light stubble, dark navy t-shirt, confident explaining expression, gestures at large glowing holographic display showing {topic} visuals, rack focus from display to his face, dark studio blue ambient lighting, holographic data pulses around him, 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style, consistent character: 26-year-old Indian male, short neat black hair, light stubble, dark navy t-shirt",
+            f"CTA close — slow push-in on 26-year-old Indian male, short neat black hair, light stubble, dark navy t-shirt, turns to face camera directly with knowing smile, direct eye contact, holographic text floats in foreground, premium soft cyan rim lighting, dark background subtle glow, gestures toward camera, 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style, consistent character: 26-year-old Indian male, short neat black hair, light stubble, dark navy t-shirt"
         ]
 
     return clips[:3]
