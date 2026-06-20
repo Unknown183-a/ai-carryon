@@ -48,7 +48,7 @@ def load_view_history_from_github():
     if not GITHUB_TOKEN:
         return None, "GITHUB_TOKEN not set"
 
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/output/view_history.json?ref=data"
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/view_history.json?ref=data"
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3.raw",
