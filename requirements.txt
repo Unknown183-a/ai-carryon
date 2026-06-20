@@ -15,3 +15,4 @@ imageio-ffmpeg
 numpy
 soundfile
 streamlit
+plotly
