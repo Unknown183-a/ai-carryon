@@ -19,7 +19,6 @@ def log(message):
 
 
 def get_recent_topics(hours=24):
-    """Return topics posted within the last `hours` hours"""
     if not os.path.exists(POSTED_FILE):
         return []
 
@@ -50,20 +49,29 @@ def mark_posted(topic):
 
 
 def get_fresh_trending_topic(region_code="US", max_attempts=5):
-    """Get a trending topic not posted in the last 24 hours"""
     from agents.trending_agent import get_trending_topic
+    from agents.saturation_agent import check_saturation
 
     recent_topics = get_recent_topics(hours=24)
 
     for attempt in range(max_attempts):
         topic = get_trending_topic(region_code=region_code)
 
-        if topic.lower().strip() not in recent_topics:
-            return topic
+        if topic.lower().strip() in recent_topics:
+            log(f"Topic already posted in last 24h, retrying ({attempt+1}/{max_attempts}): {topic}")
+            continue
 
-        log(f"Topic already posted in last 24h, retrying ({attempt+1}/{max_attempts}): {topic}")
+        # Phase 1.5 — Saturation check
+        saturation = check_saturation(topic)
+        log(f"Saturation check: score={saturation['opportunity_score']} — {saturation['reason']}")
 
-    # Exhausted retries — use the last topic anyway with a suffix to keep content unique
+        if not saturation["proceed"]:
+            log(f"Topic too saturated, retrying ({attempt+1}/{max_attempts}): {topic}")
+            continue
+
+        return topic
+
+    # Exhausted retries — use last topic anyway
     return topic + " - extra"
 
 
@@ -142,7 +150,6 @@ def generate_and_upload():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-# Run every hour
 schedule.every(5).hours.do(generate_and_upload)
 
 
@@ -152,7 +159,6 @@ def track_views_job():
         from agents.view_tracker_agent import track_views
         history = track_views()
         log(f"Tracked {len(history)} videos")
-        # Backup to GitHub for persistence across redeploys
         try:
             from agents.data_persistence import backup_view_history
             backup_view_history()
@@ -171,14 +177,12 @@ if __name__ == "__main__":
     log("Schedule: every 5 hours")
     log("View tracking: every 1 hour")
 
-    # Restore view history from GitHub on startup
     try:
         from agents.data_persistence import restore_view_history
         restore_view_history()
     except Exception as e:
         log(f"View history restore skipped: {e}")
 
-    # Run an initial view-tracking snapshot at startup
     track_views_job()
 
     utc_now = datetime.datetime.utcnow()
