@@ -304,7 +304,7 @@ def extract_frames_from_clip(clip_path, target_fps=24):
     return duration
 
 
-def create_video(manim_path=None):
+def create_video(manim_path=None, use_flow_clips=False):
     audio_path = "output/voice.mp3"
     srt_path = "output/captions.srt"
 
