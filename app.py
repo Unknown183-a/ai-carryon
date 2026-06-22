@@ -641,7 +641,7 @@ with hindi_tab:
 
                     with st.spinner("🎬 Video ban raha hai..."):
                         from agents.video_agent import create_video
-                        video_file = create_video()
+                        video_file = create_video(use_flow_clips=False)
 
                     from moviepy import AudioFileClip as AFC
                     duration = AFC("output/voice.mp3").duration

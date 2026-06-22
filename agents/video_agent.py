@@ -308,8 +308,9 @@ def create_video(manim_path=None):
     audio_path = "output/voice.mp3"
     srt_path = "output/captions.srt"
 
-    # Check for Flow/Veo MP4 clips first
-    flow_clips = get_background_clips()
+    # Flow clips only used when explicitly passed (manual Streamlit generation)
+    # Scheduler always uses image backgrounds
+    flow_clips = get_background_clips() if use_flow_clips else []
     if flow_clips:
         print(f"Using {len(flow_clips)} Flow clips as background")
         return _create_video_from_clips(flow_clips, audio_path, srt_path, manim_path)
