@@ -640,8 +640,50 @@ with hindi_tab:
                     st.code(open(caption_file).read())
 
                     with st.spinner("🎬 Video ban raha hai..."):
+                        # ── Hindi Flow Prompt Generator ────────────────
+                        with st.spinner("🎬 Flow/Veo Prompts generate ho rahe hain..."):
+                            from agents_hindi.flow_prompt_agent import generate_flow_prompts_hindi
+                            hindi_flow_prompts = generate_flow_prompts_hindi(
+                                st.session_state.get("hindi_topic", ""), script
+                            )
+
+                        st.subheader("🎬 Flow Video Prompts")
+                        st.info("Har prompt copy karo → labs.google/flow mein paste karo → clip download karo → neeche upload karo")
+
+                        for i, fp in enumerate(hindi_flow_prompts):
+                            st.code(fp, language=None)
+
+                        hindi_uploaded_clips = st.file_uploader(
+                            "📤 Flow clips upload karo (MP4)",
+                            type=["mp4", "mov"],
+                            accept_multiple_files=True,
+                            key="hindi_flow_clips_uploader"
+                        )
+
+                        if hindi_uploaded_clips:
+                            os.makedirs("assets/flow_clips", exist_ok=True)
+                            for f in glob.glob("assets/flow_clips/*.mp4"):
+                                os.remove(f)
+                            for i, clip in enumerate(hindi_uploaded_clips):
+                                clip_path = f"assets/flow_clips/clip_{i:02d}.mp4"
+                                with open(clip_path, "wb") as f:
+                                    f.write(clip.read())
+                            st.success(f"✅ {len(hindi_uploaded_clips)} clip(s) upload ho gaye")
+                            hindi_use_flow = True
+                        else:
+                            if os.path.isdir("assets/flow_clips"):
+                                for f in glob.glob("assets/flow_clips/*.mp4"):
+                                    os.remove(f)
+                            st.warning("⚠️ Koi clip upload nahi hua — auto backgrounds use honge")
+                            hindi_use_flow = False
+                        # ── End Hindi Flow ──────────────────────────────────
+
                         from agents.video_agent import create_video
-                        video_file = create_video(use_flow_clips=False)
+                        video_file = create_video(use_flow_clips=hindi_use_flow)
+                        # Clear flow clips after use
+                        import glob as _glob
+                        for _f in _glob.glob("assets/flow_clips/*.mp4"):
+                            os.remove(_f)
 
                     from moviepy import AudioFileClip as AFC
                     duration = AFC("output/voice.mp3").duration
