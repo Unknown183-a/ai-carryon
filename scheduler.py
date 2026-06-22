@@ -154,6 +154,9 @@ schedule.every(5).hours.do(generate_and_upload)
 
 
 def track_views_job():
+    if not os.path.exists("client_secrets.json"):
+        print("[SKIP] client_secrets.json not found — view tracking disabled on this environment")
+        return
     log("=== Tracking video view history ===")
     try:
         from agents.view_tracker_agent import track_views
