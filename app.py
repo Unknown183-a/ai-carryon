@@ -704,9 +704,14 @@ with hindi_tab:
                     if st.button("🎬 Video Banao (Final)", key="hindi_make_video_btn"):
                         with st.spinner("🎬 Video ban raha hai..."):
                             from agents.video_agent import create_video
-                            video_file = create_video(use_flow_clips=_hindi_clips_exist)
+                            st.session_state["hindi_video_file"] = create_video(use_flow_clips=_hindi_clips_exist)
                             for _f in glob.glob("assets/flow_clips/*.mp4"):
                                 os.remove(_f)
+
+                    video_file = st.session_state.get("hindi_video_file")
+                    if not video_file:
+                        st.info("⬆️ Upar se video mode chuno aur Video Banao (Final) click karo")
+                        st.stop()
 
                     from moviepy import AudioFileClip as AFC
                     duration = AFC("output/voice.mp3").duration
