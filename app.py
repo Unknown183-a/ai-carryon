@@ -651,26 +651,34 @@ with hindi_tab:
                     st.subheader("🎬 Flow Video Prompts (Google Flow / Veo 3)")
                     st.info("Har prompt copy karo → labs.google/flow mein paste karo → clip download karo → neeche upload karo")
 
-                    hindi_video_mode = st.radio(
-                        "Video banane ka tarika chuno:",
-                        ["🤖 Auto (Pexels images)", "🎬 Flow clips use karo (upload karo)"],
-                        key="hindi_video_mode_radio",
-                        horizontal=True
-                    )
-
-                    hindi_use_flow = "Flow clips" in hindi_video_mode
-
-                    if hindi_use_flow:
-                        st.markdown("**📋 Ye prompts Google Flow mein paste karo:**")
-                    else:
-                        st.markdown("**📋 Flow prompts (reference ke liye):**")
-
                     for i, fp in enumerate(hindi_flow_prompts):
                         st.code(fp, language=None)
 
-                    if hindi_use_flow:
+                    st.divider()
+                    st.subheader("🎬 Video Mode Chuno")
+
+                    col_auto, col_flow = st.columns(2)
+                    with col_auto:
+                        if st.button("🤖 Auto (Pexels images)", key="hindi_mode_auto",
+                                     type="primary" if st.session_state.get("hindi_mode") != "flow" else "secondary"):
+                            st.session_state["hindi_mode"] = "auto"
+                            if os.path.isdir("assets/flow_clips"):
+                                for f in glob.glob("assets/flow_clips/*.mp4"):
+                                    os.remove(f)
+                            st.rerun()
+                    with col_flow:
+                        if st.button("🎬 Flow clips use karo", key="hindi_mode_flow",
+                                     type="primary" if st.session_state.get("hindi_mode") == "flow" else "secondary"):
+                            st.session_state["hindi_mode"] = "flow"
+                            st.rerun()
+
+                    hindi_mode = st.session_state.get("hindi_mode", "auto")
+
+                    if hindi_mode == "flow":
+                        st.success("✅ Flow clips mode active hai")
+                        st.markdown("**📤 Teeno clips upload karo (MP4):**")
                         hindi_uploaded_clips = st.file_uploader(
-                            "📤 Flow clips upload karo (MP4) — teeno clips ek saath",
+                            "Flow clips upload karo",
                             type=["mp4", "mov"],
                             accept_multiple_files=True,
                             key="hindi_flow_clips_uploader"
@@ -685,32 +693,28 @@ with hindi_tab:
                                     f.write(clip.read())
                             st.success(f"✅ {len(hindi_uploaded_clips)} clip(s) upload ho gaye!")
                         else:
-                            if os.path.isdir("assets/flow_clips"):
-                                for f in glob.glob("assets/flow_clips/*.mp4"):
-                                    os.remove(f)
-                            st.warning("⚠️ Abhi tak koi clip upload nahi hua")
+                            st.warning("⚠️ Abhi tak koi clip upload nahi hua — clips upload karo phir Video Banao click karo")
                     else:
+                        st.info("🤖 Auto mode — Pexels se background images use honge")
                         if os.path.isdir("assets/flow_clips"):
                             for f in glob.glob("assets/flow_clips/*.mp4"):
                                 os.remove(f)
 
                     _hindi_clips_exist = bool(glob.glob("assets/flow_clips/*.mp4"))
-                    _hindi_use_flow = "Flow clips" in st.session_state.get("hindi_video_mode_radio", "")
+                    _hindi_use_flow = hindi_mode == "flow"
 
                     if _hindi_use_flow and not _hindi_clips_exist:
-                        st.error("❌ Flow mode select kiya hai lekin clips upload nahi hue — pehle clips upload karo")
-                        st.stop()
-
-                    if st.button("🎬 Video Banao (Final)", key="hindi_make_video_btn"):
-                        with st.spinner("🎬 Video ban raha hai..."):
-                            from agents.video_agent import create_video
-                            st.session_state["hindi_video_file"] = create_video(use_flow_clips=_hindi_clips_exist)
-                            for _f in glob.glob("assets/flow_clips/*.mp4"):
-                                os.remove(_f)
+                        st.warning("⬆️ Pehle clips upload karo, phir Video Banao click karo")
+                    else:
+                        if st.button("🎬 Video Banao (Final)", key="hindi_make_video_btn", type="primary"):
+                            with st.spinner("🎬 Video ban raha hai..."):
+                                from agents.video_agent import create_video
+                                st.session_state["hindi_video_file"] = create_video(use_flow_clips=_hindi_clips_exist)
+                                for _f in glob.glob("assets/flow_clips/*.mp4"):
+                                    os.remove(_f)
 
                     video_file = st.session_state.get("hindi_video_file")
                     if not video_file:
-                        st.info("⬆️ Upar se video mode chuno aur Video Banao (Final) click karo")
                         st.stop()
 
                     from moviepy import AudioFileClip as AFC
