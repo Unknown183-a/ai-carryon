@@ -53,6 +53,29 @@ def generate_image_prompts(topic, script, num_images=4):
 
 def download_generated_image(prompt, output_path):
     import re as _re
+    # Use Pexels as primary (reliable, no rate limit issues)
+    pexels_key = os.getenv("PEXELS_API_KEY", "")
+    if pexels_key:
+        try:
+            clean_prompt = _re.sub(r"[^a-zA-Z0-9 ,]", "", prompt).strip()
+            # Extract key search terms (first 5 words)
+            search_query = " ".join(clean_prompt.split()[:5])
+            headers = {"Authorization": pexels_key}
+            params = {"query": search_query, "orientation": "portrait", "size": "large", "per_page": 1}
+            r = requests.get("https://api.pexels.com/v1/search", headers=headers, params=params, timeout=30)
+            r.raise_for_status()
+            data = r.json()
+            if data.get("photos"):
+                img_url = data["photos"][0]["src"]["large2x"]
+                img_r = requests.get(img_url, timeout=60)
+                img_r.raise_for_status()
+                with open(output_path, "wb") as f:
+                    f.write(img_r.content)
+                return output_path
+        except Exception as e:
+            print(f"Pexels failed: {e}, trying pollinations...")
+
+    # Fallback to pollinations.ai
     clean_prompt = _re.sub(r"[^a-zA-Z0-9 ,]", "", prompt).strip()
     encoded = requests.utils.quote(clean_prompt)
     url = f"https://image.pollinations.ai/prompt/{encoded}?width=720&height=1280&nologo=true&enhance=true&model=flux"
