@@ -590,32 +590,60 @@ with hindi_tab:
                 try:
                     with st.spinner("🔍 Research ho raha hai..."):
                         from agents.research_agent import research
-                        research_data = research(hindi_topic)
-                    st.subheader("📚 Research")
-                    st.write(research_data)
-
+                        st.session_state["hindi_research"] = research(hindi_topic)
                     with st.spinner("✍️ Hindi script likh raha hai..."):
-                        script = hindi_create_script(research_data)
-                    st.subheader("📝 Hindi Script")
-                    st.write(script)
-
+                        st.session_state["hindi_script"] = hindi_create_script(st.session_state["hindi_research"])
                     with st.spinner("📈 Hindi SEO generate ho raha hai..."):
                         competitor_data = st.session_state.get("hindi_competitor", None)
-                        seo = hindi_generate_seo(hindi_topic, script, competitor_data=competitor_data)
-                    st.subheader("📈 SEO")
-                    st.markdown(f"**Title:** {seo['title']}")
-                    st.markdown(f"**Description:** {seo['description']}")
-                    st.markdown(f"**Hashtags:** {seo['hashtags']}")
+                        st.session_state["hindi_seo"] = hindi_generate_seo(hindi_topic, st.session_state["hindi_script"], competitor_data=competitor_data)
+                    with st.spinner("🖼️ Thumbnail ban raha hai..."):
+                        from agents.thumbnail_generator import generate_thumbnail
+                        st.session_state["hindi_thumb"] = generate_thumbnail(st.session_state["hindi_seo"]["title"], hindi_topic)
+                    with st.spinner("🌆 Background images fetch ho rahi hain..."):
+                        from agents.image_agent import generate_backgrounds
+                        imgs, errs = generate_backgrounds(hindi_topic, st.session_state["hindi_script"], num_images=4)
+                        st.session_state["hindi_images"] = imgs
+                        st.session_state["hindi_img_errors"] = errs
+                    with st.spinner("🎙️ Hindi awaaz generate ho rahi hai..."):
+                        st.session_state["hindi_voice"] = hindi_generate_voice(st.session_state["hindi_script"])
+                    with st.spinner("💬 Captions ban rahe hain..."):
+                        from agents.caption_agent import create_srt
+                        st.session_state["hindi_captions"] = create_srt(st.session_state["hindi_script"], st.session_state["hindi_voice"])
+                    with st.spinner("🎬 Flow/Veo Prompts generate ho rahe hain..."):
+                        from agents_hindi.flow_prompt_agent import generate_flow_prompts_hindi
+                        st.session_state["hindi_prompts"] = generate_flow_prompts_hindi(
+                            st.session_state.get("hindi_topic", ""), st.session_state["hindi_script"]
+                        )
+                    st.session_state["hindi_generated"] = True
+                    st.session_state["hindi_video_file"] = None
+                except Exception as e:
+                    st.error(str(e))
+                    import traceback
+                    st.code(traceback.format_exc())
+
+            # ── Display all generated content from session state ──
+            if st.session_state.get("hindi_generated"):
+                research_data = st.session_state.get("hindi_research", "")
+                script = st.session_state.get("hindi_script", "")
+                seo = st.session_state.get("hindi_seo", {})
+
+                st.subheader("📚 Research")
+                st.write(research_data)
+                st.subheader("📝 Hindi Script")
+                st.write(script)
+                st.subheader("📈 SEO")
+                st.markdown(f"**Title:** {seo.get('title','')}")
+                st.markdown(f"**Description:** {seo.get('description','')}")
+                st.markdown(f"**Hashtags:** {seo.get('hashtags','')}")
 
                     with st.spinner("🖼️ Thumbnail ban raha hai..."):
                         from agents.thumbnail_generator import generate_thumbnail
                         thumbnail = generate_thumbnail(seo["title"], hindi_topic)
                     st.subheader("🖼️ Thumbnail")
-                    st.image(thumbnail, use_container_width=True)
+                    st.image(st.session_state.get("hindi_thumb"), use_container_width=True)
 
-                    with st.spinner("🌆 Background images fetch ho rahi hain..."):
-                        from agents.image_agent import generate_backgrounds
-                        image_paths, image_errors = generate_backgrounds(hindi_topic, script, num_images=4)
+                    image_paths = st.session_state.get("hindi_images", [])
+                    image_errors = st.session_state.get("hindi_img_errors", [])
                     if image_errors:
                         for err in image_errors:
                             st.warning(err)
@@ -624,27 +652,16 @@ with hindi_tab:
                         cols = st.columns(len(image_paths))
                         for col, img_path in zip(cols, image_paths):
                             col.image(img_path)
-                    else:
-                        st.error("Background images nahi bani. Ruko...")
-                        st.stop()
 
-                    with st.spinner("🎙️ Hindi awaaz generate ho rahi hai..."):
-                        voice = hindi_generate_voice(script)
+                    voice = st.session_state.get("hindi_voice")
                     st.subheader("🔊 Hindi Awaaz")
-                    st.audio(voice)
+                    if voice:
+                        st.audio(voice)
 
-                    with st.spinner("💬 Captions ban rahe hain..."):
-                        from agents.caption_agent import create_srt
-                        caption_file = create_srt(script, voice)
+                    caption_file = st.session_state.get("hindi_captions")
                     st.subheader("📄 Captions")
-                    st.code(open(caption_file).read())
-
-                    # ── Hindi Flow Prompts (outside spinner) ─────────────
-                    with st.spinner("🎬 Flow/Veo Prompts generate ho rahe hain..."):
-                        from agents_hindi.flow_prompt_agent import generate_flow_prompts_hindi
-                        st.session_state["hindi_prompts"] = generate_flow_prompts_hindi(
-                            st.session_state.get("hindi_topic", ""), script
-                        )
+                    if caption_file:
+                        st.code(open(caption_file).read())
 
                     hindi_flow_prompts = st.session_state.get("hindi_prompts", [])
 
