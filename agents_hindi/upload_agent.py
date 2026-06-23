@@ -8,9 +8,14 @@ import googleapiclient.http
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 def get_youtube_client():
-    token_json = os.getenv("YOUTUBE_TOKEN_JSON")
+    # Try Hindi-specific token first, fall back to local file
+    token_json = os.getenv("HINDI_TOKEN_JSON") or os.getenv("YOUTUBE_TOKEN_JSON")
     if not token_json:
-        raise ValueError("YOUTUBE_TOKEN_JSON not set")
+        # Try local file
+        if os.path.exists("token_hindi.json"):
+            token_json = open("token_hindi.json").read()
+        else:
+            raise ValueError("No Hindi YouTube token found")
     
     token_data = json.loads(token_json)
     credentials = google.oauth2.credentials.Credentials(
