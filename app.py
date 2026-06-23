@@ -639,77 +639,74 @@ with hindi_tab:
                     st.subheader("📄 Captions")
                     st.code(open(caption_file).read())
 
-                    with st.spinner("🎬 Video ban raha hai..."):
-                        # ── Hindi Flow Prompt Generator ────────────────
-                        with st.spinner("🎬 Flow/Veo Prompts generate ho rahe hain..."):
-                            from agents_hindi.flow_prompt_agent import generate_flow_prompts_hindi
-                            st.session_state["hindi_prompts"] = generate_flow_prompts_hindi(
-                                st.session_state.get("hindi_topic", ""), script
-                            )
-                        # ── End Hindi Flow generation ───────────────────────
-
-                        # ── Hindi Video Mode Selector ──────────────────────
-                        hindi_flow_prompts = st.session_state.get("hindi_prompts", [])
-
-                        st.subheader("🎬 Flow Video Prompts (Google Flow / Veo 3)")
-                        st.info("Har prompt copy karo → labs.google/flow mein paste karo → clip download karo → neeche upload karo")
-
-                        hindi_video_mode = st.radio(
-                            "Video banane ka tarika chuno:",
-                            ["🤖 Auto (Pexels images)", "🎬 Flow clips use karo (upload karo)"],
-                            key="hindi_video_mode_radio",
-                            horizontal=True
+                    # ── Hindi Flow Prompts (outside spinner) ─────────────
+                    with st.spinner("🎬 Flow/Veo Prompts generate ho rahe hain..."):
+                        from agents_hindi.flow_prompt_agent import generate_flow_prompts_hindi
+                        st.session_state["hindi_prompts"] = generate_flow_prompts_hindi(
+                            st.session_state.get("hindi_topic", ""), script
                         )
 
-                        hindi_use_flow = "Flow clips" in hindi_video_mode
+                    hindi_flow_prompts = st.session_state.get("hindi_prompts", [])
 
-                        if hindi_use_flow:
-                            st.markdown("**📋 Ye prompts Google Flow mein paste karo:**")
-                        else:
-                            st.markdown("**📋 Flow prompts (reference ke liye):**")
+                    st.subheader("🎬 Flow Video Prompts (Google Flow / Veo 3)")
+                    st.info("Har prompt copy karo → labs.google/flow mein paste karo → clip download karo → neeche upload karo")
 
-                        for i, fp in enumerate(hindi_flow_prompts):
-                            st.code(fp, language=None)
+                    hindi_video_mode = st.radio(
+                        "Video banane ka tarika chuno:",
+                        ["🤖 Auto (Pexels images)", "🎬 Flow clips use karo (upload karo)"],
+                        key="hindi_video_mode_radio",
+                        horizontal=True
+                    )
 
-                        if hindi_use_flow:
-                            hindi_uploaded_clips = st.file_uploader(
-                                "📤 Flow clips upload karo (MP4) — teeno clips ek saath",
-                                type=["mp4", "mov"],
-                                accept_multiple_files=True,
-                                key="hindi_flow_clips_uploader"
-                            )
-                            if hindi_uploaded_clips:
-                                os.makedirs("assets/flow_clips", exist_ok=True)
-                                for f in glob.glob("assets/flow_clips/*.mp4"):
-                                    os.remove(f)
-                                for i, clip in enumerate(hindi_uploaded_clips):
-                                    clip_path = f"assets/flow_clips/clip_{i:02d}.mp4"
-                                    with open(clip_path, "wb") as f:
-                                        f.write(clip.read())
-                                st.success(f"✅ {len(hindi_uploaded_clips)} clip(s) upload ho gaye!")
-                            else:
-                                if os.path.isdir("assets/flow_clips"):
-                                    for f in glob.glob("assets/flow_clips/*.mp4"):
-                                        os.remove(f)
-                                st.warning("⚠️ Abhi tak koi clip upload nahi hua")
+                    hindi_use_flow = "Flow clips" in hindi_video_mode
+
+                    if hindi_use_flow:
+                        st.markdown("**📋 Ye prompts Google Flow mein paste karo:**")
+                    else:
+                        st.markdown("**📋 Flow prompts (reference ke liye):**")
+
+                    for i, fp in enumerate(hindi_flow_prompts):
+                        st.code(fp, language=None)
+
+                    if hindi_use_flow:
+                        hindi_uploaded_clips = st.file_uploader(
+                            "📤 Flow clips upload karo (MP4) — teeno clips ek saath",
+                            type=["mp4", "mov"],
+                            accept_multiple_files=True,
+                            key="hindi_flow_clips_uploader"
+                        )
+                        if hindi_uploaded_clips:
+                            os.makedirs("assets/flow_clips", exist_ok=True)
+                            for f in glob.glob("assets/flow_clips/*.mp4"):
+                                os.remove(f)
+                            for i, clip in enumerate(hindi_uploaded_clips):
+                                clip_path = f"assets/flow_clips/clip_{i:02d}.mp4"
+                                with open(clip_path, "wb") as f:
+                                    f.write(clip.read())
+                            st.success(f"✅ {len(hindi_uploaded_clips)} clip(s) upload ho gaye!")
                         else:
                             if os.path.isdir("assets/flow_clips"):
                                 for f in glob.glob("assets/flow_clips/*.mp4"):
                                     os.remove(f)
+                            st.warning("⚠️ Abhi tak koi clip upload nahi hua")
+                    else:
+                        if os.path.isdir("assets/flow_clips"):
+                            for f in glob.glob("assets/flow_clips/*.mp4"):
+                                os.remove(f)
 
-                        _hindi_clips_exist = bool(glob.glob("assets/flow_clips/*.mp4"))
-                        _hindi_use_flow = "Flow clips" in st.session_state.get("hindi_video_mode_radio", "")
+                    _hindi_clips_exist = bool(glob.glob("assets/flow_clips/*.mp4"))
+                    _hindi_use_flow = "Flow clips" in st.session_state.get("hindi_video_mode_radio", "")
 
-                        if _hindi_use_flow and not _hindi_clips_exist:
-                            st.error("❌ Flow mode select kiya hai lekin clips upload nahi hue — pehle clips upload karo")
-                            st.stop()
-                        # ── End Hindi Video Mode ────────────────────────────
+                    if _hindi_use_flow and not _hindi_clips_exist:
+                        st.error("❌ Flow mode select kiya hai lekin clips upload nahi hue — pehle clips upload karo")
+                        st.stop()
 
-                        from agents.video_agent import create_video
-                        video_file = create_video(use_flow_clips=_hindi_clips_exist)
-                        # Clear flow clips after use
-                        for _f in glob.glob("assets/flow_clips/*.mp4"):
-                            os.remove(_f)
+                    if st.button("🎬 Video Banao (Final)", key="hindi_make_video_btn"):
+                        with st.spinner("🎬 Video ban raha hai..."):
+                            from agents.video_agent import create_video
+                            video_file = create_video(use_flow_clips=_hindi_clips_exist)
+                            for _f in glob.glob("assets/flow_clips/*.mp4"):
+                                os.remove(_f)
 
                     from moviepy import AudioFileClip as AFC
                     duration = AFC("output/voice.mp3").duration
