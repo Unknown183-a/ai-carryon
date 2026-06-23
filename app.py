@@ -324,7 +324,7 @@ with english_tab:
                 with st.spinner("🎯 Generating Thumbnail Text..."):
                     st.session_state["eng_thumb_text"] = generate_thumbnail_text(topic)
                 with st.spinner("🖼️ Generating Thumbnail Image..."):
-                    st.session_state["eng_thumb_img"] = generate_thumbnail(st.session_state["eng_seo"]["title"], topic)
+                    st.session_state["eng_thumb_img"] = generate_thumbnail(st.session_state.get("eng_seo", {}).get("title", ""), topic)
 
             except Exception as e:
                 st.error(f"Generation failed: {e}")
@@ -333,7 +333,7 @@ with english_tab:
         if st.session_state.get("eng_topic_done"):
             research_data = st.session_state["eng_research"]
             script = st.session_state["eng_script"]
-            seo = st.session_state["eng_seo"]
+            seo = st.session_state.get("eng_seo", {})
             flow_prompts = st.session_state["eng_prompts"]
             thumbnail_text = st.session_state["eng_thumb_text"]
             thumbnail_image = st.session_state["eng_thumb_img"]
@@ -665,12 +665,10 @@ with hindi_tab:
                             if os.path.isdir("assets/flow_clips"):
                                 for f in glob.glob("assets/flow_clips/*.mp4"):
                                     os.remove(f)
-                            st.rerun()
                     with col_flow:
                         if st.button("🎬 Flow clips use karo", key="hindi_mode_flow",
                                      type="primary" if st.session_state.get("hindi_mode") == "flow" else "secondary"):
                             st.session_state["hindi_mode"] = "flow"
-                            st.rerun()
 
                     hindi_mode = st.session_state.get("hindi_mode", "auto")
 
