@@ -636,102 +636,97 @@ with hindi_tab:
                 st.markdown(f"**Description:** {seo.get('description','')}")
                 st.markdown(f"**Hashtags:** {seo.get('hashtags','')}")
 
-                    with st.spinner("🖼️ Thumbnail ban raha hai..."):
-                        from agents.thumbnail_generator import generate_thumbnail
-                        thumbnail = generate_thumbnail(seo["title"], hindi_topic)
-                    st.subheader("🖼️ Thumbnail")
-                    st.image(st.session_state.get("hindi_thumb"), use_container_width=True)
+                st.subheader("🖼️ Thumbnail")
+                st.image(st.session_state.get("hindi_thumb"), use_container_width=True)
 
-                    image_paths = st.session_state.get("hindi_images", [])
-                    image_errors = st.session_state.get("hindi_img_errors", [])
-                    if image_errors:
-                        for err in image_errors:
-                            st.warning(err)
-                    if image_paths:
-                        st.subheader("🖼️ Background Images")
-                        cols = st.columns(len(image_paths))
-                        for col, img_path in zip(cols, image_paths):
-                            col.image(img_path)
+                image_paths = st.session_state.get("hindi_images", [])
+                image_errors = st.session_state.get("hindi_img_errors", [])
+                if image_errors:
+                    for err in image_errors:
+                        st.warning(err)
+                if image_paths:
+                    st.subheader("🖼️ Background Images")
+                    cols = st.columns(len(image_paths))
+                    for col, img_path in zip(cols, image_paths):
+                        col.image(img_path)
 
-                    voice = st.session_state.get("hindi_voice")
-                    st.subheader("🔊 Hindi Awaaz")
-                    if voice:
-                        st.audio(voice)
+                voice = st.session_state.get("hindi_voice")
+                st.subheader("🔊 Hindi Awaaz")
+                if voice:
+                    st.audio(voice)
 
-                    caption_file = st.session_state.get("hindi_captions")
-                    st.subheader("📄 Captions")
-                    if caption_file:
-                        st.code(open(caption_file).read())
+                caption_file = st.session_state.get("hindi_captions")
+                st.subheader("📄 Captions")
+                if caption_file:
+                    st.code(open(caption_file).read())
 
-                    hindi_flow_prompts = st.session_state.get("hindi_prompts", [])
+                hindi_flow_prompts = st.session_state.get("hindi_prompts", [])
 
-                    st.subheader("🎬 Flow Video Prompts (Google Flow / Veo 3)")
-                    st.info("Har prompt copy karo → labs.google/flow mein paste karo → clip download karo → neeche upload karo")
+                st.subheader("🎬 Flow Video Prompts (Google Flow / Veo 3)")
+                st.info("Har prompt copy karo → labs.google/flow mein paste karo → clip download karo → neeche upload karo")
 
-                    for i, fp in enumerate(hindi_flow_prompts):
-                        st.code(fp, language=None)
+                for i, fp in enumerate(hindi_flow_prompts):
+                    st.code(fp, language=None)
 
-                    st.divider()
-                    st.subheader("🎬 Video Mode Chuno")
+                st.divider()
+                st.subheader("🎬 Video Mode Chuno")
 
-                    col_auto, col_flow = st.columns(2)
-                    with col_auto:
-                        if st.button("🤖 Auto (Pexels images)", key="hindi_mode_auto",
-                                     type="primary" if st.session_state.get("hindi_mode") != "flow" else "secondary"):
-                            st.session_state["hindi_mode"] = "auto"
-                            if os.path.isdir("assets/flow_clips"):
-                                for f in glob.glob("assets/flow_clips/*.mp4"):
-                                    os.remove(f)
-                    with col_flow:
-                        if st.button("🎬 Flow clips use karo", key="hindi_mode_flow",
-                                     type="primary" if st.session_state.get("hindi_mode") == "flow" else "secondary"):
-                            st.session_state["hindi_mode"] = "flow"
-
-                    hindi_mode = st.session_state.get("hindi_mode", "auto")
-
-                    if hindi_mode == "flow":
-                        st.success("✅ Flow clips mode active hai")
-                        st.markdown("**📤 Teeno clips upload karo (MP4):**")
-                        hindi_uploaded_clips = st.file_uploader(
-                            "Flow clips upload karo",
-                            type=["mp4", "mov"],
-                            accept_multiple_files=True,
-                            key="hindi_flow_clips_uploader"
-                        )
-                        if hindi_uploaded_clips:
-                            os.makedirs("assets/flow_clips", exist_ok=True)
-                            for f in glob.glob("assets/flow_clips/*.mp4"):
-                                os.remove(f)
-                            for i, clip in enumerate(hindi_uploaded_clips):
-                                clip_path = f"assets/flow_clips/clip_{i:02d}.mp4"
-                                with open(clip_path, "wb") as f:
-                                    f.write(clip.read())
-                            st.success(f"✅ {len(hindi_uploaded_clips)} clip(s) upload ho gaye!")
-                        else:
-                            st.warning("⚠️ Abhi tak koi clip upload nahi hua — clips upload karo phir Video Banao click karo")
-                    else:
-                        st.info("🤖 Auto mode — Pexels se background images use honge")
+                col_auto, col_flow = st.columns(2)
+                with col_auto:
+                    if st.button("🤖 Auto (Pexels images)", key="hindi_mode_auto",
+                                 type="primary" if st.session_state.get("hindi_mode") != "flow" else "secondary"):
+                        st.session_state["hindi_mode"] = "auto"
                         if os.path.isdir("assets/flow_clips"):
                             for f in glob.glob("assets/flow_clips/*.mp4"):
                                 os.remove(f)
+                with col_flow:
+                    if st.button("🎬 Flow clips use karo", key="hindi_mode_flow",
+                                 type="primary" if st.session_state.get("hindi_mode") == "flow" else "secondary"):
+                        st.session_state["hindi_mode"] = "flow"
 
-                    _hindi_clips_exist = bool(glob.glob("assets/flow_clips/*.mp4"))
-                    _hindi_use_flow = hindi_mode == "flow"
+                hindi_mode = st.session_state.get("hindi_mode", "auto")
 
-                    if _hindi_use_flow and not _hindi_clips_exist:
-                        st.warning("⬆️ Pehle clips upload karo, phir Video Banao click karo")
+                if hindi_mode == "flow":
+                    st.success("✅ Flow clips mode active hai")
+                    st.markdown("**📤 Teeno clips upload karo (MP4):**")
+                    hindi_uploaded_clips = st.file_uploader(
+                        "Flow clips upload karo",
+                        type=["mp4", "mov"],
+                        accept_multiple_files=True,
+                        key="hindi_flow_clips_uploader"
+                    )
+                    if hindi_uploaded_clips:
+                        os.makedirs("assets/flow_clips", exist_ok=True)
+                        for f in glob.glob("assets/flow_clips/*.mp4"):
+                            os.remove(f)
+                        for i, clip in enumerate(hindi_uploaded_clips):
+                            clip_path = f"assets/flow_clips/clip_{i:02d}.mp4"
+                            with open(clip_path, "wb") as f:
+                                f.write(clip.read())
+                        st.success(f"✅ {len(hindi_uploaded_clips)} clip(s) upload ho gaye!")
                     else:
-                        if st.button("🎬 Video Banao (Final)", key="hindi_make_video_btn", type="primary"):
-                            with st.spinner("🎬 Video ban raha hai..."):
-                                from agents.video_agent import create_video
-                                st.session_state["hindi_video_file"] = create_video(use_flow_clips=_hindi_clips_exist)
-                                for _f in glob.glob("assets/flow_clips/*.mp4"):
-                                    os.remove(_f)
+                        st.warning("⚠️ Abhi tak koi clip upload nahi hua — clips upload karo phir Video Banao click karo")
+                else:
+                    st.info("🤖 Auto mode — Pexels se background images use honge")
+                    if os.path.isdir("assets/flow_clips"):
+                        for f in glob.glob("assets/flow_clips/*.mp4"):
+                            os.remove(f)
 
-                    video_file = st.session_state.get("hindi_video_file")
-                    if not video_file:
-                        st.stop()
+                _hindi_clips_exist = bool(glob.glob("assets/flow_clips/*.mp4"))
+                _hindi_use_flow = hindi_mode == "flow"
 
+                if _hindi_use_flow and not _hindi_clips_exist:
+                    st.warning("⬆️ Pehle clips upload karo, phir Video Banao click karo")
+                else:
+                    if st.button("🎬 Video Banao (Final)", key="hindi_make_video_btn", type="primary"):
+                        with st.spinner("🎬 Video ban raha hai..."):
+                            from agents.video_agent import create_video
+                            st.session_state["hindi_video_file"] = create_video(use_flow_clips=_hindi_clips_exist)
+                            for _f in glob.glob("assets/flow_clips/*.mp4"):
+                                os.remove(_f)
+
+                video_file = st.session_state.get("hindi_video_file")
+                if video_file:
                     from moviepy import AudioFileClip as AFC
                     duration = AFC("output/voice.mp3").duration
                     if duration > 60:
@@ -757,15 +752,14 @@ with hindi_tab:
                             from agents_hindi.upload_agent import upload_video as hindi_upload_fn
                             video_id, video_url = hindi_upload_fn(
                                 video_path=video_file,
-                                title=seo["title"],
-                                description=seo["description"],
-                                hashtags=seo["hashtags"],
-                                thumbnail_path=thumbnail
+                                title=seo.get("title",""),
+                                description=seo.get("description",""),
+                                hashtags=seo.get("hashtags",""),
+                                thumbnail_path=st.session_state.get("hindi_thumb")
                             )
                         st.success("✅ YouTube par upload ho gaya!")
                         st.balloons()
                         st.markdown(f"**▶️ Yahan dekho:** [{video_url}]({video_url})")
-                        # Clear topic after successful upload
                         st.session_state.pop("hindi_topic", None)
                         st.session_state.pop("hindi_competitor", None)
                     else:
