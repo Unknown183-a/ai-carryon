@@ -764,6 +764,3 @@ with hindi_tab:
                         st.session_state.pop("hindi_competitor", None)
                     else:
                         st.info("💡 Auto-upload OFF hai. Toggle on karo YouTube par seedha upload karne ke liye.")
-
-                except Exception as e:
-                    st.error(str(e))
