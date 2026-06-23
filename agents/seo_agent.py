@@ -13,7 +13,21 @@ PATTERN_PROMPTS = {
 
 def generate_seo(topic, script):
     from langchain_groq import ChatGroq
-    llm = ChatGroq(model="llama-3.3-70b-versatile")
+def get_llm():
+    from langchain_groq import ChatGroq
+    try:
+        llm = get_llm()
+        # Test with a tiny call
+        llm.invoke("hi")
+        return llm
+    except Exception as e:
+        if "503" in str(e) or "capacity" in str(e) or "over capacity" in str(e):
+            print("llama-3.3-70b-versatile over capacity, switching to llama3-8b-8192")
+            return ChatGroq(model="llama3-8b-8192")
+        raise e
+
+
+    llm = get_llm()
 
     # Extract pattern hint if present
     pattern = None

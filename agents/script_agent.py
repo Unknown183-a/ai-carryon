@@ -54,6 +54,20 @@ def improve_hook(hook, topic, llm):
 
 def create_script(research_data, topic=None):
     from langchain_groq import ChatGroq
+def get_llm():
+    from langchain_groq import ChatGroq
+    try:
+        llm = get_llm()
+        # Test with a tiny call
+        llm.invoke("hi")
+        return llm
+    except Exception as e:
+        if "503" in str(e) or "capacity" in str(e) or "over capacity" in str(e):
+            print("llama-3.3-70b-versatile over capacity, switching to llama3-8b-8192")
+            return ChatGroq(model="llama3-8b-8192")
+        raise e
+
+
     llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.8)
 
     prompt = f"""Create a YouTube Shorts script based on this research:

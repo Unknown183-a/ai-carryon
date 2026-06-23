@@ -1,11 +1,25 @@
 # agents_hindi/seo_agent.py
 from langchain_groq import ChatGroq
+def get_llm():
+    from langchain_groq import ChatGroq
+    try:
+        llm = get_llm()
+        # Test with a tiny call
+        llm.invoke("hi")
+        return llm
+    except Exception as e:
+        if "503" in str(e) or "capacity" in str(e) or "over capacity" in str(e):
+            print("llama-3.3-70b-versatile over capacity, switching to llama3-8b-8192")
+            return ChatGroq(model="llama3-8b-8192")
+        raise e
+
+
 from dotenv import load_dotenv
 import json, re
 
 load_dotenv()
 
-llm = ChatGroq(model="llama-3.3-70b-versatile")
+llm = get_llm()
 
 def generate_seo(topic, script, competitor_data=None):
     competitor_context = ""
