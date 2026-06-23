@@ -1,24 +1,18 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-def generate_flow_prompts_hindi(topic, script, num_clips=3):
-    from langchain_groq import ChatGroq
 def get_llm():
     from langchain_groq import ChatGroq
     try:
-        llm = get_llm()
-        # Test with a tiny call
+        llm = ChatGroq(model="llama-3.3-70b-versatile")
         llm.invoke("hi")
         return llm
-    except Exception as e:
-        if "503" in str(e) or "capacity" in str(e) or "over capacity" in str(e):
-            print("llama-3.3-70b-versatile over capacity, switching to llama3-8b-8192")
-            return ChatGroq(model="llama3-8b-8192")
-        raise e
+    except Exception:
+        from langchain_groq import ChatGroq
+        return ChatGroq(model="llama3-8b-8192")
 
-
+def generate_flow_prompts_hindi(topic, script, num_clips=3):
     llm = get_llm()
-
     prompt = f"""You are a cinematic director writing Google Flow / Veo 3 VIDEO prompts for YouTube Shorts (Hindi tech channel).
 
 Topic (Hindi channel): {topic}
