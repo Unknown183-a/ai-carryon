@@ -621,8 +621,8 @@ with hindi_tab:
                     import traceback
                     st.code(traceback.format_exc())
 
-            # ── Display all generated content from session state ──
-            if st.session_state.get("hindi_generated"):
+        # ── Display all generated content from session state ──
+        if st.session_state.get("hindi_generated"):
                 research_data = st.session_state.get("hindi_research", "")
                 script = st.session_state.get("hindi_script", "")
                 seo = st.session_state.get("hindi_seo", {})
