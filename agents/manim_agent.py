@@ -7,8 +7,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-llm = get_llm()
-
 
 def get_llm():
     from langchain_groq import ChatGroq
@@ -18,6 +16,9 @@ def get_llm():
         return llm
     except Exception:
         return ChatGroq(model="llama3-8b-8192")
+
+
+llm = get_llm()
 
 
 def generate_manim_code(topic, script):
