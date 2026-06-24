@@ -7,7 +7,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-llm = ChatGroq(model="llama-3.3-70b-versatile")
+llm = get_llm()
+
+
+def get_llm():
+    from langchain_groq import ChatGroq
+    try:
+        llm = ChatGroq(model="llama-3.3-70b-versatile")
+        llm.invoke("hi")
+        return llm
+    except Exception:
+        return ChatGroq(model="llama3-8b-8192")
 
 
 def generate_image_prompts(topic, script, num_images=4):
