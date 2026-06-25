@@ -10,7 +10,7 @@ def get_llm():
         safe_invoke("hi")
         return llm
     except Exception:
-        return ChatGroq(model="llama3-8b-8192")
+        return ChatGroq(model="llama-3.1-8b-instant")
 
 
 def safe_invoke(prompt):
@@ -19,8 +19,8 @@ def safe_invoke(prompt):
         return get_llm().invoke(prompt)
     except Exception as e:
         if "503" in str(e) or "capacity" in str(e) or "overloaded" in str(e):
-            print("Falling back to llama3-8b-8192")
-            return ChatGroq(model="llama3-8b-8192").invoke(prompt)
+            print("Falling back to llama-3.1-8b-instant")
+            return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
         raise e
 
 

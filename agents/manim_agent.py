@@ -15,7 +15,7 @@ def get_llm():
         llm.invoke("hi")
         return llm
     except Exception:
-        return ChatGroq(model="llama3-8b-8192")
+        return ChatGroq(model="llama-3.1-8b-instant")
 
 
 llm = get_llm()

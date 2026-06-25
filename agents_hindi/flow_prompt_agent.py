@@ -9,7 +9,7 @@ def get_llm():
         return llm
     except Exception:
         from langchain_groq import ChatGroq
-        return ChatGroq(model="llama3-8b-8192")
+        return ChatGroq(model="llama-3.1-8b-instant")
 
 def generate_flow_prompts_hindi(topic, script, num_clips=3):
     llm = get_llm()
