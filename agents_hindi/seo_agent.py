@@ -21,9 +21,16 @@ def safe_invoke(prompt):
     try:
         return get_llm().invoke(prompt)
     except Exception as e:
-        if "503" in str(e) or "capacity" in str(e) or "overloaded" in str(e):
-            print("Falling back to llama-3.1-8b-instant")
-            return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
+        if "503" in str(e) or "capacity" in str(e) or "overloaded" in str(e) or "timeout" in str(e).lower():
+            print("Groq overloaded, trying llama-3.1-8b-instant...")
+            try:
+                return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
+            except Exception:
+                print("Falling back to Gemini...")
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                import os as _os
+                gemini = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=_os.getenv("GEMINI_API_KEY"))
+                return gemini.invoke(prompt)
         raise e
 
 
