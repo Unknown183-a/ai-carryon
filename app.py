@@ -430,7 +430,7 @@ with english_tab:
                 st.code(open(caption_file).read())
 
                 with st.spinner("🎬 Creating Final Video..."):
-                    video_file = create_video(manim_path=None)
+                    video_file = create_video(manim_path=None, use_flow_clips=_flow_clips_exist)
 
                 from moviepy import AudioFileClip as AFC
                 duration = AFC("output/voice.mp3").duration
