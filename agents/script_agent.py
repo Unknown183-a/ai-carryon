@@ -21,7 +21,7 @@ def get_llm(temperature=0.7):
     from langchain_groq import ChatGroq
     try:
         llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=temperature)
-        llm.invoke("hi")
+        safe_invoke("hi")
         return llm
     except Exception:
         from langchain_groq import ChatGroq
@@ -38,7 +38,7 @@ def score_hook(hook, llm):
         f"Return ONLY a number 1-10, nothing else."
     )
     try:
-        result = llm.invoke(prompt).content.strip()
+        result = safe_invoke(prompt).content.strip()
         return int(''.join(filter(str.isdigit, result[:3])) or '5')
     except Exception:
         return 5
@@ -60,7 +60,7 @@ def improve_hook(hook, topic, llm):
         f"- No clickbait — must be truthful\n"
         f"Return ONLY the new hook line, nothing else."
     )
-    return llm.invoke(prompt).content.strip()
+    return safe_invoke(prompt).content.strip()
 
 
 def create_script(research_data, topic=None):
@@ -86,7 +86,7 @@ STRICT RULES:
 
 Return ONLY the script text, nothing else."""
 
-    response = llm.invoke(prompt)
+    response = safe_invoke(prompt)
     script = response.content.strip()
 
     # Hard enforce minimum 80 words — retry up to 3 times
@@ -100,7 +100,7 @@ Return ONLY the script text, nothing else."""
             f"Return ONLY the expanded script, no labels, no explanations.\n\n"
             f"Script to expand:\n{script}"
         )
-        script = llm.invoke(prompt2).content.strip()
+        script = safe_invoke(prompt2).content.strip()
         print(f"Expansion attempt {attempt+1}: {len(script.split())} words")
 
     # Hard trim to 100 words max

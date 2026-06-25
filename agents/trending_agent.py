@@ -77,7 +77,7 @@ def get_llm_topic():
         "- Return ONLY the topic phrase (6-12 words), nothing else, no quotes\n\n"
         "Topic:"
     )
-    response = llm.invoke(prompt).content.strip()
+    response = safe_invoke(prompt).content.strip()
     lines = [l.strip() for l in response.splitlines() if l.strip()]
     topic = lines[0] if lines else seed
     topic = topic.strip('"').strip("'").strip("-").strip()

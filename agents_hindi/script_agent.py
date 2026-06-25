@@ -4,7 +4,7 @@ def get_llm():
     from langchain_groq import ChatGroq
     try:
         llm = ChatGroq(model="llama-3.3-70b-versatile")
-        llm.invoke("hi")
+        safe_invoke("hi")
         return llm
     except Exception as e:
         if "503" in str(e) or "capacity" in str(e) or "over_capacity" in str(e) or "overloaded" in str(e):
@@ -14,6 +14,15 @@ def get_llm():
 
 
 llm = get_llm()
+def safe_invoke(prompt):
+    from langchain_groq import ChatGroq
+    try:
+        return safe_invoke(prompt)
+    except Exception as e:
+        if "503" in str(e) or "capacity" in str(e) or "overloaded" in str(e):
+            print("Falling back to llama3-8b-8192")
+            return ChatGroq(model="llama3-8b-8192").invoke(prompt)
+        raise e
 
 def create_script(research_data):
     prompt = f"""
@@ -39,5 +48,5 @@ def create_script(research_data):
     Yaar suno, ye sun ke tumhara dimaag ghoom jayega. Tumhare phone mein jo chip hai, usme itne transistors hain jitne Milky Way mein taare hain. Sach mein! Ek chip mein 15 billion transistors hote hain. Aur ye sab tumhari thumbnail se bhi chote hain. Aur suno, har transistor second mein billions baar on-off hota hai. Isliye tumhara phone itna fast hai. Par yahan baat aur hai. Ab hum aur chota nahi kar sakte. Physics ke laws aad aa rahe hain. Electrons seedha wall ke through nikal jaate hain. Ye main jhooth nahi bol raha. Toh companies ab chips ko upar ki taraf stack kar rahi hain. Future upar ki taraf ja raha hai. Follow karo aur aisi videos dekhte raho.
     """
 
-    response = llm.invoke(prompt).content
+    response = safe_invoke(prompt).content
     return response.strip()

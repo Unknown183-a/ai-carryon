@@ -16,7 +16,7 @@ def get_llm():
     from langchain_groq import ChatGroq
     try:
         llm = ChatGroq(model="llama-3.3-70b-versatile")
-        llm.invoke("hi")
+        safe_invoke("hi")
         return llm
     except Exception:
         from langchain_groq import ChatGroq
@@ -25,6 +25,15 @@ def get_llm():
 
 def generate_seo(topic, script):
     llm = get_llm()
+def safe_invoke(prompt):
+    from langchain_groq import ChatGroq
+    try:
+        return safe_invoke(prompt)
+    except Exception as e:
+        if "503" in str(e) or "capacity" in str(e) or "overloaded" in str(e):
+            print("Falling back to llama3-8b-8192")
+            return ChatGroq(model="llama3-8b-8192").invoke(prompt)
+        raise e
 
     # Extract pattern hint if present
     pattern = None
@@ -78,7 +87,7 @@ DESCRIPTION: <description here>
 HASHTAGS: <15 hashtags space-separated>
 """
 
-    response = llm.invoke(prompt).content
+    response = safe_invoke(prompt).content
 
     title = ""
     description = ""

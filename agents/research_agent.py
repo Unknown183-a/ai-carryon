@@ -7,7 +7,7 @@ def get_llm():
     from langchain_groq import ChatGroq
     try:
         llm = ChatGroq(model="llama-3.3-70b-versatile")
-        llm.invoke("hi")
+        safe_invoke("hi")
         return llm
     except Exception:
         return ChatGroq(model="llama3-8b-8192")
@@ -35,5 +35,5 @@ def research(topic):
     Keep response concise.
     """
 
-    response = llm.invoke(prompt)
+    response = safe_invoke(prompt)
     return response.content

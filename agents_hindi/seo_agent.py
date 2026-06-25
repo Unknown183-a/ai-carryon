@@ -5,7 +5,7 @@ def get_llm():
     from langchain_groq import ChatGroq
     try:
         llm = ChatGroq(model="llama-3.3-70b-versatile")
-        llm.invoke("hi")
+        safe_invoke("hi")
         return llm
     except Exception as e:
         if "503" in str(e) or "capacity" in str(e) or "over_capacity" in str(e) or "overloaded" in str(e):
@@ -15,6 +15,15 @@ def get_llm():
 
 
 llm = get_llm()
+def safe_invoke(prompt):
+    from langchain_groq import ChatGroq
+    try:
+        return safe_invoke(prompt)
+    except Exception as e:
+        if "503" in str(e) or "capacity" in str(e) or "overloaded" in str(e):
+            print("Falling back to llama3-8b-8192")
+            return ChatGroq(model="llama3-8b-8192").invoke(prompt)
+        raise e
 
 def generate_seo(topic, script, competitor_data=None):
     competitor_context = ""
@@ -54,7 +63,7 @@ Ye EXACT JSON format mein return karo:
 }}
 """
 
-    response = llm.invoke(prompt).content.strip()
+    response = safe_invoke(prompt).content.strip()
     response = re.sub(r'^```json\n?', '', response)
     response = re.sub(r'^```\n?', '', response)
     response = re.sub(r'\n?```$', '', response)
