@@ -7,3 +7,8 @@ __pycache__/
 *.pyc
 .venv/
 SadTalker/
+media/
+assets/flow_clips/
+output/
+*.json
+!requirements.txt
