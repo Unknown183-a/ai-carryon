@@ -16,21 +16,39 @@ def get_llm():
 llm = get_llm()
 
 def safe_invoke(prompt):
+    import threading
     from langchain_groq import ChatGroq
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    import os as _os
+
+    result = [None]
+    error = [None]
+
+    def try_groq():
+        try:
+            llm = ChatGroq(model="llama-3.3-70b-versatile")
+            result[0] = llm.invoke(prompt)
+        except Exception as e:
+            error[0] = e
+
+    t = threading.Thread(target=try_groq)
+    t.start()
+    t.join(timeout=20)  # Wait max 20 seconds
+
+    if result[0] is not None:
+        return result[0]
+
+    # Groq timed out or failed — use Gemini
+    print("Groq timeout/fail — falling back to Gemini Flash")
     try:
-        return get_llm().invoke(prompt)
-    except Exception as e:
-        if "503" in str(e) or "capacity" in str(e) or "overloaded" in str(e) or "timeout" in str(e).lower():
-            print("Groq overloaded, trying llama-3.1-8b-instant...")
-            try:
-                return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
-            except Exception:
-                print("Falling back to Gemini...")
-                from langchain_google_genai import ChatGoogleGenerativeAI
-                import os as _os
-                gemini = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=_os.getenv("GEMINI_API_KEY"))
-                return gemini.invoke(prompt)
-        raise e
+        gemini = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            google_api_key=_os.getenv("GEMINI_API_KEY")
+        )
+        return gemini.invoke(prompt)
+    except Exception:
+        # Last resort — llama-3.1-8b-instant
+        return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
 
 
 def create_script(research_data):
