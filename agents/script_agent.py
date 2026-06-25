@@ -28,6 +28,17 @@ def get_llm(temperature=0.7):
         return ChatGroq(model="llama3-8b-8192", temperature=temperature)
 
 
+def safe_invoke(prompt):
+    from langchain_groq import ChatGroq
+    try:
+        return get_llm().invoke(prompt)
+    except Exception as e:
+        if "503" in str(e) or "capacity" in str(e) or "overloaded" in str(e):
+            print("Falling back to llama3-8b-8192")
+            return ChatGroq(model="llama3-8b-8192").invoke(prompt)
+        raise e
+
+
 def score_hook(hook, llm):
     """Score a hook line 1-10 for retention potential"""
     prompt = (

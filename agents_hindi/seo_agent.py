@@ -15,15 +15,17 @@ def get_llm():
 
 
 llm = get_llm()
+
 def safe_invoke(prompt):
     from langchain_groq import ChatGroq
     try:
-        return safe_invoke(prompt)
+        return get_llm().invoke(prompt)
     except Exception as e:
         if "503" in str(e) or "capacity" in str(e) or "overloaded" in str(e):
             print("Falling back to llama3-8b-8192")
             return ChatGroq(model="llama3-8b-8192").invoke(prompt)
         raise e
+
 
 def generate_seo(topic, script, competitor_data=None):
     competitor_context = ""
