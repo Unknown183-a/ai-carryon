@@ -315,12 +315,12 @@ with english_tab:
                 with st.spinner("🔍 Researching..."):
                     st.session_state["eng_research"] = research(topic)
                 with st.spinner("✍️ Generating Script..."):
-                    st.session_state["eng_script"] = create_script(st.session_state["eng_research"])
+                    st.session_state["eng_script"] = create_script(st.session_state.get("eng_research", ""))
                 with st.spinner("📈 Generating SEO..."):
-                    st.session_state["eng_seo"] = generate_seo(topic, st.session_state["eng_script"])
+                    st.session_state["eng_seo"] = generate_seo(topic, st.session_state.get("eng_script", ""))
                 with st.spinner("🎬 Generating Flow/Veo Prompts..."):
                     from agents.flow_prompt_agent import generate_flow_prompts
-                    st.session_state["eng_prompts"] = generate_flow_prompts(topic, st.session_state["eng_script"], num_clips=2)
+                    st.session_state["eng_prompts"] = generate_flow_prompts(topic, st.session_state.get("eng_script", ""), num_clips=2)
                 with st.spinner("🎯 Generating Thumbnail Text..."):
                     st.session_state["eng_thumb_text"] = generate_thumbnail_text(topic)
                 with st.spinner("🖼️ Generating Thumbnail Image..."):
@@ -331,12 +331,12 @@ with english_tab:
                 st.stop()
 
         if st.session_state.get("eng_topic_done"):
-            research_data = st.session_state["eng_research"]
-            script = st.session_state["eng_script"]
+            research_data = st.session_state.get("eng_research", "")
+            script = st.session_state.get("eng_script", "")
             seo = st.session_state.get("eng_seo", {})
-            flow_prompts = st.session_state["eng_prompts"]
-            thumbnail_text = st.session_state["eng_thumb_text"]
-            thumbnail_image = st.session_state["eng_thumb_img"]
+            flow_prompts = st.session_state.get("eng_prompts", [])
+            thumbnail_text = st.session_state.get("eng_thumb_text", "")
+            thumbnail_image = st.session_state.get("eng_thumb_img", "")
 
             try:
                 st.subheader("📚 Research")
