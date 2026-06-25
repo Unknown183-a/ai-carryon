@@ -4,7 +4,7 @@ from langchain_groq import ChatGroq
 def get_llm():
     from langchain_groq import ChatGroq
     try:
-        llm = ChatGroq(model="llama-3.3-70b-versatile")
+        llm = ChatGroq(model="llama-3.3-70b-versatile", request_timeout=15)
         safe_invoke("hi")
         return llm
     except Exception as e:
