@@ -320,7 +320,7 @@ with english_tab:
                     st.session_state["eng_seo"] = generate_seo(topic, st.session_state.get("eng_script", ""))
                 with st.spinner("🎬 Generating Flow/Veo Prompts..."):
                     from agents.flow_prompt_agent import generate_flow_prompts
-                    st.session_state["eng_prompts"] = generate_flow_prompts(topic, st.session_state.get("eng_script", ""), num_clips=2)
+                    st.session_state["eng_prompts"] = generate_flow_prompts(topic, st.session_state.get("eng_script", ""), num_clips=3)
                 with st.spinner("🎯 Generating Thumbnail Text..."):
                     st.session_state["eng_thumb_text"] = generate_thumbnail_text(topic)
                 with st.spinner("🖼️ Generating Thumbnail Image..."):
@@ -429,8 +429,10 @@ with english_tab:
                 st.subheader("📄 Captions")
                 st.code(open(caption_file).read())
 
-                with st.spinner("🎬 Creating Final Video..."):
-                    video_file = create_video(manim_path=None, use_flow_clips=_flow_clips_exist)
+                if st.button("🎬 Generate Final Video", key="eng_make_video_btn", type="primary"):
+                    with st.spinner("🎬 Creating Final Video..."):
+                        video_file = create_video(manim_path=None, use_flow_clips=_flow_clips_exist)
+                    st.session_state["eng_video_file"] = video_file
 
                 from moviepy import AudioFileClip as AFC
                 duration = AFC("output/voice.mp3").duration
