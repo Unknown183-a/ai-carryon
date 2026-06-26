@@ -1,7 +1,6 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-# Title pattern instructions for diversity
 PATTERN_PROMPTS = {
     "curiosity": "Start with 'Did You Know', 'Here's Why', or 'The Reason' — spark curiosity",
     "urgency": "Use urgency: 'This Changes Everything', 'Stop Doing This', 'Act Now Before'",
@@ -19,7 +18,6 @@ def get_llm():
         safe_invoke("hi")
         return llm
     except Exception:
-        from langchain_groq import ChatGroq
         return ChatGroq(model="llama-3.1-8b-instant")
 
 
@@ -41,12 +39,11 @@ def safe_invoke(prompt):
 
     t = threading.Thread(target=try_groq)
     t.start()
-    t.join(timeout=20)  # Wait max 20 seconds
+    t.join(timeout=20)
 
     if result[0] is not None:
         return result[0]
 
-    # Groq timed out or failed — use Gemini
     print("Groq timeout/fail — falling back to Gemini Flash")
     try:
         gemini = ChatGoogleGenerativeAI(
@@ -55,14 +52,12 @@ def safe_invoke(prompt):
         )
         return gemini.invoke(prompt)
     except Exception:
-        # Last resort — llama-3.1-8b-instant
         return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
 
 
-def generate_seo(topic, script):
+def generate_seo(topic, script, comparison_insights=None):
     llm = get_llm()
 
-    # Extract pattern hint if present
     pattern = None
     if "||PATTERN:" in topic:
         topic, pattern_str = topic.split("||PATTERN:")
@@ -74,18 +69,31 @@ def generate_seo(topic, script):
         "Use a UNIQUE style — avoid starting with 'Crazy', 'Insane', or 'Amazing'"
     )
 
+    # Add competitor title context if available
+    competitor_context = ""
+    if comparison_insights and not comparison_insights.get("error"):
+        top_title = comparison_insights.get("top_competitor_title", "")
+        top_views = comparison_insights.get("top_competitor_views", 0)
+        if top_title:
+            competitor_context = f"""
+COMPETITOR INTELLIGENCE:
+- Top performing title on this topic: "{top_title}" ({top_views:,} views)
+- Study its style but DO NOT copy it — create something better and original
+"""
+
     prompt = f"""You are a YouTube SEO expert for an AI/Tech Shorts channel.
 
 Generate ORIGINAL YouTube SEO content for this topic and script.
 
 Topic: {topic}
 Script: {script}
+{competitor_context}
 
 STRICT RULES:
 - Channel niche: AI, Technology, Automation, Developer tools, Future Tech ONLY
 - NEVER use these overused words to start titles: Crazy, Insane, Amazing, Unbelievable, Shocking
 - Title pattern to use: {pattern_instruction}
-- Title must reference the actual topic — not be generic (e.g. avoid just 'They Don\'t Know' with no context)
+- Title must reference the actual topic — not be generic
 - Title must be under 60 characters
 - Description must be original — never copy source material
 - Tags must be AI/tech focused

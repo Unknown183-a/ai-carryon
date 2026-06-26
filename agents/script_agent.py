@@ -1,18 +1,11 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-# 5 proven hook templates for AI/tech Shorts
-# Each follows a different psychological trigger
 HOOK_TEMPLATES = [
-    # Pattern 1: Shocking fact (triggers curiosity)
     "Nobody talks about the fact that {topic_angle}...",
-    # Pattern 2: Direct challenge (triggers ego)
     "Most developers get {topic_angle} completely wrong.",
-    # Pattern 3: Countdown urgency (triggers FOMO)
     "In 30 seconds I'll show you {topic_angle} that changes everything.",
-    # Pattern 4: Contrarian (triggers disagreement/interest)
     "Everyone says {topic_angle} is the future. They're wrong.",
-    # Pattern 5: Personal stakes (triggers relevance)
     "If you use {topic_angle}, stop what you're doing right now.",
 ]
 
@@ -24,7 +17,6 @@ def get_llm(temperature=0.7):
         safe_invoke("hi")
         return llm
     except Exception:
-        from langchain_groq import ChatGroq
         return ChatGroq(model="llama-3.1-8b-instant", temperature=temperature)
 
 
@@ -46,12 +38,11 @@ def safe_invoke(prompt):
 
     t = threading.Thread(target=try_groq)
     t.start()
-    t.join(timeout=20)  # Wait max 20 seconds
+    t.join(timeout=20)
 
     if result[0] is not None:
         return result[0]
 
-    # Groq timed out or failed — use Gemini
     print("Groq timeout/fail — falling back to Gemini Flash")
     try:
         gemini = ChatGoogleGenerativeAI(
@@ -60,12 +51,10 @@ def safe_invoke(prompt):
         )
         return gemini.invoke(prompt)
     except Exception:
-        # Last resort — llama-3.1-8b-instant
         return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
 
 
 def score_hook(hook, llm):
-    """Score a hook line 1-10 for retention potential"""
     prompt = (
         f"Score this YouTube Shorts opening line for viewer retention (1-10).\n"
         f"A 10 makes people stop scrolling immediately. A 1 is boring.\n"
@@ -81,7 +70,6 @@ def score_hook(hook, llm):
 
 
 def improve_hook(hook, topic, llm):
-    """Rewrite a weak hook using proven templates"""
     import random
     template = random.choice(HOOK_TEMPLATES)
     prompt = (
@@ -99,12 +87,28 @@ def improve_hook(hook, topic, llm):
     return safe_invoke(prompt).content.strip()
 
 
-def create_script(research_data, topic=None):
+def create_script(research_data, topic=None, comparison_insights=None):
     llm = get_llm(temperature=0.8)
+
+    # Build competitor context if available
+    competitor_context = ""
+    if comparison_insights and not comparison_insights.get("error"):
+        top_title    = comparison_insights.get("top_competitor_title", "")
+        avg_views    = comparison_insights.get("competitor_avg_views", 0)
+        avg_duration = comparison_insights.get("competitor_avg_duration_seconds", 0)
+        recs         = comparison_insights.get("recommendations", [])
+        competitor_context = f"""
+COMPETITOR INTELLIGENCE (use this to write a better script):
+- Top performing video on this topic: "{top_title}"
+- Competitor average views: {avg_views:,}
+- Competitor average duration: {avg_duration}s — match this length
+- Recommendations from analysis: {'; '.join(recs[:2]) if recs else 'None'}
+"""
 
     prompt = f"""Create a YouTube Shorts script based on this research:
 
 {research_data}
+{competitor_context}
 
 STRICT RULES:
 - Total word count: EXACTLY 80 to 100 words
@@ -125,7 +129,6 @@ Return ONLY the script text, nothing else."""
     response = safe_invoke(prompt)
     script = response.content.strip()
 
-    # Hard enforce minimum 80 words — retry up to 3 times
     for attempt in range(3):
         words = script.split()
         if len(words) >= 80:
@@ -139,22 +142,18 @@ Return ONLY the script text, nothing else."""
         script = safe_invoke(prompt2).content.strip()
         print(f"Expansion attempt {attempt+1}: {len(script.split())} words")
 
-    # Hard trim to 100 words max
     words = script.split()
     if len(words) > 100:
         script = " ".join(words[:100])
 
-    # Score the hook (first sentence)
     first_sentence = script.split('.')[0].strip()
     hook_score = score_hook(first_sentence, llm)
     print(f"Hook score: {hook_score}/10 — '{first_sentence[:60]}...'")
 
-    # If hook scores below 7, rewrite it
     if hook_score < 7:
         print("Hook too weak — rewriting...")
         topic_hint = topic or research_data[:50]
         new_hook = improve_hook(first_sentence, topic_hint, llm)
-        # Replace first sentence with improved hook
         rest_of_script = script[len(first_sentence):].lstrip('. ')
         script = new_hook + ". " + rest_of_script
         new_score = score_hook(new_hook, llm)
