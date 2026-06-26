@@ -9,99 +9,30 @@ load_dotenv()
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
-NICHE_KEYWORDS = [
-    "ai", "artificial intelligence", "machine learning", "deep learning",
-    "chatgpt", "openai", "gemini", "claude", "llm", "gpt",
-    "automation", "neural network", "python", "programming", "developer",
-    "coding", "software engineer", "tech company", "startup", "algorithm",
-    "data science", "cloud computing", "chip", "semiconductor", "quantum",
-    "cybersecurity", "robotics", "autonomous", "self-driving", "model",
-    "apple intelligence", "microsoft copilot", "github copilot"
+# Mass appeal categories — broad audience, high search volume
+CATEGORY_IDS = [
+    "28",  # Science & Technology
+    "2",   # Autos & Vehicles
+    "17",  # Sports
+    "25",  # News & Politics
+    "26",  # Howto & Style
+    "19",  # Travel & Events
 ]
 
-REJECT_KEYWORDS = [
-    "gps", "deal", "sale", "discount", "recipe", "food", "cook",
-    "makeup", "beauty", "fashion", "sport", "game", "minecraft",
-    "fortnite", "water", "alarm", "school", "prank", "vlog",
-    "travel", "workout", "gym", "music", "song", "dance",
-    "ps5", "xbox", "playstation", "overheating", "color", "materials",
-    "craft", "diy", "invent", "bending", "monitor trick", "flex",
-    "satisfying", "asmr", "life hack", "cleaning", "unboxing",
-    "smashed", "fixing", "repair", "paint", "xpeng", "car", "vehicle repair",
-    "replace it", "without paint", "scares me"
+# High performing topic boosters — titles containing these get priority
+POWER_KEYWORDS = [
+    "iphone", "samsung", "apple", "google", "leaked", "secret",
+    "revealed", "hack", "trick", "warning", "free", "banned",
+    "vs", "beats", "record", "first", "new", "just released",
+    "you didn't know", "nobody tells you", "stop doing",
 ]
 
-TITLE_PATTERNS = [
-    "curiosity",
-    "urgency",
-    "revelation",
-    "number",
-    "question",
-    "warning",
+# Topics to avoid — too niche, low search volume
+AVOID_KEYWORDS = [
+    "claude", "llm", "langchain", "hugging face", "fine-tuning",
+    "embeddings", "vector database", "rag pipeline", "token",
+    "benchmark", "parameter", "weights", "transformer architecture",
 ]
-
-SEEDS = [
-    "OpenAI latest news", "Google DeepMind breakthrough",
-    "Anthropic Claude update", "Python automation trick",
-    "AI agents replacing jobs", "LLM new capability",
-    "Apple Intelligence feature", "AI coding tool",
-    "quantum computing milestone", "cybersecurity AI tool",
-    "autonomous vehicle update", "AI chip breakthrough",
-    "open source AI model", "developer AI productivity",
-    "machine learning trick", "AI startup funding"
-]
-
-
-def is_on_niche(title):
-    title_lower = title.lower()
-    for kw in REJECT_KEYWORDS:
-        if kw in title_lower:
-            return False
-    for kw in NICHE_KEYWORDS:
-        if kw in title_lower:
-            return True
-    return False
-
-
-def get_llm_topic():
-    from langchain_groq import ChatGroq
-    llm = ChatGroq(model="llama-3.3-70b-versatile")
-    seed = random.choice(SEEDS)
-    prompt = (
-        f"Generate ONE specific YouTube Shorts topic about: {seed}\n"
-        "Rules:\n"
-        "- Must be about AI, machine learning, coding, or cutting-edge tech\n"
-        "- Must NOT be about gaming, food, sports, lifestyle, or DIY\n"
-        "- Must be specific and fascinating to developers and tech fans\n"
-        "- Must sound like a real news headline or fascinating fact\n"
-        "- Return ONLY the topic phrase (6-12 words), nothing else, no quotes\n\n"
-        "Topic:"
-    )
-    response = safe_invoke(prompt).content.strip()
-    lines = [l.strip() for l in response.splitlines() if l.strip()]
-    topic = lines[0] if lines else seed
-    topic = topic.strip('"').strip("'").strip("-").strip()
-    return topic
-
-
-
-
-def safe_invoke(prompt):
-    from langchain_groq import ChatGroq
-    try:
-        return ChatGroq(model="llama-3.3-70b-versatile").invoke(prompt)
-    except Exception as e:
-        if "503" in str(e) or "capacity" in str(e) or "overloaded" in str(e) or "timeout" in str(e).lower():
-            print("Groq overloaded, trying llama-3.1-8b-instant...")
-            try:
-                return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
-            except Exception:
-                print("Falling back to Gemini...")
-                from langchain_google_genai import ChatGoogleGenerativeAI
-                import os as _os
-                gemini = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=_os.getenv("GEMINI_API_KEY"))
-                return gemini.invoke(prompt)
-        raise e
 
 
 def get_trending_topic(region_code="US"):
@@ -109,60 +40,76 @@ def get_trending_topic(region_code="US"):
         "youtube", "v3", developerKey=YOUTUBE_API_KEY
     )
 
-    request = youtube.videos().list(
-        part="snippet",
-        chart="mostPopular",
-        regionCode=region_code,
-        maxResults=50,
-        videoCategoryId="28"
-    )
-    response = request.execute()
-    all_videos = response.get("items", [])
+    all_videos = []
 
-    pool = []
-    seen = set()
+    categories_to_try = random.sample(CATEGORY_IDS, min(3, len(CATEGORY_IDS)))
+
+    for category_id in categories_to_try:
+        try:
+            request = youtube.videos().list(
+                part="snippet,statistics",
+                chart="mostPopular",
+                regionCode=region_code,
+                maxResults=50,
+                videoCategoryId=category_id
+            )
+            response = request.execute()
+            all_videos.extend(response.get("items", []))
+        except Exception:
+            continue
+
+    if not all_videos:
+        return _fallback_topic()
+
+    scored = []
     for video in all_videos:
         snippet = video["snippet"]
-        title = snippet["title"]
-        lang = snippet.get("defaultAudioLanguage", "")
-        is_english = lang.startswith("en") or all(ord(c) < 128 for c in title)
-        clean_title = title.split("#")[0].strip()
-        if is_english and is_on_niche(title) and clean_title not in seen:
-            pool.append(clean_title)
-            seen.add(clean_title)
+        stats   = video.get("statistics", {})
+        title   = snippet["title"]
+        views   = int(stats.get("viewCount", 0))
 
-    # Load recently used topics to avoid repeats
-    import json, os
-    recent_file = "output/recent_topics.json"
-    try:
-        recent = json.load(open(recent_file)) if os.path.exists(recent_file) else []
-    except Exception:
-        recent = []
+        if not all(ord(c) < 128 for c in title):
+            continue
 
-    # Filter out recently used topics
-    fresh_pool = [t for t in pool if t not in recent]
+        title_lower = title.lower()
+        if any(kw in title_lower for kw in AVOID_KEYWORDS):
+            continue
 
-    if len(fresh_pool) >= 2:
-        # 50% chance to use LLM anyway for variety
-        if random.random() > 0.5:
-            topic = random.choice(fresh_pool)
-        else:
-            topic = get_llm_topic()
-    elif len(fresh_pool) == 1:
-        # 70% chance to use LLM to avoid repetition
-        if random.random() > 0.3:
-            topic = get_llm_topic()
-        else:
-            topic = fresh_pool[0]
-    else:
-        # No fresh trending topics — always use LLM
-        topic = get_llm_topic()
+        score = views
 
-    # Save to recent topics (keep last 20)
-    recent = ([topic] + recent)[:20]
-    os.makedirs("output", exist_ok=True)
-    json.dump(recent, open(recent_file, "w"))
+        if any(kw in title_lower for kw in POWER_KEYWORDS):
+            score *= 2
 
-    # Rotate pattern truly randomly but avoid last used
-    pattern = random.choice(TITLE_PATTERNS)
-    return f"{topic}||PATTERN:{pattern}"
+        try:
+            published = datetime.fromisoformat(
+                snippet["publishedAt"].replace("Z", "+00:00")
+            )
+            if published >= datetime.now(timezone.utc) - timedelta(hours=48):
+                score *= 1.5
+        except Exception:
+            pass
+
+        scored.append((score, title))
+
+    if not scored:
+        return _fallback_topic()
+
+    scored.sort(reverse=True)
+    top_pool = [title for _, title in scored[:10]]
+    return random.choice(top_pool)
+
+
+def _fallback_topic():
+    fallbacks = [
+        "iPhone 17 Pro Max leaked features",
+        "Samsung Galaxy secret feature you didn't know",
+        "Apple just revealed something huge",
+        "Google's new AI beats everything",
+        "This phone trick nobody tells you",
+        "Warning: stop doing this on your iPhone",
+        "New gadget everyone is buying right now",
+        "They don't want you to know this tech secret",
+        "Apple vs Samsung who wins in 2026",
+        "This free app replaces expensive software",
+    ]
+    return random.choice(fallbacks)
