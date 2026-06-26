@@ -40,52 +40,63 @@ def generate_and_upload_hindi():
     log("=== Hindi video generation shuru hua ===")
 
     try:
-        # Step 1: Get best trending Hindi topic from last 24 hours
+        # Step 1: Trending topic
         log("Hindi trending topic dhundh raha hai...")
-        from agents_hindi.spy_agent import get_best_hindi_topic
+        from agents_hindi.spy_agent import get_best_hindi_topic, get_hindi_trending_topics
         from agents_hindi.trending_agent import get_trending_topic
 
         best = get_best_hindi_topic()
 
         if best:
             topic = best['topic']
-            competitor_data = best
             log(f"Spy agent se topic mila: {topic} ({best['views']:,} views)")
         else:
-            # Fallback to trending agent if no 24h videos found
             log("24 ghante mein koi video nahi mili, trending agent use kar raha hai...")
             topic = get_trending_topic(region_code="IN")
-            competitor_data = None
             log(f"Trending topic: {topic}")
 
-        # Check if already posted today
+        # Duplicate check
         posted_today = get_posted_today()
         if topic in posted_today:
             log(f"Ye topic aaj already post ho chuka hai: {topic}")
-            # Try next best topic
-            from agents_hindi.spy_agent import get_hindi_trending_topics
             all_topics = get_hindi_trending_topics()
             for t in all_topics:
                 if t['topic'] not in posted_today:
                     topic = t['topic']
-                    competitor_data = t
                     log(f"Alternative topic: {topic}")
                     break
+
+        # Phase 2 — Competitor comparison (Hindi)
+        log("Competitor comparison ho raha hai...")
+        try:
+            from agents_hindi.comparison_agent import compare_topic_hindi
+            comparison = compare_topic_hindi(topic)
+            comparison_insights = comparison.get("insights", {})
+            if comparison_insights and not comparison_insights.get("error"):
+                log(f"Comparison: avg views={comparison_insights.get('competitor_avg_views', 0):,}, "
+                    f"best hour={comparison_insights.get('best_upload_hour_utc')} UTC")
+            else:
+                log("Comparison: data nahi mila, bina insights ke proceed kar rahe hain.")
+                comparison_insights = {}
+        except Exception as ce:
+            log(f"Comparison skip: {ce}")
+            comparison_insights = {}
 
         # Step 2: Research
         log("Research ho raha hai...")
         from agents.research_agent import research
         research_data = research(topic)
 
-        # Step 3: Hindi Script
+        # Step 3: Hindi Script (with comparison insights)
         log("Hindi script ban rahi hai...")
         from agents_hindi.script_agent import create_script
-        script = create_script(research_data)
+        script = create_script(research_data, topic=topic,
+                               comparison_insights=comparison_insights)
 
-        # Step 4: Hindi SEO (with competitor data)
+        # Step 4: Hindi SEO (with comparison insights)
         log("Hindi SEO generate ho raha hai...")
         from agents_hindi.seo_agent import generate_seo
-        seo = generate_seo(topic, script, competitor_data=competitor_data)
+        seo = generate_seo(topic, script, comparison_insights=comparison_insights)
         log(f"Title: {seo['title']}")
 
         # Step 5: Thumbnail
@@ -116,7 +127,7 @@ def generate_and_upload_hindi():
         from agents.video_agent import create_video
         video = create_video()
 
-        # Step 10: Upload to Hindi YouTube
+        # Step 10: Upload
         log("YouTube Hindi channel par upload ho raha hai...")
         from agents_hindi.upload_agent import upload_video
         video_id, video_url = upload_video(
@@ -131,7 +142,9 @@ def generate_and_upload_hindi():
         log(f"SUCCESS: Upload ho gaya! {video_url}")
 
     except Exception as e:
+        import traceback
         log(f"ERROR: {str(e)}")
+        log(f"TRACEBACK: {traceback.format_exc()}")
 
 
 # Post 3 times per day

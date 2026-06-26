@@ -1,20 +1,7 @@
-import re
 # agents_hindi/seo_agent.py
-from langchain_groq import ChatGroq
-def get_llm():
-    from langchain_groq import ChatGroq
-    try:
-        llm = ChatGroq(model="llama-3.3-70b-versatile", request_timeout=15)
-        safe_invoke("hi")
-        return llm
-    except Exception as e:
-        if "503" in str(e) or "capacity" in str(e) or "over_capacity" in str(e) or "overloaded" in str(e):
-            print("Falling back to llama-3.1-8b-instant")
-            return ChatGroq(model="llama-3.1-8b-instant")
-        return ChatGroq(model="llama-3.1-8b-instant")
+import re
+import json
 
-
-llm = get_llm()
 
 def safe_invoke(prompt):
     import threading
@@ -23,23 +10,21 @@ def safe_invoke(prompt):
     import os as _os
 
     result = [None]
-    error = [None]
 
     def try_groq():
         try:
             llm = ChatGroq(model="llama-3.3-70b-versatile")
             result[0] = llm.invoke(prompt)
-        except Exception as e:
-            error[0] = e
+        except Exception:
+            pass
 
     t = threading.Thread(target=try_groq)
     t.start()
-    t.join(timeout=20)  # Wait max 20 seconds
+    t.join(timeout=20)
 
     if result[0] is not None:
         return result[0]
 
-    # Groq timed out or failed — use Gemini
     print("Groq timeout/fail — falling back to Gemini Flash")
     try:
         gemini = ChatGoogleGenerativeAI(
@@ -48,23 +33,30 @@ def safe_invoke(prompt):
         )
         return gemini.invoke(prompt)
     except Exception:
-        # Last resort — llama-3.1-8b-instant
+        from langchain_groq import ChatGroq
         return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
 
 
-def generate_seo(topic, script, competitor_data=None):
+def generate_seo(topic, script, comparison_insights=None, competitor_data=None):
+    # Build context from comparison insights (Phase 2)
     competitor_context = ""
-    if competitor_data:
+    if comparison_insights and not comparison_insights.get("error"):
+        top_title = comparison_insights.get("top_competitor_title", "")
+        top_views = comparison_insights.get("top_competitor_views", 0)
+        if top_title:
+            competitor_context = f"""
+COMPETITOR INTELLIGENCE:
+- Is topic par sabse popular title: "{top_title}" ({top_views:,} views)
+- Iska style dekho par COPY mat karo — better aur original likho
+"""
+    # Fallback to old competitor_data format (from spy agent)
+    elif competitor_data:
         competitor_context = f"""
-Trending reference (inspiration only - rewrite everything originally):
+Trending reference (inspiration only):
 - Trending topic: {competitor_data.get('topic', '')}
 - Why trending: {competitor_data.get('why_trending', '')}
 - Suggested tags: {', '.join(competitor_data.get('tags', []))}
-- Suggested description: {competitor_data.get('description', '')}
-
-In tags aur description se INSPIRATION lo.
-Exact words COPY mat karo — copyright claim aayega.
-Apne original words mein likho same topic par.
+In tags aur description se INSPIRATION lo. Exact words COPY mat karo.
 """
 
     prompt = f"""
@@ -97,13 +89,12 @@ Ye EXACT JSON format mein return karo:
 
     try:
         data = json.loads(response)
-        # Use competitor tags as additional tags if available
         if competitor_data and competitor_data.get('tags'):
             existing = data.get('hashtags', [])
             extra = [t for t in competitor_data['tags'] if t not in existing]
             data['hashtags'] = (existing + extra)[:20]
         return data
-    except:
+    except Exception:
         return {
             "title": f"{topic} - Hindi Facts",
             "description": f"{topic} ke baare mein amazing facts. {script[:100]}",
