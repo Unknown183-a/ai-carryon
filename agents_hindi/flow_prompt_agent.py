@@ -3,24 +3,31 @@ load_dotenv()
 
 def get_llm():
     from langchain_groq import ChatGroq
+    return ChatGroq(model="llama-3.3-70b-versatile")
+
+def safe_invoke(prompt):
+    import threading
+    from langchain_groq import ChatGroq
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    import os as _os
+    result = [None]
+    def try_groq():
+        try:
+            result[0] = ChatGroq(model="llama-3.3-70b-versatile").invoke(prompt)
+        except Exception:
+            pass
+    t = threading.Thread(target=try_groq)
+    t.start()
+    t.join(timeout=20)
+    if result[0] is not None:
+        return result[0]
     try:
-        llm = ChatGroq(model="llama-3.3-70b-versatile")
-        llm.invoke("hi")
-        return llm
-    except Exception as e:
-        if "503" in str(e) or "capacity" in str(e) or "overloaded" in str(e) or "timeout" in str(e).lower():
-            from langchain_groq import ChatGroq
-            try:
-                return ChatGroq(model="llama-3.1-8b-instant")
-            except Exception:
-                from langchain_google_genai import ChatGoogleGenerativeAI
-                import os as _os
-                return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=_os.getenv("GEMINI_API_KEY"))
-        from langchain_groq import ChatGroq
-        return ChatGroq(model="llama-3.1-8b-instant")
+        gemini = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=_os.getenv("GEMINI_API_KEY"))
+        return gemini.invoke(prompt)
+    except Exception:
+        return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
 
 def generate_flow_prompts_hindi(topic, script, num_clips=3):
-    llm = get_llm()
     prompt = f"""You are a cinematic director writing Google Flow / Veo 3 VIDEO prompts for YouTube Shorts (Hindi tech channel).
 
 Topic (Hindi channel): {topic}
@@ -71,7 +78,7 @@ CLIP 2: <paragraph>
 CLIP 3: <paragraph>
 """
 
-    response = llm.invoke(prompt).content.strip()
+    response = safe_invoke(prompt).content.strip()
 
     clips = []
     for line in response.split("\n"):
