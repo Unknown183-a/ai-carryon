@@ -63,25 +63,26 @@ def generate_flow_prompts(topic, script, num_clips=3):
     facts_display = " | ".join(key_facts)
 
     # Generate dialogue for each part
-    dialogue_prompt = f"""You are an emotional dialogue writer for YouTube Shorts tech content.
-Write 3 short natural dialogue lines for a tech presenter about this topic.
+    dialogue_prompt = f"""You are a YouTube Shorts script writer. Write SPECIFIC topic-based dialogue.
 
 Topic: {topic}
 Key facts: {facts_display}
-Script: {script}
+Script reference: {script[:300]}
 
-Rules:
-- Natural, unscripted, conversational English
-- MUST mention the actual topic "{topic}" by name in dialogue
-- MUST include actual facts: {facts_display}
-- Use phrases like "Honestly...", "Wait what?", "This actually surprised me.", "Not gonna lie..."
-- SLOW natural pace — emotional pauses between sentences
-- Each line max 2 sentences
-- Be SPECIFIC — no vague filler without mentioning the actual topic
+CRITICAL RULES:
+- Every line MUST mention the actual topic or specific facts — NO generic filler
+- BAD LINE 1: "Wait, this actually surprised me" — TOO VAGUE, REJECTED
+- GOOD LINE 1: "Honestly, {topic} just changed something that most people completely missed — and it actually matters"
+- BAD LINE 2: "Here are the facts" — TOO VAGUE, REJECTED
+- GOOD LINE 2: "So here is what {topic} actually means: {facts_display.split('|')[0].strip() if facts_display else 'first fact'}. Not gonna lie, this one caught me off guard."
+- BAD LINE 3: "Now you know the real story" — TOO VAGUE, REJECTED
+- GOOD LINE 3: "If you are not paying attention to {topic} right now, you are missing something important. Follow for more content like this."
 
-LINE 1 (Hook — mention topic name + shocking specific angle, don't reveal all facts yet):
-LINE 2 (Facts — say topic name + reveal each fact from {facts_display} one by one slowly):
-LINE 3 (Payoff — final verdict on topic + natural follow CTA):"""
+Write exactly 3 lines. Each MUST contain topic name or specific fact. Natural slow conversational pace.
+
+LINE 1 (Hook — name the topic, ONE shocking specific angle, build curiosity without revealing all):
+LINE 2 (Facts — name topic + explain each fact from "{facts_display}" one by one in simple clear English):
+LINE 3 (Verdict — specific conclusion about topic + warm natural follow CTA):"""
 
     dialogue_response = safe_invoke(dialogue_prompt).content.strip()
     lines = {"LINE 1": "", "LINE 2": "", "LINE 3": ""}

@@ -63,25 +63,26 @@ def generate_flow_prompts_hindi(topic, script, num_clips=3):
     clean_topic = topic.split("||PATTERN:")[0].strip()
 
     # Generate Hinglish dialogue
-    dialogue_prompt = f"""You are an emotional Hinglish dialogue writer for YouTube Shorts tech content.
-Write 3 short natural Hinglish dialogue lines for a Hindi tech presenter.
+    dialogue_prompt = f"""You are a Hinglish YouTube Shorts script writer. Write SPECIFIC topic-based dialogue.
 
 Topic: {clean_topic}
 Key facts: {facts_display}
-Script: {script}
+Script reference: {script[:300]}
 
-Rules:
-- Natural Hinglish — mix of Hindi and English, conversational
-- MUST mention the actual topic "{clean_topic}" by name in dialogue
-- MUST include actual facts from: {facts_display}
-- Use phrases like "Honestly yaar...", "Sach mein?", "Not gonna lie..."
-- SLOW natural pace — emotional pauses
-- Each line max 2 sentences
-- Be SPECIFIC — no vague filler like "yeh jaankar hairan tha" without context
+CRITICAL RULES:
+- Every line MUST mention the actual topic or specific facts — NO generic filler
+- BAD example LINE 1: "Yaar suno, yeh jaankar main khud hairan tha" — TOO VAGUE, REJECTED
+- GOOD example LINE 1: "Yaar, {clean_topic} ke baare mein ek cheez hai jo 99% log nahi jaante — aur yeh genuinely important hai"
+- BAD example LINE 2: "Toh yeh hain asli facts" — TOO VAGUE, REJECTED  
+- GOOD example LINE 2: "Pehli baat — {facts_display.split('|')[0].strip() if facts_display else 'pehla fact'}. Yeh sun ke main bhi shocked tha sach mein."
+- BAD example LINE 3: "Ab tum jaante ho poora sach" — TOO VAGUE, REJECTED
+- GOOD example LINE 3: "Toh {clean_topic} ko seriously lena chahiye — yeh future hai. Follow karo aur aisi cheezein milti rahengi."
 
-LINE 1 (Hook — mention topic name, shocking specific angle, don't reveal all facts yet):
-LINE 2 (Facts — say topic name + reveal each fact from {facts_display} one by one slowly):
-LINE 3 (Payoff — final verdict on topic + natural follow CTA):"""
+Write exactly 3 lines. Each line MUST contain the topic name or specific fact. Natural slow Hinglish pace.
+
+LINE 1 (Hook — name the topic, give ONE shocking specific angle, create curiosity):
+LINE 2 (Facts — name topic + explain each fact from "{facts_display}" in simple Hinglish one by one):
+LINE 3 (Verdict — specific conclusion about topic + warm natural follow CTA):"""
 
     dialogue_response = safe_invoke(dialogue_prompt).content.strip()
     lines = {"LINE 1": "", "LINE 2": "", "LINE 3": ""}
