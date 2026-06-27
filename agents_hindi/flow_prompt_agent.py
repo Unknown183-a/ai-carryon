@@ -72,14 +72,16 @@ Script: {script}
 
 Rules:
 - Natural Hinglish — mix of Hindi and English, conversational
-- Use phrases like "Honestly yaar...", "Sach mein?", "Yeh toh maine expect nahi kiya tha", "Not gonna lie..."
-- NO brand names
+- MUST mention the actual topic "{clean_topic}" by name in dialogue
+- MUST include actual facts from: {facts_display}
+- Use phrases like "Honestly yaar...", "Sach mein?", "Not gonna lie..."
 - SLOW natural pace — emotional pauses
 - Each line max 2 sentences
+- Be SPECIFIC — no vague filler like "yeh jaankar hairan tha" without context
 
-LINE 1 (Hook — shock/curiosity in Hinglish, don't reveal answer):
-LINE 2 (Facts — reveal {facts_display} slowly and clearly in Hinglish):
-LINE 3 (Payoff — verdict + follow CTA in Hinglish):"""
+LINE 1 (Hook — mention topic name, shocking specific angle, don't reveal all facts yet):
+LINE 2 (Facts — say topic name + reveal each fact from {facts_display} one by one slowly):
+LINE 3 (Payoff — final verdict on topic + natural follow CTA):"""
 
     dialogue_response = safe_invoke(dialogue_prompt).content.strip()
     lines = {"LINE 1": "", "LINE 2": "", "LINE 3": ""}
@@ -94,8 +96,8 @@ LINE 3 (Payoff — verdict + follow CTA in Hinglish):"""
         lines["LINE 2"] = f"Toh yeh hain asli facts: {facts_display}. Sach mein, yeh sun ke dimaag ghoom gaya mera."
         lines["LINE 3"] = f"Ab tum jaante ho poora sach. Aisa content chahiye toh follow karo — seriously worth it."
 
-    for key in lines:
-        lines[key] = sanitize_for_flow(lines[key])
+    # Do NOT sanitize dialogue — keep topic specific
+    pass
 
     # PART 1 — VIRAL HOOK
     clip1 = f"""Hyper-realistic cinematic UGC YouTube Shorts — Hindi tech channel.

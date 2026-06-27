@@ -72,14 +72,16 @@ Script: {script}
 
 Rules:
 - Natural, unscripted, conversational English
-- Use phrases like "Honestly...", "Wait, what?", "This actually surprised me.", "Not gonna lie..."
-- NO brand names
-- SLOW natural pace — not rushed
+- MUST mention the actual topic "{topic}" by name in dialogue
+- MUST include actual facts: {facts_display}
+- Use phrases like "Honestly...", "Wait what?", "This actually surprised me.", "Not gonna lie..."
+- SLOW natural pace — emotional pauses between sentences
 - Each line max 2 sentences
+- Be SPECIFIC — no vague filler without mentioning the actual topic
 
-LINE 1 (Hook — shock/curiosity, don't reveal answer): 
-LINE 2 (Facts — reveal {facts_display} slowly and clearly):
-LINE 3 (Payoff — verdict + follow CTA):"""
+LINE 1 (Hook — mention topic name + shocking specific angle, don't reveal all facts yet):
+LINE 2 (Facts — say topic name + reveal each fact from {facts_display} one by one slowly):
+LINE 3 (Payoff — final verdict on topic + natural follow CTA):"""
 
     dialogue_response = safe_invoke(dialogue_prompt).content.strip()
     lines = {"LINE 1": "", "LINE 2": "", "LINE 3": ""}
@@ -94,9 +96,8 @@ LINE 3 (Payoff — verdict + follow CTA):"""
         lines["LINE 2"] = f"Honestly, here are the facts: {facts_display}. Not gonna lie, this changes everything."
         lines["LINE 3"] = f"This is seriously worth knowing. Follow for more content like this."
 
-    # Sanitize dialogue
-    for key in lines:
-        lines[key] = sanitize_for_flow(lines[key])
+    # Do NOT sanitize dialogue — keep topic specific
+    # Sanitization only applies to character/scene descriptions below
 
     # PART 1 — VIRAL HOOK
     clip1 = f"""Hyper-realistic cinematic UGC YouTube Shorts. 
