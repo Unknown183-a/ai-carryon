@@ -16,3 +16,4 @@ numpy
 soundfile
 streamlit
 plotly
+langchain-google-genai
