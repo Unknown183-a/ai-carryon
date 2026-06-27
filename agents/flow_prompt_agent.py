@@ -1,3 +1,17 @@
+
+def sanitize_for_flow(text):
+    """Remove brand names and real entities that violate Flow policies."""
+    import re
+    brands = [
+        "Tata", "Apple", "Samsung", "Google", "Microsoft", "Meta", "Tesla",
+        "OpenAI", "Anthropic", "Amazon", "Netflix", "Twitter", "Instagram",
+        "WhatsApp", "YouTube", "TikTok", "Jio", "Airtel", "Paytm",
+        "Flipkart", "Zomato", "Swiggy", "Ola", "Uber", "iPhone", "Android"
+    ]
+    for brand in brands:
+        text = re.sub(rf"\b{brand}\b", "a major tech company", text, flags=re.IGNORECASE)
+    return text
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -90,6 +104,10 @@ PART3: <3 sentences>"""
     )
 
     suffix = "9:16 vertical, 8 seconds, photorealistic, cinematic, natural lighting, real environment, NOT CGI, NOT generated looking"
+
+    parts["PART1"] = sanitize_for_flow(parts["PART1"])
+    parts["PART2"] = sanitize_for_flow(parts["PART2"])
+    parts["PART3"] = sanitize_for_flow(parts["PART3"])
 
     clip1 = (
         f"Avatar presenter, shocked curious expression, looks directly at camera, "
