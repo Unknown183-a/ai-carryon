@@ -25,23 +25,13 @@ def safe_invoke(prompt):
 
 
 def extract_hindi_facts(script, topic):
-    """Extract 2-3 concrete facts from script for on-screen display."""
-    prompt = f"""From this Hindi YouTube Shorts script, extract exactly 2-3 KEY FACTS to show on screen.
-
+    prompt = f"""From this Hindi YouTube Shorts script, extract exactly 2-3 KEY FACTS for on-screen display.
 Topic: {topic}
 Script: {script}
-
-Rules:
-- SPECIFIC: numbers, prices, percentages, names
-- Short: max 6 words each
-- In Hinglish (mix of Hindi + English)
-
-Good: "Battery 40% zyada", "Price sirf ₹999", "Speed 2x faster"
-Bad: "Bahut achha hai", "Improved performance"
-
-Return ONLY a Python list:
-["fact 1", "fact 2", "fact 3"]
-"""
+Rules: SPECIFIC numbers/prices in Hinglish, max 6 words each.
+Good: "Battery 40% zyada", "Price sirf ₹999"
+Bad: "Bahut achha", "Better than before"
+Return ONLY a Python list: ["fact 1", "fact 2", "fact 3"]"""
     try:
         import re, json
         response = safe_invoke(prompt).content.strip()
@@ -50,7 +40,7 @@ Return ONLY a Python list:
             return json.loads(match.group())
     except Exception:
         pass
-    return [f"{topic} — naya update", "Poora video dekho"]
+    return [f"{topic} naya update", "Poora video dekho"]
 
 
 def generate_flow_prompts_hindi(topic, script, num_clips=3):
@@ -58,69 +48,64 @@ def generate_flow_prompts_hindi(topic, script, num_clips=3):
     facts_display = " | ".join(key_facts)
     clean_topic = topic.split("||PATTERN:")[0].strip()
 
-    prompt = f"""You are a cinematic director creating a 3-part CONTINUOUS story for a Hindi YouTube Shorts channel.
+    # Step 1: Write one continuous Hinglish monologue, split into 3 parts
+    monologue_prompt = f"""You are a Hindi YouTube Shorts presenter. Write ONE continuous Hinglish monologue about this topic.
+The monologue will be split into 3 video clips — write it as one unbroken speech.
 
 Topic: {clean_topic}
-Script (Hindi): {script}
-Key facts to show on screen in Clip 2: {facts_display}
+Key facts to include: {facts_display}
+Script: {script}
 
-CRITICAL: These 3 clips are ONE continuous video. The presenter speaks CONTINUOUSLY — each clip picks up EXACTLY where the previous one ended. No random restarts. One unbroken conversation split into 3 parts.
-
-CHARACTER (SAME in ALL 3 clips — never change):
-"26-year-old Indian male, short neat black hair, light stubble, sharp jawline, dark navy crew-neck t-shirt, slim build, wheatish skin tone, no glasses, natural Hindi speaker expressions"
-
-CLIP 1 — HOOK (opens the story, creates curiosity):
-- Presenter starts speaking directly to camera with shocked/curious expression
-- He OPENS A LOOP in Hinglish — teases the topic without revealing the answer yet
-- Example: "Yaar suno, {clean_topic} ke baare mein ek baat hai jo koi nahi batata..."
-- He does NOT give facts yet — ends mid-sentence to pull viewer into Clip 2
-- Camera: handheld UGC close-up, fast punch-in zoom first 2 seconds, shaky realistic
-- Lighting: moody saffron/orange rim light, dark futuristic studio
-- Ends with "...aur yeh sun ke tumhara dimaag ghoom jayega"
-- 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style
-
-CLIP 2 — FACT REVEAL (continues directly from Clip 1):
-- Presenter CONTINUES speaking — picks up exactly where Clip 1 ended, no restart
-- He reveals the actual facts in Hinglish: bold readable glowing text "{facts_display}" appears on holographic display one by one as he points and explains
-- Viewer can READ the facts on screen as floating text cards
-- Camera: smooth gimbal medium shot, rack focus from holographic display to face
-- Lighting: dark studio saffron/orange ambient, holographic glow on face
-- Ends with "...aur sabse mast part toh abhi baaki hai"
-- 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style
-
-CLIP 3 — PAYOFF + CTA (closes the loop, drives follow):
-- Presenter CONTINUES from Clip 2 — delivers final surprising fact or verdict
-- CLOSES THE LOOP from Clip 1 — fully answers what was teased
-- Looks directly into camera: "Toh yahi hai {clean_topic} ka sach. Aisa content chahiye toh follow karo."
-- Camera: slow push-in, turns directly to camera with knowing smile
-- Lighting: premium soft saffron rim light, warm tone
-- Holographic text "FOLLOW KARO" floats in foreground
-- 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style
-
-Write each clip as ONE rich paragraph in English (Google Flow only accepts English).
-Always end each with: "9:16 vertical, 8 seconds, photorealistic, cinematic UGC style, Hindi tech creator, consistent character: 26-year-old Indian male short black hair dark navy t-shirt"
+Rules:
+- Total: exactly 3 sentences per part, 9 sentences total
+- Hinglish (Hindi + English mix), natural conversational tone
+- Part 1 (Hook): Open with shocking Hinglish question. Do NOT answer yet. End with "...aur yeh sun ke dimaag ghoom jayega"
+- Part 2 (Facts): Continue directly from Part 1. Reveal facts: {facts_display}. End with "...aur sabse mast part?"
+- Part 3 (Payoff): Deliver final punchline. Close the loop. End with "Aisa content chahiye toh follow karo."
+- No labels, just continuous speech
 
 Return EXACTLY:
-CLIP 1: <paragraph>
-CLIP 2: <paragraph>
-CLIP 3: <paragraph>
-"""
+PART1: <3 Hinglish sentences — hook>
+PART2: <3 Hinglish sentences — facts, continues from part1>
+PART3: <3 Hinglish sentences — payoff, closes loop>"""
 
-    response = safe_invoke(prompt).content.strip()
+    monologue_response = safe_invoke(monologue_prompt).content.strip()
 
-    clips = []
-    for line in response.split("\n"):
+    parts = {"PART1": "", "PART2": "", "PART3": ""}
+    for line in monologue_response.split("\n"):
         line = line.strip()
-        if line.upper().startswith("CLIP"):
-            parts = line.split(":", 1)
-            if len(parts) == 2:
-                clips.append(parts[1].strip())
+        for key in parts:
+            if line.upper().startswith(key + ":"):
+                parts[key] = line.split(":", 1)[1].strip()
 
-    if len(clips) < 3:
-        clips = [
-            f"Hook — handheld UGC close-up of 26-year-old Indian male short black hair dark navy t-shirt, shocked curious expression, fast punch-in zoom first 2 seconds, looks directly at camera and says in Hinglish 'Yaar suno, {clean_topic} ke baare mein ek baat hai jo koi nahi batata...' opens loop does not reveal answer yet ends mid-sentence, dark futuristic studio orange holographic panels moody saffron rim light, 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style, Hindi tech creator, consistent character: 26-year-old Indian male short black hair dark navy t-shirt",
-            f"Fact reveal — smooth gimbal medium shot of same 26-year-old Indian male short black hair dark navy t-shirt, continues speaking directly from clip 1 no restart, points at large holographic display showing bold readable glowing Hinglish text '{facts_display}' appearing one by one as floating text cards he explains each fact, rack focus display to face, dark studio saffron ambient holographic glow, ends with 'aur sabse mast part toh abhi baaki hai', 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style, Hindi tech creator, consistent character: 26-year-old Indian male short black hair dark navy t-shirt",
-            f"Payoff CTA — slow push-in on same 26-year-old Indian male short black hair dark navy t-shirt, continues from clip 2 delivers final verdict about {clean_topic} closes loop from clip 1, turns directly to camera knowing smile says 'Toh yahi hai {clean_topic} ka sach. Aisa content chahiye toh follow karo', holographic text FOLLOW KARO floats foreground, premium soft saffron rim light warm tone dark background, 9:16 vertical, 8 seconds, photorealistic, cinematic UGC style, Hindi tech creator, consistent character: 26-year-old Indian male short black hair dark navy t-shirt"
-        ]
+    if not parts["PART1"]:
+        parts["PART1"] = f"Yaar suno, {clean_topic} ke baare mein ek baat hai jo koi nahi batata. Sach mein yeh jaankar hairan ho jaoge. Aur yeh sun ke dimaag ghoom jayega..."
+        parts["PART2"] = f"Toh yeh hain asli facts: {facts_display}. Yahi cheez isse baaki sab se alag banati hai. Aur sabse mast part?"
+        parts["PART3"] = f"Isliye aajkal sablog iske baare mein baat kar rahe hain. Ab tum jaante ho {clean_topic} ka poora sach. Aisa content chahiye toh follow karo."
 
-    return clips[:3]
+    character = "26-year-old Indian male, short neat black hair, light stubble, sharp jawline, dark navy crew-neck t-shirt, slim build, wheatish skin tone, no glasses, natural Hindi speaker expressions"
+    suffix = "9:16 vertical, 8 seconds, photorealistic, cinematic UGC style, Hindi tech creator, consistent character: 26-year-old Indian male short black hair dark navy t-shirt"
+
+    clip1 = (
+        f"Handheld UGC close-up of {character}, shocked curious expression, fast punch-in zoom first 2 seconds, "
+        f"looks directly at camera speaking Hinglish: \"{parts['PART1']}\" — leans forward eyes wide hands gesturing expressively does not reveal answer yet, "
+        f"dark futuristic studio saffron orange holographic panels moody warm rim light flickering. {suffix}"
+    )
+
+    clip2 = (
+        f"Smooth gimbal medium shot of {character}, confident explaining expression, "
+        f"CONTINUES speaking directly from previous clip no restart: \"{parts['PART2']}\" — "
+        f"points at large holographic display showing bold readable glowing Hinglish text '{facts_display}' "
+        f"appearing one by one as floating text cards as he explains each fact, "
+        f"rack focus from display to face, dark studio saffron orange ambient holographic glow. {suffix}"
+    )
+
+    clip3 = (
+        f"Slow push-in on {character}, knowing confident smile, "
+        f"CONTINUES speaking directly from previous clip: \"{parts['PART3']}\" — "
+        f"turns directly to camera delivers final verdict closes the loop started in clip 1, "
+        f"holographic text 'FOLLOW KARO' floats in foreground, "
+        f"premium soft saffron rim light warm tone dark background. {suffix}"
+    )
+
+    return [clip1, clip2, clip3]
