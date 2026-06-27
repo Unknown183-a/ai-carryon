@@ -29,7 +29,7 @@ def extract_hindi_facts(script, topic):
 Topic: {topic}
 Script: {script}
 Rules: SPECIFIC numbers/prices in Hinglish, max 6 words each.
-Good: "Battery 40% zyada", "Price sirf ₹999"
+Good: "Battery 40% zyada", "Price sirf Rs 999"
 Bad: "Bahut achha", "Better than before"
 Return ONLY a Python list: ["fact 1", "fact 2", "fact 3"]"""
     try:
@@ -48,26 +48,25 @@ def generate_flow_prompts_hindi(topic, script, num_clips=3):
     facts_display = " | ".join(key_facts)
     clean_topic = topic.split("||PATTERN:")[0].strip()
 
-    # Step 1: Write one continuous Hinglish monologue, split into 3 parts
-    monologue_prompt = f"""You are a Hindi YouTube Shorts presenter. Write ONE continuous Hinglish monologue about this topic.
-The monologue will be split into 3 video clips — write it as one unbroken speech.
+    # Step 1: Write one continuous Hinglish monologue
+    monologue_prompt = f"""You are a Hindi YouTube Shorts presenter. Write ONE continuous Hinglish monologue.
+Split into 3 parts — one unbroken natural conversation.
 
 Topic: {clean_topic}
-Key facts to include: {facts_display}
+Key facts: {facts_display}
 Script: {script}
 
 Rules:
-- Total: exactly 3 sentences per part, 9 sentences total
-- Hinglish (Hindi + English mix), natural conversational tone
-- Part 1 (Hook): Open with shocking Hinglish question. Do NOT answer yet. End with "...aur yeh sun ke dimaag ghoom jayega"
-- Part 2 (Facts): Continue directly from Part 1. Reveal facts: {facts_display}. End with "...aur sabse mast part?"
-- Part 3 (Payoff): Deliver final punchline. Close the loop. End with "Aisa content chahiye toh follow karo."
-- No labels, just continuous speech
+- Part 1 (Hook): Shocking Hinglish opening, do NOT answer yet, end with "...aur yeh sun ke dimaag ghoom jayega"
+- Part 2 (Facts): Continue directly, reveal facts slowly and clearly: {facts_display}, end with "...aur sabse mast part?"
+- Part 3 (Payoff): Final verdict, close the loop, end with "Aisa content chahiye toh follow karo."
+- Natural conversational pace — SLOW and clear, like explaining to a friend, NOT rushed
+- Short sentences with natural pauses
 
 Return EXACTLY:
-PART1: <3 Hinglish sentences — hook>
-PART2: <3 Hinglish sentences — facts, continues from part1>
-PART3: <3 Hinglish sentences — payoff, closes loop>"""
+PART1: <3 Hinglish sentences>
+PART2: <3 Hinglish sentences — slow clear facts>
+PART3: <3 Hinglish sentences>"""
 
     monologue_response = safe_invoke(monologue_prompt).content.strip()
 
@@ -83,29 +82,37 @@ PART3: <3 Hinglish sentences — payoff, closes loop>"""
         parts["PART2"] = f"Toh yeh hain asli facts: {facts_display}. Yahi cheez isse baaki sab se alag banati hai. Aur sabse mast part?"
         parts["PART3"] = f"Isliye aajkal sablog iske baare mein baat kar rahe hain. Ab tum jaante ho {clean_topic} ka poora sach. Aisa content chahiye toh follow karo."
 
-    character = "26-year-old Indian male, short neat black hair, light stubble, sharp jawline, dark navy crew-neck t-shirt, slim build, wheatish skin tone, no glasses, natural Hindi speaker expressions"
-    suffix = "9:16 vertical, 8 seconds, photorealistic, cinematic UGC style, Hindi tech creator, consistent character: 26-year-old Indian male short black hair dark navy t-shirt"
+    # Realistic background for Hindi channel
+    background = (
+        "realistic Indian home studio background, warm lighting, soft LED strip lights, "
+        "a desk with laptop showing tech content, plants in background, "
+        "shallow depth of field, cinematic feel, real room not CGI, warm Indian home aesthetic"
+    )
+
+    suffix = "9:16 vertical, 8 seconds, photorealistic, cinematic, natural lighting, real environment, NOT CGI, NOT generated looking"
 
     clip1 = (
-        f"Handheld UGC close-up of {character}, shocked curious expression, fast punch-in zoom first 2 seconds, "
-        f"looks directly at camera speaking Hinglish: \"{parts['PART1']}\" — leans forward eyes wide hands gesturing expressively does not reveal answer yet, "
-        f"dark futuristic studio saffron orange holographic panels moody warm rim light flickering. {suffix}"
+        f"Avatar presenter, shocked curious expression, looks directly at camera, "
+        f"speaks Hinglish at SLOW natural conversational pace with clear pauses: \"{parts['PART1']}\" "
+        f"leans forward slightly eyes wide natural expressive Indian hand gestures, "
+        f"{background}, fast punch-in zoom first 2 seconds. {suffix}"
     )
 
     clip2 = (
-        f"Smooth gimbal medium shot of {character}, confident explaining expression, "
-        f"CONTINUES speaking directly from previous clip no restart: \"{parts['PART2']}\" — "
-        f"points at large holographic display showing bold readable glowing Hinglish text '{facts_display}' "
-        f"appearing one by one as floating text cards as he explains each fact, "
-        f"rack focus from display to face, dark studio saffron orange ambient holographic glow. {suffix}"
+        f"Avatar presenter, confident calm expression, continues speaking from previous clip at SLOW clear pace: \"{parts['PART2']}\" "
+        f"Bold readable Hinglish text overlays appear on screen one by one: '{facts_display}' "
+        f"each fact appears as large white bold caption at exact moment he mentions it, "
+        f"text stays 2-3 seconds before next appears, "
+        f"presenter points toward text naturally with Indian hand gesture, "
+        f"{background}, smooth gimbal medium shot. {suffix}"
     )
 
     clip3 = (
-        f"Slow push-in on {character}, knowing confident smile, "
-        f"CONTINUES speaking directly from previous clip: \"{parts['PART3']}\" — "
-        f"turns directly to camera delivers final verdict closes the loop started in clip 1, "
-        f"holographic text 'FOLLOW KARO' floats in foreground, "
-        f"premium soft saffron rim light warm tone dark background. {suffix}"
+        f"Avatar presenter, warm confident smile, continues from previous clip at relaxed natural pace: \"{parts['PART3']}\" "
+        f"turns slightly more toward camera direct eye contact, "
+        f"bold text 'FOLLOW KARO' appears at bottom of screen, "
+        f"subtle approving nod at end, "
+        f"{background}, slow push-in shot. {suffix}"
     )
 
     return [clip1, clip2, clip3]
