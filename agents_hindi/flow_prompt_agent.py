@@ -80,7 +80,7 @@ CRITICAL RULES:
 
 Write exactly 3 lines. Each line MUST contain the topic name or specific fact. Natural slow Hinglish pace.
 
-LINE 1 (Hook — name the topic, give ONE shocking specific angle, create curiosity):
+LINE 1 (Hook — extract the CONCEPT from the topic, rephrase naturally in Hinglish, give ONE shocking angle, DO NOT paste topic title word for word):
 LINE 2 (Facts — name topic + explain each fact from "{facts_display}" in simple Hinglish one by one):
 LINE 3 (Verdict — specific conclusion about topic + warm natural follow CTA):"""
 

@@ -80,7 +80,7 @@ CRITICAL RULES:
 
 Write exactly 3 lines. Each MUST contain topic name or specific fact. Natural slow conversational pace.
 
-LINE 1 (Hook — name the topic, ONE shocking specific angle, build curiosity without revealing all):
+LINE 1 (Hook — extract the CONCEPT from the topic, rephrase naturally, DO NOT paste topic title word for word, ONE shocking angle):
 LINE 2 (Facts — name topic + explain each fact from "{facts_display}" one by one in simple clear English):
 LINE 3 (Verdict — specific conclusion about topic + warm natural follow CTA):"""
 
