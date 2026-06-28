@@ -86,24 +86,25 @@ LINE 3 (Verdict — specific conclusion about topic + warm natural follow CTA):"
 
     dialogue_response = safe_invoke(dialogue_prompt).content.strip()
     lines = {"LINE 1": "", "LINE 2": "", "LINE 3": ""}
-    import re as _re
-    patterns = [
-        (r"LINE\s*1\s*[:\-\)]\s*(.+)", "LINE 1"),
-        (r"LINE\s*2\s*[:\-\)]\s*(.+)", "LINE 2"),
-        (r"LINE\s*3\s*[:\-\)]\s*(.+)", "LINE 3"),
-        (r"^1[\.):\-]\s*(.+)", "LINE 1"),
-        (r"^2[\.):\-]\s*(.+)", "LINE 2"),
-        (r"^3[\.):\-]\s*(.+)", "LINE 3"),
-    ]
-    for line in dialogue_response.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        for pattern, key in patterns:
-            match = _re.match(pattern, line, _re.IGNORECASE)
-            if match and not lines[key]:
-                lines[key] = match.group(1).strip()
+
+    raw_lines = [l.strip() for l in dialogue_response.split("\n") if l.strip()]
+    current_key = None
+    for i, line in enumerate(raw_lines):
+        import re as _re
+        for num, key in [("1", "LINE 1"), ("2", "LINE 2"), ("3", "LINE 3")]:
+            if _re.match(rf"LINE\s*{num}", line, _re.IGNORECASE):
+                current_key = key
+                after_colon = line.split(":", 1)[-1].strip().strip('"\ ')
+                if after_colon and len(after_colon) > 10:
+                    lines[key] = after_colon
                 break
+        else:
+            if current_key and not lines[current_key]:
+                cleaned = line.strip('"\ ')
+                if len(cleaned) > 10:
+                    lines[current_key] = cleaned
+                    current_key = None
+
     print(f"Parsed dialogue: {lines}")
 
     if not lines["LINE 1"]:
