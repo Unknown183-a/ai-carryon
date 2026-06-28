@@ -33,6 +33,9 @@ AVOID_KEYWORDS = [
     "sport", "football", "cricket", "basketball", "race", "running",
     "music", "song", "album", "movie", "film", "drama", "series",
     "bypass", "plumbing", "gardening", "fitness", "workout", "diet",
+    "trump", "biden", "iran", "russia", "ukraine", "war", "politics",
+    "election", "president", "senator", "congress", "government",
+    "stuck", "challenge", "survive", "dating", "relationship",
 ]
 
 
