@@ -26,13 +26,12 @@ def safe_invoke(prompt):
 
 
 def sanitize_for_flow(text):
-    """Remove brand/real entity names that violate Flow policies."""
     brands = [
-        "Tata", "Apple", "Samsung", "Google", "Microsoft", "Meta", "Tesla",
-        "OpenAI", "Anthropic", "Amazon", "Netflix", "Twitter", "Instagram",
-        "WhatsApp", "YouTube", "TikTok", "Jio", "Airtel", "Paytm",
-        "Flipkart", "Zomato", "Swiggy", "Ola", "Uber", "iPhone", "Android",
-        "ChatGPT", "Gemini", "Claude", "BSNL", "HDFC", "SBI", "ICICI"
+        "Tata","Apple","Samsung","Google","Microsoft","Meta","Tesla",
+        "OpenAI","Anthropic","Amazon","Netflix","Twitter","Instagram",
+        "WhatsApp","YouTube","TikTok","Jio","Airtel","Paytm",
+        "Flipkart","Zomato","Swiggy","Ola","Uber","Android",
+        "ChatGPT","Gemini","Claude","BSNL","HDFC","SBI","ICICI"
     ]
     for brand in brands:
         text = re.sub(rf"\b{brand}\b", "a major tech company", text, flags=re.IGNORECASE)
@@ -58,87 +57,107 @@ Return ONLY a Python list: ["fact 1", "fact 2", "fact 3"]"""
     return [f"{topic} key update", "Watch till end"]
 
 
+def parse_dialogue(response_text):
+    """Parse LLM dialogue response — handles label+dialogue on same line OR next line."""
+    lines_out = {"LINE 1": "", "LINE 2": "", "LINE 3": ""}
+    raw_lines = [l.strip() for l in response_text.split("\n") if l.strip()]
+    current_key = None
+
+    for line in raw_lines:
+        matched_key = None
+        for num, key in [("1", "LINE 1"), ("2", "LINE 2"), ("3", "LINE 3")]:
+            if re.match(rf"LINE\s*{num}", line, re.IGNORECASE):
+                matched_key = key
+                break
+
+        if matched_key:
+            current_key = matched_key
+            # Check if dialogue is on same line after colon
+            after_colon = line.split(":", 1)[-1].strip().strip('"\'')
+            if len(after_colon) > 10:
+                lines_out[current_key] = after_colon
+        else:
+            # Dialogue is on next line
+            if current_key and not lines_out[current_key]:
+                cleaned = line.strip('"\'')
+                if len(cleaned) > 10:
+                    lines_out[current_key] = cleaned
+                    current_key = None
+
+    print(f"Parsed dialogue: {lines_out}")
+    return lines_out
+
+
 def generate_flow_prompts(topic, script, num_clips=3):
     key_facts = extract_key_facts(script, topic)
     facts_display = " | ".join(key_facts)
 
-    # Generate dialogue for each part
-    dialogue_prompt = f"""You are a YouTube Shorts script writer. Write SPECIFIC topic-based dialogue.
+    dialogue_prompt = f"""You are a YouTube Shorts script writer. Write 3 specific dialogue lines for a tech presenter.
 
 Topic: {topic}
 Key facts: {facts_display}
 Script reference: {script[:300]}
 
-CRITICAL RULES:
-- Every line MUST mention the actual topic or specific facts — NO generic filler
-- BAD LINE 1: "Wait, this actually surprised me" — TOO VAGUE, REJECTED
-- GOOD LINE 1: "Honestly, this just changed something that most people completely missed — and it actually matters" (naturally weave topic concept, never append topic title at the end of sentence)
-- BAD LINE 2: "Here are the facts" — TOO VAGUE, REJECTED
-- GOOD LINE 2: "So here is what {topic} actually means: {facts_display.split('|')[0].strip() if facts_display else 'first fact'}. Not gonna lie, this one caught me off guard."
-- BAD LINE 3: "Now you know the real story" — TOO VAGUE, REJECTED
-- GOOD LINE 3: "If you are not paying attention to {topic} right now, you are missing something important. Follow for more content like this."
+RULES:
+- Be SPECIFIC — mention actual topic concept and facts
+- Natural slow conversational English
+- Max 2 sentences per line
+- Never paste topic title word for word at end of sentence
 
-Write exactly 3 lines. Each MUST contain topic name or specific fact. Natural slow conversational pace.
-
-LINE 1 (Hook — extract the CONCEPT, rephrase naturally, NEVER end sentence with topic title, ONE shocking angle in max 2 sentences):
-LINE 2 (Facts — name topic + explain each fact from "{facts_display}" one by one in simple clear English):
-LINE 3 (Verdict — specific conclusion about topic + warm natural follow CTA):"""
+LINE 1 (Hook — shocking specific angle about topic, build curiosity, do not reveal all facts):
+LINE 2 (Facts — explain each fact from "{facts_display}" one by one in simple English):
+LINE 3 (Verdict — specific conclusion about topic + natural follow CTA):"""
 
     dialogue_response = safe_invoke(dialogue_prompt).content.strip()
-    lines = {"LINE 1": "", "LINE 2": "", "LINE 3": ""}
-    for line in dialogue_response.split("\n"):
-        line = line.strip()
-        for key in lines:
-            if line.upper().startswith(key):
-                lines[key] = line.split(":", 1)[-1].strip()
+    lines = parse_dialogue(dialogue_response)
 
+    # Fallback only if parsing completely failed
     if not lines["LINE 1"]:
-        lines["LINE 1"] = f"Wait... this actually surprised me. Nobody is talking about what just happened in tech."
-        lines["LINE 2"] = f"Honestly, here are the facts: {facts_display}. Not gonna lie, this changes everything."
-        lines["LINE 3"] = f"This is seriously worth knowing. Follow for more content like this."
+        lines["LINE 1"] = f"Honestly, what just happened with {topic} caught me completely off guard — and most people have no idea."
+        lines["LINE 2"] = f"Here is what actually matters: {facts_display}. Not gonna lie, each of these changes things."
+        lines["LINE 3"] = f"If you care about tech, {topic} is something you need to pay attention to right now. Follow for more."
 
-    # Do NOT sanitize dialogue — keep topic specific
-    # Sanitization only applies to character/scene descriptions below
+    background = (
+        "Modern premium home studio — dark background, soft RGB ambient lighting deep blue and purple, "
+        "sleek desk with ultrawide monitor showing tech UI, clean minimal aesthetic, "
+        "shallow depth of field, real room NOT CGI"
+    )
+    suffix = "9:16 vertical, 8 seconds, photorealistic, hyper-realistic, premium cinematic UGC, NOT CGI, real human energy"
 
-    # PART 1 — VIRAL HOOK
-    clip1 = f"""Hyper-realistic cinematic UGC YouTube Shorts. 
+    clip1 = f"""Hyper-realistic cinematic UGC YouTube Shorts.
 SCENE OBJECTIVE: Viral hook — instant curiosity, emotional attention within 2 seconds.
 CHARACTER: Smart confident tech presenter, modern minimal outfit — fitted dark t-shirt, clean look, sharp style. Uses avatar image for face consistency.
 ACTION: Fast punch-in zoom in first 2 seconds. Presenter looks directly at camera with genuine shocked curious expression. Natural subtle reaction — slight eyebrow raise, leans forward. Says naturally at slow conversational pace with emotional pause: "{lines['LINE 1']}"
 CAMERA: Handheld UGC close-up, fast punch-in zoom, slight authentic shake, POV energy.
-ENVIRONMENT: Modern premium home studio — dark background, soft RGB ambient lighting in deep blue and purple, sleek desk setup with ultrawide monitor showing tech UI, clean minimal aesthetic, shallow depth of field, feels real not CGI.
+ENVIRONMENT: {background}.
 LIGHTING: Moody cinematic low-key, soft blue rim light on face, natural skin tone, premium contrast.
 EMOTION: Genuine surprise, curiosity, authentic not overacted.
 SOUND: Subtle whoosh on zoom, ambient room tone.
-TRANSITION: Seamless cut to next clip — presenter mid-sentence.
-9:16 vertical, 8 seconds, photorealistic, hyper-realistic, premium cinematic UGC, NOT CGI, NOT AI generated looking, real human energy."""
+TRANSITION: Seamless cut — presenter mid-sentence continuing to part 2.
+{suffix}"""
 
-    # PART 2 — FACT REVEAL
     clip2 = f"""Hyper-realistic cinematic UGC YouTube Shorts — CONTINUES DIRECTLY FROM PREVIOUS CLIP.
-SCENE OBJECTIVE: Deliver actual value — show real facts clearly on screen, build trust.
+SCENE OBJECTIVE: Deliver real value — show facts clearly on screen, build trust.
 CHARACTER: Same presenter, same outfit, same environment — confident explaining expression, natural hand gestures.
-ACTION: Continues speaking naturally from previous clip — NO restart. Says slowly and clearly: "{lines['LINE 2']}". As he speaks, bold white text overlays appear one by one on screen: '{facts_display}' — each fact appears at exact moment he mentions it, stays 2-3 seconds, large readable font. Presenter points naturally toward text. Slight head nod for emphasis.
-CAMERA: Smooth gimbal medium shot, subtle rack focus from text overlay to face, dynamic but stable.
-ENVIRONMENT: Same premium home studio — ultrawide monitor now shows relevant tech graphics/data visualizations glowing behind him.
-LIGHTING: Same moody blue ambient, monitor glow adds cinematic depth.
-B-ROLL: Quick macro cut to tech device/screen showing the facts visually, then back to presenter.
-EMOTION: Confident, knowledgeable, trustworthy — like a smart friend explaining.
-SOUND: Subtle notification sound as each text fact appears.
-TRANSITION: Seamless — presenter mid-thought leading into part 3.
-9:16 vertical, 8 seconds, photorealistic, hyper-realistic, premium cinematic UGC, real human energy."""
+ACTION: Continues speaking naturally from previous clip — NO restart. Says slowly and clearly: "{lines['LINE 2']}". Bold white text overlays appear one by one on screen: '{facts_display}' — each at exact moment mentioned, stays 2-3 seconds, large readable font. Presenter points naturally toward text.
+CAMERA: Smooth gimbal medium shot, subtle rack focus from text overlay to face.
+ENVIRONMENT: {background} — monitor now shows relevant tech graphics.
+LIGHTING: Same moody blue ambient, monitor glow adds depth.
+B-ROLL: Quick macro cut to screen showing facts, then back to presenter.
+EMOTION: Confident, knowledgeable, trustworthy.
+SOUND: Subtle notification sound as each fact text appears.
+TRANSITION: Seamless — leading into part 3.
+{suffix}"""
 
-    # PART 3 — PAYOFF + CTA
     clip3 = f"""Hyper-realistic cinematic UGC YouTube Shorts — CONTINUES DIRECTLY FROM PREVIOUS CLIP.
-SCENE OBJECTIVE: Emotional payoff — close the loop, drive follow action naturally.
+SCENE OBJECTIVE: Emotional payoff — close loop, drive follow action naturally.
 CHARACTER: Same presenter, same outfit — warm knowing smile, direct confident eye contact.
-ACTION: Continues from previous clip, delivers final verdict naturally: "{lines['LINE 3']}". Turns slightly more toward camera — feels like talking directly to viewer. Subtle approving nod. Natural slight smile. Bold text 'FOLLOW FOR MORE' appears at bottom of screen in clean modern font.
-CAMERA: Slow cinematic push-in, over-shoulder then turns to face camera directly, premium feel.
-ENVIRONMENT: Same studio — slight warmer tone shift, premium hero shot feel.
-LIGHTING: Slightly warmer soft rim light, cinematic premium glow.
-B-ROLL: Quick hero shot of topic visual, then back to presenter for final look.
-EMOTION: Warm, confident, genuine — like a trusted friend giving real advice.
-SOUND: Subtle satisfying chime on CTA text appearance, warm ambient fade.
-TRANSITION: Clean end frame with presenter smiling at camera.
-9:16 vertical, 8 seconds, photorealistic, hyper-realistic, premium cinematic UGC, real human energy."""
+ACTION: Continues from previous clip, delivers final verdict: "{lines['LINE 3']}". Turns slightly more toward camera — direct personal connection. Subtle approving nod, natural warm smile. Bold text 'FOLLOW FOR MORE' appears at bottom in clean modern font.
+CAMERA: Slow cinematic push-in, turns to face camera directly.
+ENVIRONMENT: {background} — slight warmer tone.
+LIGHTING: Slightly warmer soft rim light, premium cinematic glow.
+EMOTION: Warm, genuine, trusted friend giving real advice.
+SOUND: Subtle satisfying chime on CTA text, warm ambient fade.
+{suffix}"""
 
     return [clip1, clip2, clip3]
