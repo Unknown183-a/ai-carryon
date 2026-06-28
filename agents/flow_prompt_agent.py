@@ -72,7 +72,7 @@ Script reference: {script[:300]}
 CRITICAL RULES:
 - Every line MUST mention the actual topic or specific facts — NO generic filler
 - BAD LINE 1: "Wait, this actually surprised me" — TOO VAGUE, REJECTED
-- GOOD LINE 1: "Honestly, {topic} just changed something that most people completely missed — and it actually matters"
+- GOOD LINE 1: "Honestly, this just changed something that most people completely missed — and it actually matters" (naturally weave topic concept, never append topic title at the end of sentence)
 - BAD LINE 2: "Here are the facts" — TOO VAGUE, REJECTED
 - GOOD LINE 2: "So here is what {topic} actually means: {facts_display.split('|')[0].strip() if facts_display else 'first fact'}. Not gonna lie, this one caught me off guard."
 - BAD LINE 3: "Now you know the real story" — TOO VAGUE, REJECTED
@@ -80,7 +80,7 @@ CRITICAL RULES:
 
 Write exactly 3 lines. Each MUST contain topic name or specific fact. Natural slow conversational pace.
 
-LINE 1 (Hook — extract the CONCEPT from the topic, rephrase naturally, DO NOT paste topic title word for word, ONE shocking angle):
+LINE 1 (Hook — extract the CONCEPT, rephrase naturally, NEVER end sentence with topic title, ONE shocking angle in max 2 sentences):
 LINE 2 (Facts — name topic + explain each fact from "{facts_display}" one by one in simple clear English):
 LINE 3 (Verdict — specific conclusion about topic + warm natural follow CTA):"""
 

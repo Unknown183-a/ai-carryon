@@ -11,12 +11,9 @@ YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 # Mass appeal categories — broad audience, high search volume
 CATEGORY_IDS = [
-    "28",  # Science & Technology
-    "2",   # Autos & Vehicles
-    "17",  # Sports
-    "25",  # News & Politics
-    "26",  # Howto & Style
-    "19",  # Travel & Events
+    "28",  # Science & Technology — PRIMARY
+    "25",  # News & Politics — for big tech news
+    "26",  # Howto & Style — for tech tutorials
 ]
 
 # High performing topic boosters — titles containing these get priority
