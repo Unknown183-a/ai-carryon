@@ -96,8 +96,25 @@ def get_trending_topic(region_code="US"):
         return _fallback_topic()
 
     scored.sort(reverse=True)
-    top_pool = [title for _, title in scored[:10]]
-    return random.choice(top_pool)
+
+    # Final validation — must contain at least one tech signal
+    TECH_SIGNALS = [
+        "ai", "iphone", "samsung", "apple", "google", "microsoft", "tech",
+        "robot", "chip", "cpu", "gpu", "phone", "laptop", "app", "software",
+        "hack", "cyber", "data", "camera", "battery", "5g", "electric",
+        "gadget", "device", "computer", "internet", "crypto", "space", "nasa",
+        "tesla", "elon", "openai", "chatgpt", "gemini", "claude", "meta",
+        "vr", "ar", "drone", "satellite", "quantum", "neural", "model",
+    ]
+    tech_pool = [
+        title for _, title in scored[:20]
+        if any(sig in title.lower() for sig in TECH_SIGNALS)
+    ]
+
+    if tech_pool:
+        return random.choice(tech_pool[:10])
+
+    return _fallback_topic()
 
 
 def _fallback_topic():
