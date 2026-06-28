@@ -29,6 +29,10 @@ AVOID_KEYWORDS = [
     "claude", "llm", "langchain", "hugging face", "fine-tuning",
     "embeddings", "vector database", "rag pipeline", "token",
     "benchmark", "parameter", "weights", "transformer architecture",
+    "ring", "jewelry", "fashion", "cooking", "recipe", "makeup",
+    "sport", "football", "cricket", "basketball", "race", "running",
+    "music", "song", "album", "movie", "film", "drama", "series",
+    "bypass", "plumbing", "gardening", "fitness", "workout", "diet",
 ]
 
 
