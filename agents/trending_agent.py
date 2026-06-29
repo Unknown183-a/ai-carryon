@@ -9,128 +9,130 @@ load_dotenv()
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
-# Mass appeal categories — broad audience, high search volume
-CATEGORY_IDS = [
-    "28",  # Science & Technology — PRIMARY
-    "25",  # News & Politics — for big tech news
-    "26",  # Howto & Style — for tech tutorials
+# ONLY Science & Technology category
+CATEGORY_IDS = ["28"]
+
+# Must contain at least one of these to qualify
+TECH_MUST_HAVE = [
+    "ai", "artificial intelligence", "robot", "iphone", "samsung", "apple",
+    "google", "microsoft", "tech", "chip", "cpu", "gpu", "phone", "laptop",
+    "app", "software", "hack", "cyber", "data", "camera", "battery", "5g",
+    "electric", "gadget", "device", "computer", "internet", "crypto",
+    "space", "nasa", "tesla", "elon", "openai", "chatgpt", "gemini",
+    "meta", "vr", "ar", "drone", "satellite", "quantum", "neural", "model",
+    "invention", "technology", "innovation", "future", "new feature",
+    "launched", "released", "revealed", "upgrade", "update", "version",
+    "humanoid", "autonomous", "self-driving", "electric vehicle", "ev",
+    "gpt", "llm", "machine learning", "deep learning", "automation",
 ]
 
-# High performing topic boosters — titles containing these get priority
-POWER_KEYWORDS = [
-    "iphone", "samsung", "apple", "google", "leaked", "secret",
-    "revealed", "hack", "trick", "warning", "free", "banned",
-    "vs", "beats", "record", "first", "new", "just released",
-    "you didn't know", "nobody tells you", "stop doing",
+# Immediately reject if contains any of these
+TECH_BLOCKLIST = [
+    "gift", "wedding", "love", "relationship", "dating", "family",
+    "cooking", "recipe", "food", "fashion", "makeup", "beauty",
+    "sport", "football", "cricket", "basketball", "soccer", "tennis",
+    "music", "song", "album", "concert", "dance", "movie", "film",
+    "drama", "series", "netflix", "disney", "celebrity", "actor",
+    "politics", "election", "trump", "biden", "government", "war",
+    "iran", "russia", "ukraine", "military", "president", "senator",
+    "religion", "god", "prayer", "church", "mosque", "temple",
+    "fitness", "workout", "diet", "weight loss", "gym", "yoga",
+    "travel", "hotel", "vacation", "tourism", "beach", "holiday",
+    "real estate", "house", "home decor", "interior", "garden",
+    "animals", "pet", "dog", "cat", "wildlife", "nature",
+    "funny", "prank", "challenge", "reaction", "vlog", "storytime",
+    "she", "he", "her", "him", "waited", "gave", "surprised",
 ]
 
-# Topics to avoid — too niche, low search volume
-AVOID_KEYWORDS = [
-    "claude", "llm", "langchain", "hugging face", "fine-tuning",
-    "embeddings", "vector database", "rag pipeline", "token",
-    "benchmark", "parameter", "weights", "transformer architecture",
-    "ring", "jewelry", "fashion", "cooking", "recipe", "makeup",
-    "sport", "football", "cricket", "basketball", "race", "running",
-    "music", "song", "album", "movie", "film", "drama", "series",
-    "bypass", "plumbing", "gardening", "fitness", "workout", "diet",
-    "trump", "biden", "iran", "russia", "ukraine", "war", "politics",
-    "election", "president", "senator", "congress", "government",
-    "stuck", "challenge", "survive", "dating", "relationship",
-]
+
+def is_tech_topic(title: str) -> bool:
+    title_lower = title.lower()
+    # Reject if blocklist word found
+    if any(kw in title_lower for kw in TECH_BLOCKLIST):
+        return False
+    # Accept if tech signal found
+    if any(kw in title_lower for kw in TECH_MUST_HAVE):
+        return True
+    return False
 
 
 def get_trending_topic(region_code="US"):
-    youtube = googleapiclient.discovery.build(
-        "youtube", "v3", developerKey=YOUTUBE_API_KEY
-    )
+    try:
+        youtube = googleapiclient.discovery.build(
+            "youtube", "v3", developerKey=YOUTUBE_API_KEY
+        )
 
-    all_videos = []
+        all_videos = []
 
-    categories_to_try = random.sample(CATEGORY_IDS, min(3, len(CATEGORY_IDS)))
+        # Fetch from Science & Technology only
+        request = youtube.videos().list(
+            part="snippet,statistics",
+            chart="mostPopular",
+            regionCode=region_code,
+            maxResults=50,
+            videoCategoryId="28"
+        )
+        response = request.execute()
+        all_videos.extend(response.get("items", []))
 
-    for category_id in categories_to_try:
-        try:
-            request = youtube.videos().list(
-                part="snippet,statistics",
-                chart="mostPopular",
-                regionCode=region_code,
-                maxResults=50,
-                videoCategoryId=category_id
-            )
-            response = request.execute()
-            all_videos.extend(response.get("items", []))
-        except Exception:
-            continue
+        # Score and filter
+        scored = []
+        for video in all_videos:
+            snippet = video["snippet"]
+            stats = video.get("statistics", {})
+            title = snippet["title"]
+            views = int(stats.get("viewCount", 0))
 
-    if not all_videos:
-        return _fallback_topic()
+            # English only
+            if not all(ord(c) < 128 for c in title):
+                continue
 
-    scored = []
-    for video in all_videos:
-        snippet = video["snippet"]
-        stats   = video.get("statistics", {})
-        title   = snippet["title"]
-        views   = int(stats.get("viewCount", 0))
+            # Must pass tech filter
+            if not is_tech_topic(title):
+                continue
 
-        if not all(ord(c) < 128 for c in title):
-            continue
+            score = views
 
-        title_lower = title.lower()
-        if any(kw in title_lower for kw in AVOID_KEYWORDS):
-            continue
+            # Boost recent videos
+            try:
+                published = datetime.fromisoformat(
+                    snippet["publishedAt"].replace("Z", "+00:00")
+                )
+                if published >= datetime.now(timezone.utc) - timedelta(hours=48):
+                    score *= 1.5
+            except Exception:
+                pass
 
-        score = views
+            scored.append((score, title))
 
-        if any(kw in title_lower for kw in POWER_KEYWORDS):
-            score *= 2
+        if scored:
+            scored.sort(reverse=True)
+            top_pool = [title for _, title in scored[:10]]
+            return random.choice(top_pool)
 
-        try:
-            published = datetime.fromisoformat(
-                snippet["publishedAt"].replace("Z", "+00:00")
-            )
-            if published >= datetime.now(timezone.utc) - timedelta(hours=48):
-                score *= 1.5
-        except Exception:
-            pass
-
-        scored.append((score, title))
-
-    if not scored:
-        return _fallback_topic()
-
-    scored.sort(reverse=True)
-
-    # Final validation — must contain at least one tech signal
-    TECH_SIGNALS = [
-        "ai", "iphone", "samsung", "apple", "google", "microsoft", "tech",
-        "robot", "chip", "cpu", "gpu", "phone", "laptop", "app", "software",
-        "hack", "cyber", "data", "camera", "battery", "5g", "electric",
-        "gadget", "device", "computer", "internet", "crypto", "space", "nasa",
-        "tesla", "elon", "openai", "chatgpt", "gemini", "claude", "meta",
-        "vr", "ar", "drone", "satellite", "quantum", "neural", "model",
-    ]
-    tech_pool = [
-        title for _, title in scored[:20]
-        if any(sig in title.lower() for sig in TECH_SIGNALS)
-    ]
-
-    if tech_pool:
-        return random.choice(tech_pool[:10])
+    except Exception as e:
+        print(f"Trending agent error: {e}")
 
     return _fallback_topic()
 
 
 def _fallback_topic():
+    """Proven high-performing tech topics."""
     fallbacks = [
-        "iPhone 17 Pro Max leaked features",
-        "Samsung Galaxy secret feature you didn't know",
-        "Apple just revealed something huge",
-        "Google's new AI beats everything",
-        "This phone trick nobody tells you",
-        "Warning: stop doing this on your iPhone",
-        "New gadget everyone is buying right now",
-        "They don't want you to know this tech secret",
-        "Apple vs Samsung who wins in 2026",
-        "This free app replaces expensive software",
+        "New AI robot that can do everything humans can",
+        "Apple just revealed iPhone 17 Pro hidden features",
+        "Google's new AI beats every model in the world",
+        "This new invention will change how we use phones forever",
+        "Tesla's new self-driving update just changed everything",
+        "New humanoid robot just launched and it's insane",
+        "OpenAI just released something nobody expected",
+        "Samsung Galaxy S26 leaked features are mind blowing",
+        "This AI tool replaces 10 apps for free",
+        "New chip technology makes phones 10x faster",
+        "NASA just discovered something that changes space forever",
+        "The AI that can clone your voice in 3 seconds",
+        "New electric vehicle beats Tesla at half the price",
+        "This free AI tool is replacing expensive software",
+        "Google just launched the most powerful AI assistant ever",
     ]
     return random.choice(fallbacks)
