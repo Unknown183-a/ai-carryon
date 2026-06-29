@@ -56,7 +56,15 @@ def upload_video(video_path, title, description, hashtags, thumbnail_path=None):
     
     response = None
     while response is None:
-        status, response = request.next_chunk()
+        for retry in range(3):
+                try:
+                    status, response = request.next_chunk()
+                    break
+                except Exception as chunk_err:
+                    if retry == 2:
+                        raise
+                    print(f"Chunk upload retry {retry+1}: {chunk_err}")
+                    import time; time.sleep(5)
         if status:
             print(f"Upload progress: {int(status.progress() * 100)}%")
     
