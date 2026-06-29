@@ -122,7 +122,7 @@ LINE 3 (Verdict — specific conclusion about topic + natural follow CTA):"""
         "sleek desk with ultrawide monitor showing tech UI, clean minimal aesthetic, "
         "shallow depth of field, real room NOT CGI"
     )
-    suffix = "9:16 vertical, 8 seconds, photorealistic, hyper-realistic, premium cinematic UGC, NOT CGI, real human energy"
+    suffix = "STRICT 9:16 VERTICAL PORTRAIT FORMAT — YouTube Shorts format, tall not wide, phone screen format, 1080x1920 resolution, 8 seconds, photorealistic, hyper-realistic, premium cinematic UGC, NOT CGI, real human energy"
 
     clip1 = f"""Hyper-realistic cinematic UGC YouTube Shorts.
 SCENE OBJECTIVE: Viral hook — instant curiosity, emotional attention within 2 seconds.

@@ -108,7 +108,7 @@ LINE 3 (Verdict — specific conclusion about topic + natural Hinglish follow CT
         "sleek desk with laptop showing tech content, books on shelf, indoor plants, "
         "feels real and relatable, shallow depth of field, NOT CGI"
     )
-    suffix = "9:16 vertical, 8 seconds, photorealistic, hyper-realistic, premium cinematic UGC, real human energy, Indian aesthetic"
+    suffix = "STRICT 9:16 VERTICAL PORTRAIT FORMAT — YouTube Shorts format, tall not wide, phone screen format, 1080x1920 resolution, 8 seconds, photorealistic, hyper-realistic, premium cinematic UGC, real human energy, Indian aesthetic"
 
     clip1 = f"""Hyper-realistic cinematic UGC YouTube Shorts — Hindi tech channel.
 SCENE OBJECTIVE: Viral hook — instant curiosity, emotional attention within 2 seconds.
