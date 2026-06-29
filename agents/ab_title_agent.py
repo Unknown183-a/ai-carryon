@@ -72,20 +72,34 @@ def safe_invoke(prompt):
         return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
 
 
+PATTERN_EXAMPLES = {
+    "curiosity":  "Did You Know Claude AI Just Replaced This? 🤯",
+    "urgency":    "This Claude AI Update Changes Everything Now ⚡",
+    "revelation": "Nobody Told You Claude AI Can Do This 🔥",
+    "number":     "3 Reasons Claude AI Beats ChatGPT in 2026 🏆",
+    "question":   "Can Claude AI Really Beat Every Chatbot? 🤔",
+    "warning":    "Warning: Stop Using ChatGPT Before Watching This 🚨",
+    "contrarian": "Everyone Is Wrong About Claude AI — Here's Why 💡",
+    "personal":   "This Claude AI Update Affects You Right Now 👀",
+}
+
 def generate_title_variation(topic, script, pattern_name, pattern_instruction):
     """Generate one title variation using a specific pattern."""
+    example = PATTERN_EXAMPLES.get(pattern_name, "")
     prompt = f"""You are a YouTube Shorts title expert for a tech/AI channel.
 
 Topic: {topic}
-Script (first 200 chars): {script[:200]}
-Pattern to use: {pattern_instruction}
+Pattern: {pattern_name}
+Pattern instruction: {pattern_instruction}
+Example of this pattern style (adapt to YOUR topic, don't copy): "{example}"
 
+Write ONE title about "{topic}" following the {pattern_name} pattern.
 Rules:
 - Under 60 characters
-- Must be about the actual topic — not generic
-- No clickbait that doesn't match content
+- Must mention the actual topic concept
+- Follow the pattern STRICTLY — the example shows the style
 - Add 1 relevant emoji at the end
-- Follow the pattern strictly
+- Do NOT just repeat the topic as-is
 
 Return ONLY the title, nothing else."""
 
