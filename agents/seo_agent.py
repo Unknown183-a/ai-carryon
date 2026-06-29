@@ -55,7 +55,7 @@ def safe_invoke(prompt):
         return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
 
 
-def generate_seo(topic, script, comparison_insights=None):
+def generate_seo(topic, script, comparison_insights=None, use_ab_titles=True):
     llm = get_llm()
 
     pattern = None
@@ -80,6 +80,20 @@ COMPETITOR INTELLIGENCE:
 - Top performing title on this topic: "{top_title}" ({top_views:,} views)
 - Study its style but DO NOT copy it — create something better and original
 """
+
+    # Phase 3 — A/B Title Testing
+    ab_winner_title = None
+    ab_variations = []
+    if use_ab_titles:
+        try:
+            from agents.ab_title_agent import get_best_title
+            print("Running A/B title test...")
+            ab_result = get_best_title(topic, script)
+            ab_winner_title = ab_result["winner"]["title"]
+            ab_variations = ab_result["variations"]
+            print(f"A/B winner: {ab_winner_title} (score: {ab_result['winner']['score']}/10)")
+        except Exception as e:
+            print(f"A/B title test failed: {e}")
 
     prompt = f"""You are a YouTube SEO expert for an AI/Tech Shorts channel.
 
@@ -139,10 +153,15 @@ HASHTAGS: <15 hashtags space-separated>
 
     hashtag_list = [h.strip() for h in hashtags.split() if h.startswith("#")]
 
+    # Use A/B tested title if available and scored higher
+    final_title = ab_winner_title if ab_winner_title else title
+
     return {
-        "title": title,
+        "title": final_title,
         "description": description,
         "hashtags": hashtag_list,
         "topic": topic,
-        "pattern": pattern
+        "pattern": pattern,
+        "ab_variations": ab_variations,
+        "ab_winner": ab_winner_title,
     }
