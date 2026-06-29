@@ -42,6 +42,13 @@ def get_recent_topics(hours=24):
 
 
 def mark_posted(topic):
+    # Write to SQLite
+    try:
+        from agents.database import db
+        db.mark_posted(topic, channel="english")
+    except Exception as e:
+        log(f"DB mark_posted error: {e}")
+    # Also write to file (backup)
     os.makedirs("output", exist_ok=True)
     ts = datetime.datetime.utcnow().isoformat()
     with open(POSTED_FILE, "a") as f:

@@ -227,7 +227,23 @@ def get_best_pattern_from_history():
 
 
 def _log_result(result):
-    """Append result to log file for learning."""
+    """Append result to SQLite DB and JSON log file."""
+    # Write to SQLite (primary)
+    try:
+        from agents.database import db
+        winner = result.get("winner", {})
+        db.log_ab_test(
+            topic=result.get("topic", ""),
+            winner_title=winner.get("title", ""),
+            winner_pattern=winner.get("pattern", ""),
+            winner_score=winner.get("score", 0),
+            all_variations=result.get("variations", []),
+            generated_at=result.get("generated_at"),
+        )
+    except Exception as e:
+        print(f"DB log error: {e}")
+
+    # Write to JSON (backup)
     os.makedirs("output", exist_ok=True)
     logs = []
     if os.path.exists(LOG_FILE):
@@ -238,8 +254,6 @@ def _log_result(result):
             logs = []
 
     logs.append(result)
-
-    # Keep last 200 entries
     logs = logs[-200:]
 
     with open(LOG_FILE, "w") as f:
