@@ -38,6 +38,12 @@ st.caption("Upload at the exact hour your audience is most active.")
 channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON"], horizontal=True)
 is_hindi = channel == "Hindi AI CarryON"
 
+col_refresh, _ = st.columns([1, 5])
+with col_refresh:
+    if st.button("🔄 Refresh data"):
+        st.cache_data.clear()
+        st.rerun()
+
 # ── Load data ─────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=300)

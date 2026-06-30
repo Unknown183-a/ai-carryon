@@ -38,6 +38,12 @@ st.caption("View velocity analysis — when your channel gets the most traction.
 channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON"], horizontal=True)
 is_hindi = channel == "Hindi AI CarryON"
 
+col_refresh, _ = st.columns([1, 5])
+with col_refresh:
+    if st.button("🔄 Refresh data"):
+        st.cache_data.clear()
+        st.rerun()
+
 # ── Load analysis from SQLite ───────────────────────────────────────────────
 
 @st.cache_data(ttl=300)
