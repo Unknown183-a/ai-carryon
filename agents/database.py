@@ -23,6 +23,21 @@ import json
 from datetime import datetime, timezone
 from contextlib import contextmanager
 
+def _parse_ts_safe(ts_str):
+    """
+    Parse a timestamp that may be naive or timezone-aware, always
+    return a timezone-AWARE UTC datetime. This fixes the bug where
+    some snapshots were saved with utcnow() (naive) and others with
+    datetime.now(timezone.utc) (aware), causing subtraction to fail.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+    s = ts_str.replace("Z", "+00:00")
+    parsed = _dt.fromisoformat(s)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_tz.utc)
+    return parsed
+
+
 # Store DB in output/ folder — mount as persistent volume on Render
 DB_PATH = os.environ.get("DB_PATH", "output/aicarryon.db")
 
@@ -346,9 +361,8 @@ class Database:
                 prev = snapshots[i-1]
                 curr = snapshots[i]
                 try:
-                    from datetime import datetime as dt
-                    t1 = dt.fromisoformat(prev["timestamp"].replace("Z", "+00:00"))
-                    t2 = dt.fromisoformat(curr["timestamp"].replace("Z", "+00:00"))
+                    t1 = _parse_ts_safe(prev["timestamp"])
+                    t2 = _parse_ts_safe(curr["timestamp"])
                     hours_elapsed = (t2 - t1).total_seconds() / 3600
                     if hours_elapsed <= 0:
                         continue
