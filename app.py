@@ -285,9 +285,10 @@ with english_tab:
         st.markdown("---")
         st.markdown("**🎬 Video Background Mode**")
         video_mode_pre = st.radio(
-            "",
+            "Video Background Mode",
             ["🎥 Flow clips — cinematic AI video (recommended)", "🖼️ Auto image backgrounds — no upload needed"],
             index=0,
+            label_visibility="collapsed",
             key="video_mode_radio",
             horizontal=True
         )
