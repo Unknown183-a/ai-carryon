@@ -190,7 +190,9 @@ def get_video_velocity_summary(view_history: dict) -> list:
 
 def load_and_analyse(path: str = "output/view_history.json") -> dict:
     """
-    Load view_history.json from disk and return the full analysis:
+    Load view history and return the full analysis. Tries SQLite first
+    (channel="english", survives Railway restarts), falls back to
+    output/view_history.json if the DB is empty or unavailable.
     {
       "velocity_data": {...},      # per-video velocity
       "peak_hours": {...},         # {0..23: {avg_velocity, sample_count}}
@@ -199,16 +201,36 @@ def load_and_analyse(path: str = "output/view_history.json") -> dict:
       "total_videos_analysed": N,
       "total_velocity_points": N,
     }
-    Returns empty structure with an "error" key if file is missing or malformed.
+    Returns empty structure with an "error" key if no data found anywhere.
     """
-    if not os.path.exists(path):
-        return {"error": f"File not found: {path}"}
+    view_history = {}
 
+    # Try SQLite first — primary source, survives restarts
     try:
-        with open(path, "r") as f:
-            view_history = json.load(f)
-    except json.JSONDecodeError as e:
-        return {"error": f"JSON parse error: {e}"}
+        from agents.database import db
+        all_data = db.get_all_snapshots()
+        view_history = {
+            vid: data for vid, data in all_data.items()
+            if data.get("channel", "english") == "english"
+        }
+        if view_history:
+            print(f"Loaded {len(view_history)} videos from SQLite (channel=english)")
+    except Exception as e:
+        print(f"SQLite read failed: {e}")
+
+    # Fallback to JSON file if DB had nothing
+    if not view_history:
+        if not os.path.exists(path):
+            return {"error": f"File not found: {path}"}
+        try:
+            with open(path, "r") as f:
+                view_history = json.load(f)
+            print(f"Loaded {len(view_history)} videos from JSON fallback")
+        except json.JSONDecodeError as e:
+            return {"error": f"JSON parse error: {e}"}
+
+    if not view_history:
+        return {"error": "No view history data found in SQLite or JSON"}
 
     velocity_data = compute_velocity(view_history)
     peak_hours = get_peak_hours(view_history)
