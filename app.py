@@ -393,7 +393,7 @@ with english_tab:
                 st.subheader("🖼️ Thumbnail Text")
                 st.success(thumbnail_text)
                 st.subheader("🖼️ Thumbnail Image")
-                st.image(thumbnail_image, use_container_width=True)
+                st.image(thumbnail_image, width="stretch")
 
                 # Skip Pexels if Flow clips mode is active
                 _flow_clips_exist = bool(glob.glob("assets/flow_clips/*.mp4"))
@@ -640,7 +640,7 @@ with hindi_tab:
                 st.markdown(f"**Hashtags:** {seo.get('hashtags','')}")
 
                 st.subheader("🖼️ Thumbnail")
-                st.image(st.session_state.get("hindi_thumb"), use_container_width=True)
+                st.image(st.session_state.get("hindi_thumb"), width="stretch")
 
                 image_paths = st.session_state.get("hindi_images", [])
                 image_errors = st.session_state.get("hindi_img_errors", [])
