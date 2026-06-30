@@ -161,8 +161,9 @@ schedule.every(5).hours.do(generate_and_upload)
 
 
 def track_views_job():
-    if not os.path.exists("client_secrets.json"):
-        print("[SKIP] client_secrets.json not found — view tracking disabled on this environment")
+    has_secrets = os.path.exists("client_secrets.json") or os.environ.get("YOUTUBE_CLIENT_SECRETS_B64")
+    if not has_secrets:
+        print("[SKIP] No YouTube credentials found (file or env var) — view tracking disabled")
         return
     log("=== Tracking video view history ===")
     try:
