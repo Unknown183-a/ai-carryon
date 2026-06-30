@@ -3,7 +3,7 @@ import os
 import base64
 
 # Sarvam AI voices — primary + fallback
-PRIMARY_SPEAKER = "abhilash"
+PRIMARY_SPEAKER = "karun"
 FALLBACK_SPEAKER = "hitesh"
 
 SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
