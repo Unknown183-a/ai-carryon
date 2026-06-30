@@ -11,6 +11,7 @@ SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
 
 def _generate_sarvam(script, output_path, speaker):
     """Generate voice using Sarvam AI Bulbul v2 — native Indian Hindi voice.
+    Sarvam splits long text into multiple audio chunks — concatenate ALL of them.
     Sarvam returns WAV — convert to MP3 to keep pipeline compatibility."""
     from sarvamai import SarvamAI
     from pydub import AudioSegment
@@ -26,11 +27,18 @@ def _generate_sarvam(script, output_path, speaker):
         speaker=speaker,
     )
 
-    wav_bytes = base64.b64decode(audio.audios[0])
+    print(f"Sarvam returned {len(audio.audios)} audio segment(s)")
 
-    # Convert WAV bytes to MP3 and save
-    audio_segment = AudioSegment.from_wav(io.BytesIO(wav_bytes))
-    audio_segment.export(output_path, format="mp3")
+    # Concatenate ALL audio segments — Sarvam splits long text into chunks
+    combined = AudioSegment.empty()
+    for i, audio_b64 in enumerate(audio.audios):
+        wav_bytes = base64.b64decode(audio_b64)
+        segment = AudioSegment.from_wav(io.BytesIO(wav_bytes))
+        combined += segment
+        print(f"  Segment {i+1}: {len(segment)/1000:.1f}s")
+
+    combined.export(output_path, format="mp3")
+    print(f"Total combined audio: {len(combined)/1000:.1f}s")
 
 
 def _generate_edge_tts_fallback(script, output_path):
