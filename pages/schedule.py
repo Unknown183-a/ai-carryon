@@ -129,13 +129,18 @@ try:
         customdata=samples,
     ))
 
-    fig.add_vline(
-        x=now_utc.strftime("%H:00"),
-        line_dash="dash",
-        line_color="#f59e0b",
-        annotation_text="Now",
-        annotation_position="top",
-    )
+    now_label = now_utc.strftime("%H:00")
+    if now_label in labels:
+        now_idx = labels.index(now_label)
+        fig.add_vrect(
+            x0=now_idx - 0.5,
+            x1=now_idx + 0.5,
+            fillcolor="rgba(245,158,11,0.15)",
+            line_color="#f59e0b",
+            line_width=2,
+            annotation_text="Now",
+            annotation_position="top",
+        )
 
     fig.update_layout(
         plot_bgcolor="#0f172a",
