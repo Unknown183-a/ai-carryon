@@ -54,7 +54,7 @@ COMPETITOR INTELLIGENCE (Hindi market ke liye):
     prompt = f"""
 Ek YouTube Shorts script likho is research ke basis par.
 Target duration: 45-60 seconds bolne mein.
-Target word count: 150-200 words.
+Target word count: EXACTLY 150 to 180 words. Yeh STRICT requirement hai.
 {competitor_context}
 
 Rules:
@@ -63,17 +63,43 @@ Rules:
 - Short punchy sentences. Max 10 words per sentence.
 - Pehle 3 seconds mein shocking hook
 - "Yaar suno...", "Sach mein?", "Aur suno...", "Bilkul sach hai..." jaisi expressions use karo
-- 3-4 interesting facts batao topic ke baare mein
+- 4-5 interesting facts batao topic ke baare mein (zyada detail mein)
 - "Par yahan baat aur hai...", "Aur sabse mast part..." jaisi transitions use karo
 - End mein CTA: "Follow karo aur aisi videos dekhte raho"
 - Koi labels mat likho jaise "Hook:", "CTA:"
 - Sirf bolne wale words likho, kuch aur nahi
+- IMPORTANT: Script chota mat likhna — kam se kam 150 words zaroor likho
 
 Research: {research_data}
 
-Example style:
-Yaar suno, ye sun ke tumhara dimaag ghoom jayega. Tumhare phone mein jo chip hai, usme itne transistors hain jitne Milky Way mein taare hain. Sach mein! Ek chip mein 15 billion transistors hote hain. Aur ye sab tumhari thumbnail se bhi chote hain. Aur suno, har transistor second mein billions baar on-off hota hai. Isliye tumhara phone itna fast hai. Par yahan baat aur hai. Ab hum aur chota nahi kar sakte. Physics ke laws aad aa rahe hain. Electrons seedha wall ke through nikal jaate hain. Ye main jhooth nahi bol raha. Toh companies ab chips ko upar ki taraf stack kar rahi hain. Future upar ki taraf ja raha hai. Follow karo aur aisi videos dekhte raho.
+Example style (yeh example bhi 150+ words ka hai, isi length ka target rakho):
+Yaar suno, ye sun ke tumhara dimaag ghoom jayega. Tumhare phone mein jo chip hai, usme itne transistors hain jitne Milky Way mein taare hain. Sach mein! Ek chip mein 15 billion transistors hote hain. Aur ye sab tumhari thumbnail se bhi chote hain. Aur suno, har transistor second mein billions baar on-off hota hai. Isliye tumhara phone itna fast hai. Par yahan baat aur hai. Ab hum aur chota nahi kar sakte. Physics ke laws aad aa rahe hain. Electrons seedha wall ke through nikal jaate hain. Ye main jhooth nahi bol raha. Toh companies ab chips ko upar ki taraf stack kar rahi hain. Ek aur interesting baat — yeh stacking technology already smartphones mein use ho rahi hai. Samsung aur TSMC dono is par kaam kar rahe hain. Aane wale 5 saalon mein yeh aur bhi advanced ho jayega. Future upar ki taraf ja raha hai, literally. Follow karo aur aisi videos dekhte raho.
 """
 
-    response = safe_invoke(prompt).content
-    return response.strip()
+    response = safe_invoke(prompt)
+    script = response.content.strip()
+
+    # Hard enforce minimum 150 words — retry up to 3 times
+    for attempt in range(3):
+        words = script.split()
+        if len(words) >= 150:
+            break
+        print(f"Hindi script too short ({len(words)} words) — expanding, attempt {attempt+1}")
+        prompt2 = (
+            f"Yeh script sirf {len(words)} words ka hai. Isse EXACTLY 170 words tak expand karo.\n"
+            f"Same hook, style, aur topic rakho. Aur 2-3 specific facts, numbers, ya examples add karo.\n"
+            f"Sirf expanded script return karo, koi labels ya explanation nahi.\n\n"
+            f"Script to expand:\n{script}"
+        )
+        script = safe_invoke(prompt2).content.strip()
+        print(f"Expansion attempt {attempt+1}: {len(script.split())} words")
+
+    # Trim if way too long (over 220 words)
+    words = script.split()
+    if len(words) > 220:
+        script = " ".join(words[:220])
+
+    final_word_count = len(script.split())
+    print(f"Final Hindi script: {final_word_count} words")
+
+    return script
