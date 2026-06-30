@@ -12,9 +12,9 @@ import datetime
 
 def get_recent_videos_hindi(max_videos=20):
     """Fetch recent Hindi channel video stats."""
-    from agents_hindi.upload_agent import get_youtube_client
+    from agents_hindi.upload_agent import get_youtube_client_readonly
 
-    yt = get_youtube_client()
+    yt = get_youtube_client_readonly()
 
     # Get uploads playlist
     channels_response = yt.channels().list(part="contentDetails", mine=True).execute()

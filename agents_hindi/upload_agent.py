@@ -7,16 +7,35 @@ import googleapiclient.http
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
+# Broader scopes needed for view tracking (read channel stats, playlists, videos)
+SCOPES_READ = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+]
+
 def get_youtube_client():
-    # Try Hindi-specific token first, fall back to local file
+    """Upload-only client — works with existing YOUTUBE_TOKEN_JSON."""
+    return _build_client(SCOPES)
+
+
+def get_youtube_client_readonly():
+    """
+    Read-capable client for view tracking (channels, playlists, videos.list).
+    Requires a token with youtube.readonly scope — if the existing token
+    doesn't have it, this will fail with insufficient_scope and view
+    tracking should be skipped gracefully by the caller.
+    """
+    return _build_client(SCOPES_READ)
+
+
+def _build_client(scopes):
     token_json = os.getenv("HINDI_TOKEN_JSON") or os.getenv("YOUTUBE_TOKEN_JSON")
     if not token_json:
-        # Try local file
         if os.path.exists("token_hindi.json"):
             token_json = open("token_hindi.json").read()
         else:
             raise ValueError("No Hindi YouTube token found")
-    
+
     token_data = json.loads(token_json)
     credentials = google.oauth2.credentials.Credentials(
         token=token_data["token"],
@@ -24,7 +43,7 @@ def get_youtube_client():
         token_uri=token_data["token_uri"],
         client_id=token_data["client_id"],
         client_secret=token_data["client_secret"],
-        scopes=token_data["scopes"]
+        scopes=token_data.get("scopes", scopes)
     )
     return googleapiclient.discovery.build("youtube", "v3", credentials=credentials)
 
