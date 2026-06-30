@@ -7,6 +7,9 @@ import datetime
 LOG_FILE = "output/scheduler_hindi_log.txt"
 POSTED_TODAY_FILE = "output/posted_today_hindi.txt"
 
+# How many videos per day to aim for (fully adaptive now)
+VIDEOS_PER_DAY = 3
+
 
 def log(message):
     os.makedirs("output", exist_ok=True)
@@ -18,7 +21,6 @@ def log(message):
 
 
 def get_posted_today():
-    # Try SQLite first
     try:
         from agents.database import db
         return db.get_recent_posted(hours=24, channel="hindi")
@@ -36,8 +38,12 @@ def get_posted_today():
     return posted
 
 
+def get_posted_count_today():
+    """Count how many Hindi videos posted today — for adaptive daily cap."""
+    return len(get_posted_today())
+
+
 def mark_posted_today(topic):
-    # Write to SQLite
     try:
         from agents.database import db
         db.mark_posted(topic, channel="hindi")
@@ -50,7 +56,52 @@ def mark_posted_today(topic):
         f.write(f"{today}|{topic}\n")
 
 
+def get_adaptive_hours():
+    """
+    Get the top N best upload hours from real Hindi velocity data.
+    Falls back to spread-out defaults if not enough data yet.
+    """
+    try:
+        from agents_hindi.velocity_agent import get_best_upload_windows_hindi
+        windows = get_best_upload_windows_hindi(top_n=VIDEOS_PER_DAY)
+        good_windows = [w for w in windows if w["sample_count"] >= 3]
+        if len(good_windows) >= VIDEOS_PER_DAY:
+            hours = sorted([w["hour"] for w in good_windows[:VIDEOS_PER_DAY]])
+            log(f"Adaptive hours from real data (UTC): {hours}")
+            return hours
+    except Exception as e:
+        log(f"Could not get adaptive hours: {e}")
+
+    # Fallback — spread across day in UTC (roughly matches 8AM/1PM/7PM IST)
+    fallback = [2, 7, 13]  # UTC hours ≈ 7:30AM, 12:30PM, 6:30PM IST
+    log(f"Not enough Hindi data yet — using fallback hours (UTC): {fallback}")
+    return fallback
+
+
+def should_generate_now():
+    """
+    Check if current UTC hour is one of our adaptive best hours
+    AND we haven't already posted our daily quota.
+    """
+    if get_posted_count_today() >= VIDEOS_PER_DAY:
+        return False, "Daily quota reached"
+
+    adaptive_hours = get_adaptive_hours()
+    current_hour = datetime.datetime.utcnow().hour
+
+    if current_hour in adaptive_hours:
+        return True, f"Current hour {current_hour:02d}:00 UTC is in best hours {adaptive_hours}"
+
+    return False, f"Current hour {current_hour:02d}:00 UTC not in best hours {adaptive_hours}"
+
+
 def generate_and_upload_hindi():
+    should_run, reason = should_generate_now()
+    log(f"Schedule check: {reason}")
+
+    if not should_run:
+        return
+
     log("=== Hindi video generation shuru hua ===")
 
     try:
@@ -69,7 +120,6 @@ def generate_and_upload_hindi():
             topic = get_trending_topic(region_code="IN")
             log(f"Trending topic: {topic}")
 
-        # Duplicate check
         posted_today = get_posted_today()
         if topic in posted_today:
             log(f"Ye topic aaj already post ho chuka hai: {topic}")
@@ -86,8 +136,6 @@ def generate_and_upload_hindi():
             from agents_hindi.saturation_agent import check_saturation_hindi
             saturation = check_saturation_hindi(topic)
             log(f"Saturation: score={saturation['opportunity_score']} — {saturation['reason']}")
-            if not saturation["proceed"]:
-                log(f"Topic too saturated, but proceeding anyway (Hindi has limited topic pool)")
         except Exception as se:
             log(f"Saturation check skip: {se}")
 
@@ -98,21 +146,17 @@ def generate_and_upload_hindi():
             comparison = compare_topic_hindi(topic)
             comparison_insights = comparison.get("insights", {})
             if comparison_insights and not comparison_insights.get("error"):
-                log(f"Comparison: avg views={comparison_insights.get('competitor_avg_views', 0):,}, "
-                    f"best hour={comparison_insights.get('best_upload_hour_utc')} UTC")
+                log(f"Comparison: avg views={comparison_insights.get('competitor_avg_views', 0):,}")
             else:
-                log("Comparison: data nahi mila, bina insights ke proceed kar rahe hain.")
                 comparison_insights = {}
         except Exception as ce:
             log(f"Comparison skip: {ce}")
             comparison_insights = {}
 
-        # Step 2: Research
         log("Research ho raha hai...")
         from agents.research_agent import research
         research_data = research(topic)
 
-        # Step 3: Hindi Script (with comparison insights)
         log("Hindi script ban rahi hai...")
         from agents_hindi.script_agent import create_script
         script = create_script(research_data, topic=topic,
@@ -125,27 +169,21 @@ def generate_and_upload_hindi():
             from agents_hindi.ab_title_agent import get_best_title_hindi
             ab_result = get_best_title_hindi(topic, script)
             ab_winner_title = ab_result["winner"]["title"]
-            log(f"A/B winner: {ab_winner_title} (score: {ab_result['winner']['score']}/10, pattern: {ab_result['winner']['pattern']})")
+            log(f"A/B winner: {ab_winner_title} (score: {ab_result['winner']['score']}/10)")
         except Exception as ae:
             log(f"A/B title test skip: {ae}")
 
-        # Step 4: Hindi SEO (with comparison insights + AB winner title)
         log("Hindi SEO generate ho raha hai...")
         from agents_hindi.seo_agent import generate_seo
         seo = generate_seo(topic, script, comparison_insights=comparison_insights)
-
-        # Override with A/B winner title if available
         if ab_winner_title:
             seo["title"] = ab_winner_title
-
         log(f"Title: {seo['title']}")
 
-        # Step 5: Thumbnail
         log("Thumbnail ban raha hai...")
         from agents.thumbnail_generator import generate_thumbnail
         thumbnail = generate_thumbnail(seo["title"], topic)
 
-        # Step 6: Background images
         log("Background images fetch ho rahi hain...")
         from agents.image_agent import generate_backgrounds
         image_paths, errors = generate_backgrounds(topic, script, num_images=4)
@@ -153,30 +191,18 @@ def generate_and_upload_hindi():
             log(f"Images nahi bani: {errors}")
             return
 
-        # Step 7: Hindi Voice
         log("Hindi awaaz generate ho rahi hai...")
         from agents_hindi.voice_agent import generate_voice
         voice = generate_voice(script)
 
-        # Step 8: Captions
         log("Captions ban rahe hain...")
         from agents.caption_agent import create_srt
         create_srt(script, voice)
 
-        # Step 9: Video
         log("Video ban raha hai...")
         from agents.video_agent import create_video
         video = create_video()
 
-        # Phase 4 — Wait for best Hindi upload hour
-        log("Best Hindi upload hour check ho raha hai...")
-        try:
-            from agents_hindi.adaptive_scheduler import wait_for_best_hour_hindi
-            wait_for_best_hour_hindi(log_fn=log)
-        except Exception as we:
-            log(f"Adaptive scheduling skip: {we}")
-
-        # Step 10: Upload
         log("YouTube Hindi channel par upload ho raha hai...")
         from agents_hindi.upload_agent import upload_video
         video_id, video_url = upload_video(
@@ -208,22 +234,21 @@ def track_views_hindi_job():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-# Post 3 times per day
-schedule.every().day.at("08:00").do(generate_and_upload_hindi)
-schedule.every().day.at("13:00").do(generate_and_upload_hindi)
-schedule.every().day.at("19:00").do(generate_and_upload_hindi)
+# Check every hour if this is a good time to generate — fully adaptive
+schedule.every().hour.at(":00").do(generate_and_upload_hindi)
 
-# Track Hindi views every hour — same cadence as English
+# Track Hindi views every hour
 schedule.every(1).hours.do(track_views_hindi_job)
 
 if __name__ == "__main__":
-    log("Hindi Scheduler shuru hua!")
-    log(f"Schedule: 8 AM, 1 PM, 7 PM")
-    log(f"View tracking: every 1 hour")
-    log(f"Next run: {schedule.next_run()}")
+    log("Hindi Scheduler shuru hua! (Fully Adaptive Mode)")
+    log(f"Checking every hour — generates when current UTC hour matches best velocity windows")
+    log(f"Target: {VIDEOS_PER_DAY} videos/day at data-driven peak hours")
 
-    # Initial view tracking snapshot at startup
     track_views_hindi_job()
+
+    adaptive_hours = get_adaptive_hours()
+    log(f"Current best hours (UTC): {adaptive_hours}")
 
     while True:
         schedule.run_pending()
