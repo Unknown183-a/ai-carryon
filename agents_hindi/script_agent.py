@@ -53,8 +53,8 @@ COMPETITOR INTELLIGENCE (Hindi market ke liye):
 
     prompt = f"""
 Ek YouTube Shorts script likho is research ke basis par.
-Target duration: 45-60 seconds bolne mein.
-Target word count: EXACTLY 150 to 180 words. Yeh STRICT requirement hai.
+Target duration: 35-45 seconds bolne mein (STRICT — 50 seconds se zyada nahi).
+Target word count: EXACTLY 110 to 130 words. Yeh STRICT requirement hai — isse zyada mat likhna.
 {competitor_context}
 
 Rules:
@@ -79,25 +79,26 @@ Yaar suno, ye sun ke tumhara dimaag ghoom jayega. Tumhare phone mein jo chip hai
     response = safe_invoke(prompt)
     script = response.content.strip()
 
-    # Hard enforce minimum 150 words — retry up to 3 times
+    # Enforce 110-130 word range — expand if too short, trim if too long
     for attempt in range(3):
         words = script.split()
-        if len(words) >= 150:
+        if len(words) >= 110:
             break
         print(f"Hindi script too short ({len(words)} words) — expanding, attempt {attempt+1}")
         prompt2 = (
-            f"Yeh script sirf {len(words)} words ka hai. Isse EXACTLY 170 words tak expand karo.\n"
-            f"Same hook, style, aur topic rakho. Aur 2-3 specific facts, numbers, ya examples add karo.\n"
+            f"Yeh script sirf {len(words)} words ka hai. Isse EXACTLY 120 words tak expand karo.\n"
+            f"Same hook, style, aur topic rakho. Aur 1-2 specific facts add karo.\n"
             f"Sirf expanded script return karo, koi labels ya explanation nahi.\n\n"
             f"Script to expand:\n{script}"
         )
         script = safe_invoke(prompt2).content.strip()
         print(f"Expansion attempt {attempt+1}: {len(script.split())} words")
 
-    # Trim if way too long (over 220 words)
+    # Hard trim if over 140 words (would exceed 60s at speaking pace)
     words = script.split()
-    if len(words) > 220:
-        script = " ".join(words[:220])
+    if len(words) > 140:
+        script = " ".join(words[:140])
+        print(f"Trimmed script to 140 words to stay under 60s limit")
 
     final_word_count = len(script.split())
     print(f"Final Hindi script: {final_word_count} words")
