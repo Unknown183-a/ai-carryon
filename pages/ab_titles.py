@@ -1,11 +1,10 @@
 """
 pages/ab_titles.py — Phase 3 Dashboard: A/B Title Performance
-Shows which title patterns win most, score history, and best titles generated.
+Reads from SQLite (primary) — works for both English and Hindi channels.
 """
 
 import sys
 import os
-import json
 from datetime import datetime
 
 import streamlit as st
@@ -31,25 +30,59 @@ if APP_PASSWORD:
         st.stop()
 
 st.title("🎯 A/B Title Tester")
-st.caption("Which title patterns get the most clicks? Track and learn.")
+st.caption("Which title patterns get the most clicks? Track and learn — per channel.")
 
-LOG_FILE = os.path.join(os.path.dirname(__file__), "..", "output", "title_ab_log.json")
+# ── Channel selector ────────────────────────────────────────────────────────
 
-# ── Load log ──────────────────────────────────────────────────────────────
+channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON"], horizontal=True)
+is_hindi = channel == "Hindi AI CarryON"
 
-def load_log():
-    if not os.path.exists(LOG_FILE):
+# ── Load from SQLite, fallback to JSON ──────────────────────────────────────
+
+@st.cache_data(ttl=120)
+def load_logs(hindi: bool):
+    try:
+        from agents.database import db
+        all_tests = db.get_ab_tests(limit=500)
+        if hindi:
+            filtered = [t for t in all_tests if t.get("topic", "").startswith("[HI]")]
+            for t in filtered:
+                t["topic"] = t["topic"].replace("[HI] ", "")
+        else:
+            filtered = [t for t in all_tests if not t.get("topic", "").startswith("[HI]")]
+
+        logs = []
+        for t in filtered:
+            logs.append({
+                "topic": t.get("topic", ""),
+                "winner": {
+                    "title": t.get("winner_title", ""),
+                    "pattern": t.get("winner_pattern", ""),
+                    "score": t.get("winner_score", 0),
+                },
+                "variations": t.get("all_variations", []),
+                "generated_at": t.get("generated_at", ""),
+            })
+        return logs
+    except Exception as e:
+        print(f"DB load error, falling back to JSON: {e}")
+
+    if hindi:
+        return []
+    import json
+    log_file = os.path.join(os.path.dirname(__file__), "..", "output", "title_ab_log.json")
+    if not os.path.exists(log_file):
         return []
     try:
-        with open(LOG_FILE, "r") as f:
+        with open(log_file, "r") as f:
             return json.load(f)
     except Exception:
         return []
 
-logs = load_log()
+logs = load_logs(is_hindi)
 
 if not logs:
-    st.info("No A/B title data yet. Generate some videos first — titles will be logged automatically.")
+    st.info(f"No A/B title data yet for {channel}. Generate some videos first — titles will be logged automatically.")
     st.stop()
 
 # ── Metrics ────────────────────────────────────────────────────────────────
@@ -60,7 +93,6 @@ all_winners = [entry["winner"] for entry in logs if "winner" in entry]
 
 avg_winner_score = sum(w["score"] for w in all_winners) / len(all_winners) if all_winners else 0
 
-# Pattern win counts
 pattern_wins = {}
 pattern_scores = {}
 for entry in logs:
@@ -68,9 +100,7 @@ for entry in logs:
     pattern = winner.get("pattern", "unknown")
     score = winner.get("score", 0)
     pattern_wins[pattern] = pattern_wins.get(pattern, 0) + 1
-    if pattern not in pattern_scores:
-        pattern_scores[pattern] = []
-    pattern_scores[pattern].append(score)
+    pattern_scores.setdefault(pattern, []).append(score)
 
 best_pattern = max(pattern_wins, key=pattern_wins.get) if pattern_wins else "—"
 
@@ -84,7 +114,7 @@ st.divider()
 
 # ── Pattern win chart ──────────────────────────────────────────────────────
 
-st.subheader("🏆 Pattern win rate")
+st.subheader(f"🏆 Pattern win rate — {channel}")
 
 patterns = list(pattern_wins.keys())
 wins = [pattern_wins[p] for p in patterns]
@@ -146,9 +176,9 @@ st.divider()
 
 # ── Manual title tester ───────────────────────────────────────────────────
 
-st.subheader("🧪 Test a title now")
+st.subheader(f"🧪 Test a title now — {channel}")
 
-test_topic = st.text_input("Topic", placeholder="e.g. iPhone 17 Pro camera upgrade")
+test_topic = st.text_input("Topic", placeholder="e.g. iPhone 17 Pro camera upgrade" if not is_hindi else "e.g. iPhone 17 ka naya feature")
 test_script = st.text_area("Script (optional)", placeholder="Paste script here for better results...", height=100)
 
 if st.button("🎯 Generate Title Variations", type="primary"):
@@ -157,8 +187,12 @@ if st.button("🎯 Generate Title Variations", type="primary"):
     else:
         with st.spinner("Generating and scoring title variations..."):
             try:
-                from agents.ab_title_agent import get_best_title
-                result = get_best_title(test_topic.strip(), test_script.strip() or test_topic)
+                if is_hindi:
+                    from agents_hindi.ab_title_agent import get_best_title_hindi
+                    result = get_best_title_hindi(test_topic.strip(), test_script.strip() or test_topic)
+                else:
+                    from agents.ab_title_agent import get_best_title
+                    result = get_best_title(test_topic.strip(), test_script.strip() or test_topic)
 
                 st.success(f"🏆 Winner: **{result['winner']['title']}** (score: {result['winner']['score']}/10, pattern: {result['winner']['pattern']})")
 
@@ -167,7 +201,9 @@ if st.button("🎯 Generate Title Variations", type="primary"):
                     medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉"
                     st.markdown(f"{medal} **[{v['score']}/10] [{v['pattern']}]** {v['title']}")
 
+                load_logs.clear()
+
             except Exception as e:
                 st.error(f"Error: {e}")
 
-st.caption(f"Data from output/title_ab_log.json · {total_tests} tests logged")
+st.caption(f"Channel: {channel} · {total_tests} tests logged · Source: SQLite")
