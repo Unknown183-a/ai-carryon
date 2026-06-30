@@ -19,3 +19,4 @@ plotly
 langchain-google-genai
 google-genai
 sarvamai
+pydub

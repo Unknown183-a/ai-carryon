@@ -10,12 +10,14 @@ SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
 
 
 def _generate_sarvam(script, output_path, speaker):
-    """Generate voice using Sarvam AI Bulbul v2 — native Indian Hindi voice."""
+    """Generate voice using Sarvam AI Bulbul v2 — native Indian Hindi voice.
+    Sarvam returns WAV — convert to MP3 to keep pipeline compatibility."""
     from sarvamai import SarvamAI
+    from pydub import AudioSegment
+    import io
 
     client = SarvamAI(api_subscription_key=SARVAM_API_KEY)
 
-    # Sarvam has a 2500 char limit per request
     text = script[:2500]
 
     audio = client.text_to_speech.convert(
@@ -24,9 +26,11 @@ def _generate_sarvam(script, output_path, speaker):
         speaker=speaker,
     )
 
-    audio_bytes = base64.b64decode(audio.audios[0])
-    with open(output_path, "wb") as f:
-        f.write(audio_bytes)
+    wav_bytes = base64.b64decode(audio.audios[0])
+
+    # Convert WAV bytes to MP3 and save
+    audio_segment = AudioSegment.from_wav(io.BytesIO(wav_bytes))
+    audio_segment.export(output_path, format="mp3")
 
 
 def _generate_edge_tts_fallback(script, output_path):
@@ -43,7 +47,7 @@ def _generate_edge_tts_fallback(script, output_path):
 
 def generate_voice(script):
     os.makedirs("output", exist_ok=True)
-    output_path = "output/voice.wav"  # Sarvam returns WAV format
+    output_path = "output/voice.mp3"  # unified path — convert WAV to MP3 internally
 
     if not SARVAM_API_KEY:
         print("SARVAM_API_KEY not set — using edge-tts fallback")
