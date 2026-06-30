@@ -1,6 +1,7 @@
 """
 pages/schedule.py — Phase 4 Dashboard: Adaptive Scheduling
 Shows optimal upload windows and current schedule recommendation.
+Works for both English and Hindi channels via selector.
 """
 
 import sys
@@ -9,6 +10,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 import plotly.graph_objects as go
+import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -31,34 +33,60 @@ if APP_PASSWORD:
 st.title("🕐 Adaptive Schedule")
 st.caption("Upload at the exact hour your audience is most active.")
 
+# ── Channel selector ────────────────────────────────────────────────────────
+
+channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON"], horizontal=True)
+is_hindi = channel == "Hindi AI CarryON"
+
 # ── Load data ─────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=300)
-def load_recommendation():
+def load_recommendation(hindi: bool):
     try:
-        from agents.adaptive_scheduler import get_schedule_recommendation, get_best_upload_windows
-        rec = get_schedule_recommendation()
-        windows, source = get_best_upload_windows(top_n=24)
-        return rec, windows, source
+        if hindi:
+            from agents_hindi.velocity_agent import load_and_analyse_hindi, get_best_upload_hour_hindi
+            analysis = load_and_analyse_hindi()
+            best_hour = get_best_upload_hour_hindi()
+            windows = analysis["best_upload_windows"]
+            peak_hours = analysis["peak_hours"]
+            total_points = analysis["total_velocity_points"]
+            source = "Hindi SQLite"
+        else:
+            from agents.adaptive_scheduler import get_schedule_recommendation, get_best_upload_windows, get_peak_hours_analysis
+            rec = get_schedule_recommendation()
+            windows, _ = get_best_upload_windows(top_n=24)
+            peak_hours, source = get_peak_hours_analysis()
+            best_hour = rec.get("best_hour")
+            total_points = None
+
+        return {
+            "best_hour": best_hour,
+            "windows": windows,
+            "peak_hours": peak_hours,
+            "source": source,
+            "total_points": total_points,
+        }
     except Exception as e:
-        return {"status": "error", "message": str(e)}, [], "error"
+        return {"error": str(e)}
 
 with st.spinner("Analyzing view velocity data..."):
-    rec, windows, source = load_recommendation()
+    data = load_recommendation(is_hindi)
 
-# ── Status banner ─────────────────────────────────────────────────────────
+if "error" in data:
+    st.error(f"Error: {data['error']}")
+    st.stop()
 
-if rec["status"] == "insufficient_data":
-    st.warning(f"⏳ {rec['message']}")
-elif rec["status"] == "ready":
-    st.success(f"✅ {rec['message']}")
-elif rec["status"] == "error":
-    st.error(f"Error: {rec['message']}")
+best_hour = data["best_hour"]
+top_windows = data["windows"]
+peak_hours = data["peak_hours"]
+source = data["source"]
+
+if best_hour is None:
+    st.warning("⏳ Not enough data yet for this channel. Need more hourly snapshots.")
+else:
+    st.success(f"✅ Best upload hour identified: {best_hour:02d}:00 UTC")
 
 # ── Top metrics ────────────────────────────────────────────────────────────
-
-best_hour = rec.get("best_hour")
-top_windows = rec.get("windows", [])
 
 now_utc = datetime.now(timezone.utc)
 ist_hour = (best_hour + 5) % 24 if best_hour is not None else None
@@ -77,17 +105,14 @@ st.divider()
 
 # ── 24h velocity chart ─────────────────────────────────────────────────────
 
-st.subheader("📈 View velocity by hour (UTC)")
+st.subheader(f"📈 {'Hindi' if is_hindi else 'English'} view velocity by hour (UTC)")
 
 try:
-    from agents.adaptive_scheduler import get_peak_hours_analysis
-    peak_hours, _ = get_peak_hours_analysis()
-
     hours = list(range(24))
     velocities = [peak_hours.get(h, {}).get("avg_velocity", 0) for h in hours]
     samples = [peak_hours.get(h, {}).get("sample_count", 0) for h in hours]
     labels = [f"{h:02d}:00" for h in hours]
-    top_set = {w["hour"] for w in top_windows[:3]}
+    top_set = {w["hour"] for w in top_windows[:3]} if top_windows else set()
     colors = ["#6366f1" if h in top_set else "#334155" for h in hours]
 
     fig = go.Figure(go.Bar(
@@ -98,7 +123,6 @@ try:
         customdata=samples,
     ))
 
-    # Mark current hour
     fig.add_vline(
         x=now_utc.strftime("%H:00"),
         line_dash="dash",
@@ -127,7 +151,6 @@ st.divider()
 
 if top_windows:
     st.subheader("🏆 Best upload windows")
-    import pandas as pd
     rows = []
     for w in top_windows:
         ist = (w["hour"] + 5) % 24
@@ -138,9 +161,10 @@ if top_windows:
             "Data points": w["sample_count"],
         })
     df = pd.DataFrame(rows)
-    df.index = ["🥇","🥈","🥉"] + [f"{i+4}th" for i in range(len(df)-3)]
-    df.index = df.index[:len(df)]
+    df.index = (["🥇", "🥈", "🥉"] + [f"{i+4}th" for i in range(len(df) - 3)])[:len(df)]
     st.dataframe(df, use_container_width=True)
+else:
+    st.info("No upload windows yet — need more snapshot data.")
 
 st.divider()
 
@@ -155,6 +179,9 @@ with st.expander("How adaptive scheduling works"):
 3. It groups velocities by the UTC hour they were recorded
 4. The hour with the highest average velocity = best upload time
 
+**English and Hindi channels are tracked completely separately** — different audiences,
+different timezones, different peak hours. This page shows whichever channel you select above.
+
 **Scheduler behavior:**
 - If best hour is within 90 minutes → waits and uploads at that hour
 - If best hour is more than 90 minutes away → uploads immediately (doesn't waste time)
@@ -166,4 +193,4 @@ If you upload when your audience is most active, those first 30 minutes get maxi
 which triggers the algorithm to push the video to more people.
 """)
 
-st.caption(f"Data source: {source} · Refreshes every 5 min · {now_utc.strftime('%Y-%m-%d %H:%M')} UTC")
+st.caption(f"Data source: {source} · Channel: {channel} · Refreshes every 5 min · {now_utc.strftime('%Y-%m-%d %H:%M')} UTC")

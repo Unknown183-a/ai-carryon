@@ -1,12 +1,10 @@
 """
 pages/peak_hours.py — Phase 1 Dashboard: Velocity Analysis & Peak Upload Windows
-Loads view_history.json from GitHub data branch (works across Railway services).
+Reads from SQLite (primary) — works for both English and Hindi channels.
 """
 
 import sys
 import os
-import json
-import requests
 
 import streamlit as st
 import pandas as pd
@@ -15,12 +13,6 @@ import plotly.express as px
 from datetime import datetime
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from agents.velocity_agent import (
-    compute_velocity,
-    get_peak_hours,
-    get_best_upload_windows,
-    get_video_velocity_summary,
-)
 
 st.set_page_config(page_title="Peak Hours · AI CarryON", page_icon="⚡", layout="wide")
 
@@ -38,73 +30,58 @@ if APP_PASSWORD:
                 st.error("Wrong password")
         st.stop()
 
-# ── Load view_history from GitHub data branch ──────────────────────────────
-
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-GITHUB_REPO  = os.environ.get("GITHUB_REPO", "Unknown183-a/ai-carryon")
-
-@st.cache_data(ttl=300)
-def load_view_history_from_github():
-    if not GITHUB_TOKEN:
-        return None, "GITHUB_TOKEN not set"
-
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/view_history.json?ref=data"
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3.raw",
-    }
-
-    try:
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            return json.loads(r.text), None
-        else:
-            return None, f"GitHub returned {r.status_code}: {r.text[:200]}"
-    except Exception as e:
-        return None, str(e)
-
-
-@st.cache_data(ttl=300)
-def load_analysis():
-    view_history, err = load_view_history_from_github()
-    if err:
-        return {"error": err}
-
-    velocity_data  = compute_velocity(view_history)
-    peak_hours     = get_peak_hours(view_history)
-    best_windows   = get_best_upload_windows(view_history, top_n=5)
-    video_summary  = get_video_velocity_summary(view_history)
-    total_points   = sum(len(v["velocity_points"]) for v in velocity_data.values())
-
-    return {
-        "velocity_data": velocity_data,
-        "peak_hours": peak_hours,
-        "best_upload_windows": best_windows,
-        "video_summary": video_summary,
-        "total_videos_analysed": len(velocity_data),
-        "total_velocity_points": total_points,
-    }
-
-
 st.title("⚡ Peak Hours")
 st.caption("View velocity analysis — when your channel gets the most traction.")
 
-with st.spinner("Loading from GitHub…"):
-    analysis = load_analysis()
+# ── Channel selector ────────────────────────────────────────────────────────
+
+channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON"], horizontal=True)
+is_hindi = channel == "Hindi AI CarryON"
+
+# ── Load analysis from SQLite ───────────────────────────────────────────────
+
+@st.cache_data(ttl=300)
+def load_analysis(hindi: bool):
+    try:
+        if hindi:
+            from agents_hindi.velocity_agent import load_and_analyse_hindi
+            return load_and_analyse_hindi()
+        else:
+            from agents.velocity_agent import load_and_analyse
+            return load_and_analyse("output/view_history.json")
+    except Exception as e:
+        return {"error": str(e)}
+
+with st.spinner("Loading velocity data…"):
+    analysis = load_analysis(is_hindi)
 
 if "error" in analysis:
-    st.error(f"Could not load view history: {analysis['error']}")
+    st.error(f"Could not load data: {analysis['error']}")
     st.stop()
 
 if analysis["total_velocity_points"] < 10:
     st.warning(
-        f"Only {analysis['total_velocity_points']} data points so far. "
-        "Need 48–72 hourly snapshots per video. Come back tomorrow."
+        f"Only {analysis['total_velocity_points']} data points so far for {channel}. "
+        "Need more hourly snapshots. Come back in a day or two."
     )
 
 peak_hours    = analysis["peak_hours"]
 best_windows  = analysis["best_upload_windows"]
-video_summary = analysis["video_summary"]
+video_summary = analysis.get("video_summary", [])
+
+# Build video_summary from velocity_data if not present (Hindi path)
+if not video_summary and "velocity_data" in analysis:
+    video_summary = sorted([
+        {
+            "video_id": vid,
+            "title": v["title"],
+            "published": v["published"],
+            "avg_velocity": v["avg_velocity"],
+            "peak_velocity": v["peak_velocity"],
+            "total_snapshots": v["total_snapshots"],
+        }
+        for vid, v in analysis["velocity_data"].items()
+    ], key=lambda x: x["avg_velocity"], reverse=True)
 
 best_hour     = best_windows[0]["hour"]     if best_windows else None
 best_velocity = best_windows[0]["avg_velocity"] if best_windows else 0
@@ -119,7 +96,7 @@ st.divider()
 
 # ── 24h bar chart ──────────────────────────────────────────────────────────
 
-st.subheader("Average view velocity by hour of day (UTC)")
+st.subheader(f"Average view velocity by hour of day (UTC) — {channel}")
 
 hours         = list(range(24))
 avg_velocities = [peak_hours[h]["avg_velocity"] for h in hours]
@@ -157,13 +134,15 @@ if best_windows:
     df_w.columns = ["Upload hour (UTC)", "Avg velocity", "Data points"]
     df_w.index = ["🥇","🥈","🥉","4th","5th"][:len(df_w)]
     st.dataframe(df_w, use_container_width=True)
+else:
+    st.info("No upload windows yet — need more snapshot data.")
 
 st.divider()
 
 # ── Per-video sparkline ────────────────────────────────────────────────────
 
 st.subheader("Video velocity over time")
-velocity_data = analysis["velocity_data"]
+velocity_data = analysis.get("velocity_data", {})
 
 if velocity_data:
     video_options = {
@@ -193,6 +172,8 @@ if velocity_data:
         st.metric("Snapshots",     vdata["total_snapshots"])
         if vdata["published"]:
             st.caption(f"Published: {vdata['published']}")
+else:
+    st.info("No video velocity data yet.")
 
 st.divider()
 
@@ -207,8 +188,10 @@ if video_summary:
     df_rank.columns = ["Title","Published","Avg v/hr","Peak v/hr","Snapshots"]
     df_rank.index = range(1, len(df_rank)+1)
     st.dataframe(df_rank, use_container_width=True)
+else:
+    st.info("No ranked videos yet.")
 
 st.caption(
-    f"Data refreshes every 5 min · Loaded from GitHub data branch · "
+    f"Channel: {channel} · Data refreshes every 5 min · Loaded from SQLite · "
     f"Last computed: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"
 )
