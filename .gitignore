@@ -12,3 +12,4 @@ assets/flow_clips/
 output/
 *.json
 !requirements.txt
+.env.save
