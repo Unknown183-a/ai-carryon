@@ -252,6 +252,20 @@ if __name__ == "__main__":
     adaptive_hours = get_adaptive_hours()
     log(f"Current best hours (UTC): {adaptive_hours}")
 
+    # TEMPORARY TEST BLOCK — remove once pipeline is confirmed working
+    import threading
+    def _test_forced_run():
+        log("=== TEST MODE: Forced Hindi generation (bypassing schedule check) ===")
+        try:
+            generate_and_upload_hindi(force=True)
+        except Exception as e:
+            import traceback
+            log(f"TEST MODE ERROR: {e}")
+            log(traceback.format_exc())
+    threading.Timer(300, _test_forced_run).start()
+    log("TEST MODE: forced run scheduled for 5 minutes from now")
+    # END TEMPORARY TEST BLOCK
+
     while True:
         schedule.run_pending()
         time.sleep(60)
