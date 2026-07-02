@@ -218,6 +218,9 @@ def generate_and_upload_hindi(force=False):
         mark_posted_today(topic)
         log(f"SUCCESS: Upload ho gaya! {video_url}")
 
+        from agents.cleanup_agent import cleanup_after_upload
+        cleanup_after_upload(video, log_fn=log)
+
     except Exception as e:
         import traceback
         log(f"ERROR: {str(e)}")
@@ -244,6 +247,9 @@ schedule.every(1).hours.do(track_views_hindi_job)
 
 if __name__ == "__main__":
     log("Hindi Scheduler shuru hua! (Fully Adaptive Mode)")
+
+    from agents.cleanup_agent import sweep_old_videos
+    sweep_old_videos(max_age_hours=24, log_fn=log)
     log(f"Checking every hour — generates when current UTC hour matches best velocity windows")
     log(f"Target: {VIDEOS_PER_DAY} videos/day at data-driven peak hours")
 

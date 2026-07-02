@@ -162,6 +162,9 @@ def generate_and_upload():
         mark_posted(topic)
         log(f"SUCCESS: YouTube: {video_url}")
 
+        from agents.cleanup_agent import cleanup_after_upload
+        cleanup_after_upload(video_file, log_fn=log)
+
     except Exception as e:
         import traceback
         log(f"ERROR: {str(e)}")
@@ -197,6 +200,9 @@ schedule.every(1).hours.do(track_views_job)
 
 if __name__ == "__main__":
     log("Scheduler started!")
+
+    from agents.cleanup_agent import sweep_old_videos
+    sweep_old_videos(max_age_hours=24, log_fn=log)
     log("Schedule: every 5 hours")
     log("View tracking: every 1 hour")
 
