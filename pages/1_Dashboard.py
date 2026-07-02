@@ -195,6 +195,10 @@ if "authenticated" not in st.session_state:
 
 if not st.session_state["authenticated"]:
     st.title("🔐 AI CarryON - Login")
+    st.info(
+        "This panel is password protected — it controls live video generation and "
+        "uploads to real YouTube channels using API credentials, so public access isn't allowed."
+    )
     password = st.text_input("Enter Password", type="password")
     if st.button("Login"):
         if password == os.getenv("APP_PASSWORD", "aicarryon2026"):
