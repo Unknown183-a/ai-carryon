@@ -1,7 +1,7 @@
 """
 Public Portfolio Page — AI CarryON
 No password gate. Safe to share with recruiters.
-File-based routing: numbered 0_ so it appears first in the Streamlit sidebar.
+This is the app entry point (root URL), so it loads first automatically.
 """
 
 import streamlit as st
@@ -281,6 +281,16 @@ with f3:
     st.link_button("🌐 Live Dashboard", LIVE_APP_URL, use_container_width=True)
 
 st.caption(
-    "Other pages in the sidebar (Generate Video, Peak Hours, A/B Titles, Schedule) are the "
-    "operational dashboard — password protected, since they control live uploads and API usage."
+    "Other pages in the sidebar (Dashboard, Peak Hours, A/B Titles, Schedule, Comparison) are the "
+    "operational control panel — password protected."
+)
+
+st.info(
+    "🔒 **Why the other tabs are locked**\n\n"
+    "Those pages include a **live \'Generate & Upload Video\' control** that publishes directly to "
+    "both YouTube channels using real API credentials. If left public, anyone visiting this page "
+    "could trigger uploads — including abusive, spam, or harmful content — under my channel\'s name. "
+    "Keeping that panel behind a password protects the channels and keeps the system\'s real "
+    "operational access private, while this Portfolio page stays fully open so you can see the "
+    "architecture, the build history, and the engineering work without needing any access."
 )
