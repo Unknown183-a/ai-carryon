@@ -83,6 +83,17 @@ def get_fresh_trending_topic(region_code="US", max_attempts=5):
 
 
 def generate_and_upload():
+    should_run, reason = should_upload_now()
+    log(f"Schedule check: {reason}")
+    if not should_run:
+        return
+
+    # Also cap at 3 videos per day
+    posted_today = get_recent_topics(hours=24)
+    if len(posted_today) >= 3:
+        log("Daily cap reached (3 videos) — skipping this hour")
+        return
+
     log("=== Starting scheduled video generation ===")
     try:
         from agents.research_agent import research
@@ -157,7 +168,8 @@ def generate_and_upload():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-schedule.every(5).hours.do(generate_and_upload)
+# Check every hour — generate+upload only when current hour matches a top velocity window
+schedule.every().hour.at(":00").do(generate_and_upload)
 
 
 def track_views_job():
