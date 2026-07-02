@@ -95,12 +95,14 @@ def should_generate_now():
     return False, f"Current hour {current_hour:02d}:00 UTC not in best hours {adaptive_hours}"
 
 
-def generate_and_upload_hindi():
-    should_run, reason = should_generate_now()
-    log(f"Schedule check: {reason}")
-
-    if not should_run:
-        return
+def generate_and_upload_hindi(force=False):
+    if force:
+        log("Schedule check: BYPASSED (test mode forced run)")
+    else:
+        should_run, reason = should_generate_now()
+        log(f"Schedule check: {reason}")
+        if not should_run:
+            return
 
     log("=== Hindi video generation shuru hua ===")
 
