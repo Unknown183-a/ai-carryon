@@ -82,6 +82,47 @@ def get_fresh_trending_topic(region_code="US", max_attempts=5):
     return topic + " - extra"
 
 
+def get_top_upload_hours(n=3, min_gap_hours=1):
+    """Pick top N distinct upload hours by real velocity. No averaging."""
+    try:
+        from agents.database import db
+        peak_hours = db.get_peak_hours()
+        candidates = sorted(
+            [{"hour": h, "avg_velocity": data["avg_velocity"]}
+             for h, data in peak_hours.items()
+             if data["sample_count"] >= 2 and data["avg_velocity"] > 0],
+            key=lambda x: x["avg_velocity"], reverse=True
+        )
+        chosen = []
+        for c in candidates:
+            h = c["hour"]
+            too_close = any(
+                min(abs(h - ch), 24 - abs(h - ch)) < min_gap_hours
+                for ch in chosen
+            )
+            if not too_close:
+                chosen.append(h)
+            if len(chosen) == n:
+                break
+        if len(chosen) >= 1:
+            log(f"Top upload hours from real data (UTC): {sorted(chosen)}")
+            return sorted(chosen)
+    except Exception as e:
+        log(f"Could not get top upload hours: {e}")
+    fallback = [4, 12, 19]
+    log(f"Using fallback upload hours (UTC): {fallback}")
+    return fallback
+
+
+def should_upload_now():
+    """Return (True, reason) if current UTC hour matches a top upload slot."""
+    top_hours = get_top_upload_hours(n=3, min_gap_hours=1)
+    current_hour = __import__("datetime").datetime.utcnow().hour
+    if current_hour in top_hours:
+        return True, f"Hour {current_hour:02d}:00 UTC is in top slots {top_hours}"
+    return False, f"Hour {current_hour:02d}:00 UTC not in top slots {top_hours}"
+
+
 def generate_and_upload():
     should_run, reason = should_upload_now()
     log(f"Schedule check: {reason}")
