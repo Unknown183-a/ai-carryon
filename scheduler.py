@@ -123,17 +123,19 @@ def should_upload_now():
     return False, f"Hour {current_hour:02d}:00 UTC not in top slots {top_hours}"
 
 
-def generate_and_upload():
-    should_run, reason = should_upload_now()
-    log(f"Schedule check: {reason}")
-    if not should_run:
-        return
+def generate_and_upload(force=False):
+    if not force:
+        should_run, reason = should_upload_now()
+        log(f"Schedule check: {reason}")
+        if not should_run:
+            return
 
-    # Also cap at 3 videos per day
-    posted_today = get_recent_topics(hours=24)
-    if len(posted_today) >= 3:
-        log("Daily cap reached (3 videos) — skipping this hour")
-        return
+        posted_today = get_recent_topics(hours=24)
+        if len(posted_today) >= 3:
+            log("Daily cap reached (3 videos) — skipping this hour")
+            return
+    else:
+        log("FORCE MODE: bypassing schedule gate and daily cap")
 
     log("=== Starting scheduled video generation ===")
     try:
@@ -287,8 +289,8 @@ if __name__ == "__main__":
 
     import threading
     if os.environ.get("TEST_UPLOAD_ON_START", "false").lower() == "true":
-        log("TEST MODE: will force generate_and_upload() in 5 minutes regardless of schedule")
-        threading.Timer(300, generate_and_upload).start()
+        log("TEST MODE: will force generate_and_upload(force=True) in 5 minutes — bypassing schedule gate")
+        threading.Timer(300, lambda: generate_and_upload(force=True)).start()
 
     while True:
         schedule.run_pending()
