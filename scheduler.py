@@ -241,24 +241,49 @@ schedule.every(1).hours.do(track_views_job)
 
 if __name__ == "__main__":
     log("Scheduler started!")
-
-    from agents.cleanup_agent import sweep_old_videos
-    sweep_old_videos(max_age_hours=24, log_fn=log)
-    log("Schedule: every 5 hours")
+    log("Generation: adaptive — top 3 velocity hours, max 3/day")
     log("View tracking: every 1 hour")
 
     try:
+        from agents.cleanup_agent import sweep_old_videos
+        sweep_old_videos(max_age_hours=24, log_fn=log)
+    except Exception as e:
+        log(f"Cleanup skipped: {e}")
+
+    # Step 1: Restore view_history.json from GitHub
+    try:
         from agents.data_persistence import restore_view_history
         restore_view_history()
+        log("View history restored from GitHub")
     except Exception as e:
         log(f"View history restore skipped: {e}")
 
+    # Step 2: Migrate JSON into SQLite so velocity data is available
+    try:
+        from agents.database import db
+        result = db.migrate_from_json(
+            view_history_path="output/view_history.json",
+            ab_log_path="output/title_ab_log.json",
+            posted_path="output/posted_topics.txt",
+        )
+        log(f"SQLite rebuilt from GitHub backup: {result}")
+    except Exception as e:
+        log(f"SQLite migration skipped: {e}")
+
+    # Step 3: Show which hours will be used today
+    try:
+        hours = get_top_upload_hours(n=3, min_gap_hours=1)
+        log(f"Upload slots today (UTC): {hours}")
+    except Exception as e:
+        log(f"Could not compute upload hours: {e}")
+
+    # Step 4: Initial view tracking snapshot
     track_views_job()
 
     utc_now = datetime.datetime.utcnow()
     ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
     log(f"Current IST time: {ist_now.strftime('%H:%M:%S')}")
-    log(f"Next run (UTC): {schedule.next_run()}")
+    log(f"Next check (UTC): {schedule.next_run()}")
 
     while True:
         schedule.run_pending()
