@@ -258,6 +258,11 @@ if __name__ == "__main__":
     adaptive_hours = get_adaptive_hours()
     log(f"Current best hours (UTC): {adaptive_hours}")
 
+    import threading
+    if os.environ.get("TEST_UPLOAD_ON_START", "false").lower() == "true":
+        log("TEST MODE: will force generate_and_upload_hindi() in 5 minutes regardless of schedule")
+        threading.Timer(300, generate_and_upload_hindi).start()
+
     while True:
         schedule.run_pending()
         time.sleep(60)

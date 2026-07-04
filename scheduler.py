@@ -285,6 +285,11 @@ if __name__ == "__main__":
     log(f"Current IST time: {ist_now.strftime('%H:%M:%S')}")
     log(f"Next check (UTC): {schedule.next_run()}")
 
+    import threading
+    if os.environ.get("TEST_UPLOAD_ON_START", "false").lower() == "true":
+        log("TEST MODE: will force generate_and_upload() in 5 minutes regardless of schedule")
+        threading.Timer(300, generate_and_upload).start()
+
     while True:
         schedule.run_pending()
         time.sleep(30)
