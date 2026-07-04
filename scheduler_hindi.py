@@ -260,8 +260,8 @@ if __name__ == "__main__":
 
     import threading
     if os.environ.get("TEST_UPLOAD_ON_START", "false").lower() == "true":
-        log("TEST MODE: will force generate_and_upload_hindi() in 5 minutes regardless of schedule")
-        threading.Timer(300, generate_and_upload_hindi).start()
+        log("TEST MODE: will force generate_and_upload_hindi(force=True) in 5 minutes — bypassing schedule gate")
+        threading.Timer(300, lambda: generate_and_upload_hindi(force=True)).start()
 
     while True:
         schedule.run_pending()
