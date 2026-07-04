@@ -243,6 +243,12 @@
         "views": 294,
         "likes": 3,
         "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
+        "views": 294,
+        "likes": 3,
+        "comments": 0
       }
     ]
   },
@@ -487,6 +493,12 @@
       },
       {
         "timestamp": "2026-07-04T05:23:56.575274+00:00",
+        "views": 223,
+        "likes": 2,
+        "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
         "views": 223,
         "likes": 2,
         "comments": 0
@@ -792,6 +804,12 @@
         "views": 83,
         "likes": 2,
         "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
+        "views": 83,
+        "likes": 2,
+        "comments": 0
       }
     ]
   },
@@ -1036,6 +1054,12 @@
       },
       {
         "timestamp": "2026-07-04T05:23:56.575274+00:00",
+        "views": 61,
+        "likes": 1,
+        "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
         "views": 61,
         "likes": 1,
         "comments": 0
@@ -1286,6 +1310,12 @@
         "views": 60,
         "likes": 1,
         "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
+        "views": 60,
+        "likes": 1,
+        "comments": 0
       }
     ]
   },
@@ -1530,6 +1560,12 @@
       },
       {
         "timestamp": "2026-07-04T05:23:56.575274+00:00",
+        "views": 57,
+        "likes": 2,
+        "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
         "views": 57,
         "likes": 2,
         "comments": 0
@@ -1780,6 +1816,12 @@
         "views": 73,
         "likes": 1,
         "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
+        "views": 73,
+        "likes": 1,
+        "comments": 0
       }
     ]
   },
@@ -2024,6 +2066,12 @@
       },
       {
         "timestamp": "2026-07-04T05:23:56.575274+00:00",
+        "views": 44,
+        "likes": 2,
+        "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
         "views": 44,
         "likes": 2,
         "comments": 0
@@ -2274,6 +2322,12 @@
         "views": 41,
         "likes": 1,
         "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
+        "views": 41,
+        "likes": 1,
+        "comments": 0
       }
     ]
   },
@@ -2518,6 +2572,12 @@
       },
       {
         "timestamp": "2026-07-04T05:23:56.575274+00:00",
+        "views": 23,
+        "likes": 1,
+        "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
         "views": 23,
         "likes": 1,
         "comments": 0
@@ -2768,6 +2828,12 @@
         "views": 18,
         "likes": 2,
         "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
+        "views": 18,
+        "likes": 2,
+        "comments": 0
       }
     ]
   },
@@ -3012,6 +3078,12 @@
       },
       {
         "timestamp": "2026-07-04T05:23:56.575274+00:00",
+        "views": 14,
+        "likes": 1,
+        "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
         "views": 14,
         "likes": 1,
         "comments": 0
@@ -3262,6 +3334,12 @@
         "views": 12,
         "likes": 1,
         "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
+        "views": 12,
+        "likes": 1,
+        "comments": 0
       }
     ]
   },
@@ -3506,6 +3584,12 @@
       },
       {
         "timestamp": "2026-07-04T05:23:56.575274+00:00",
+        "views": 11,
+        "likes": 1,
+        "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
         "views": 11,
         "likes": 1,
         "comments": 0
@@ -3883,6 +3967,12 @@
         "views": 5,
         "likes": 1,
         "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
+        "views": 5,
+        "likes": 1,
+        "comments": 0
       }
     ]
   },
@@ -4127,6 +4217,12 @@
       },
       {
         "timestamp": "2026-07-04T05:23:56.575274+00:00",
+        "views": 3,
+        "likes": 0,
+        "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
         "views": 3,
         "likes": 0,
         "comments": 0
@@ -4377,6 +4473,12 @@
         "views": 4,
         "likes": 1,
         "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
+        "views": 4,
+        "likes": 1,
+        "comments": 0
       }
     ]
   },
@@ -4624,6 +4726,12 @@
         "views": 2,
         "likes": 0,
         "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
+        "views": 2,
+        "likes": 0,
+        "comments": 0
       }
     ]
   },
@@ -4823,6 +4931,12 @@
         "views": 20,
         "likes": 1,
         "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
+        "views": 20,
+        "likes": 1,
+        "comments": 0
       }
     ]
   },
@@ -4947,6 +5061,12 @@
       },
       {
         "timestamp": "2026-07-04T05:23:56.575274+00:00",
+        "views": 15,
+        "likes": 1,
+        "comments": 0
+      },
+      {
+        "timestamp": "2026-07-04T06:23:58.959210+00:00",
         "views": 15,
         "likes": 1,
         "comments": 0
