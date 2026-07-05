@@ -99,9 +99,9 @@ LINE 3 (Verdict — specific conclusion about topic + natural Hinglish follow CT
     lines = parse_dialogue(dialogue_response)
 
     if not lines["LINE 1"]:
-        lines["LINE 1"] = f"Yaar, {clean_topic} ke baare mein ek cheez hai jo 99% log nahi jaante — aur yeh genuinely important hai."
-        lines["LINE 2"] = f"Toh yeh hain asli facts: {facts_display}. Sach mein, yeh sun ke main bhi shocked tha."
-        lines["LINE 3"] = f"Toh {clean_topic} ko seriously lena chahiye. Follow karo aur aisi cheezein milti rahengi."
+        lines["LINE 1"] = f"Hello everyone — {clean_topic} ke baare mein ek baat hai jo genuinely important hai aur 99% log miss kar rahe hain."
+        lines["LINE 2"] = f"Dekho, yeh hain asli facts: {facts_display}. Har ek point carefully suno kyunki yeh directly tumhe affect karta hai."
+        lines["LINE 3"] = f"Toh ab tum jaante ho {clean_topic} ka sach. Agar aisi real information chahiye toh channel follow karo."
 
     background = (
         "Modern premium Indian home studio — dark background, warm amber and blue LED strip lighting, "
