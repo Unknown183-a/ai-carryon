@@ -354,25 +354,37 @@ def create_video(manim_path=None, use_flow_clips=False):
         images = get_background_images()
         if not images:
             raise FileNotFoundError("No background images found.")
-        resized_imgs = []
+        resized_paths = []
         for i, img_path in enumerate(images):
             out = f"output/bg_{i}.jpg"
             resize_image(img_path, out)
-            resized_imgs.append(Image.open(out).convert("RGB"))
+            resized_paths.append(out)
         n = len(images)
         per_image_frames = total_frames // n
         directions = ["zoom_in", "zoom_out"]
         print("Rendering frames with Ken Burns effect...")
+        current_bg_idx = None
+        current_bg_img = None
         for frame_idx in range(total_frames):
             bg_idx = min(frame_idx // per_image_frames, n - 1)
+            if bg_idx != current_bg_idx:
+                if current_bg_img is not None:
+                    current_bg_img.close()
+                current_bg_img = Image.open(resized_paths[bg_idx]).convert("RGB")
+                current_bg_idx = bg_idx
             local_frame = frame_idx - bg_idx * per_image_frames
             direction = directions[bg_idx % 2]
-            frame = apply_ken_burns(resized_imgs[bg_idx], local_frame, per_image_frames, direction)
+            frame = apply_ken_burns(current_bg_img, local_frame, per_image_frames, direction)
             word = frame_word.get(frame_idx)
             if word:
                 frame = draw_caption(frame, word)
             frame.save(f"output/frames/{frame_idx:06d}.jpg", "JPEG", quality=80)
+            frame.close()
+        if current_bg_img is not None:
+            current_bg_img.close()
 
+    import gc
+    gc.collect()
     print("Creating video with ffmpeg...")
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = f"output/video_{timestamp}.mp4"
