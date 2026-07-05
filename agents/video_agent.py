@@ -404,8 +404,11 @@ def create_video(manim_path=None, use_flow_clips=False):
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        print("FFMPEG ERROR:", result.stderr[-500:])
-        raise RuntimeError("ffmpeg failed")
+        print(f"FFMPEG RETURN CODE: {result.returncode}")
+        if result.returncode < 0:
+            print(f"FFMPEG WAS KILLED BY SIGNAL {-result.returncode} (likely OOM if signal is 9)")
+        print("FFMPEG STDERR TAIL:", result.stderr[-1000:] if result.stderr else "(empty)")
+        raise RuntimeError(f"ffmpeg failed with return code {result.returncode}")
 
     latest_path = "output/final_video.mp4"
     shutil.copy(output_path, latest_path)
