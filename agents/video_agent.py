@@ -325,7 +325,7 @@ def create_video(manim_path=None, use_flow_clips=False):
     for f in glob.glob("output/frames/*.jpg"):
         os.remove(f)
 
-    fps = 24
+    fps = 20
     total_frames = int(duration * fps)
 
     frame_word = {}
@@ -378,8 +378,11 @@ def create_video(manim_path=None, use_flow_clips=False):
             word = frame_word.get(frame_idx)
             if word:
                 frame = draw_caption(frame, word)
-            frame.save(f"output/frames/{frame_idx:06d}.jpg", "JPEG", quality=80)
+            frame.save(f"output/frames/{frame_idx:06d}.jpg", "JPEG", quality=72)
             frame.close()
+            if frame_idx % 150 == 0:
+                import gc
+                gc.collect()
         if current_bg_img is not None:
             current_bg_img.close()
 
@@ -420,7 +423,25 @@ def create_video(manim_path=None, use_flow_clips=False):
         if result.returncode < 0:
             print(f"FFMPEG WAS KILLED BY SIGNAL {-result.returncode} (likely OOM if signal is 9)")
         print("FFMPEG STDERR TAIL:", result.stderr[-1000:] if result.stderr else "(empty)")
-        raise RuntimeError(f"ffmpeg failed with return code {result.returncode}")
+        if result.returncode == -9:
+            print("OOM detected — retrying once with ultrafast+lower bitrate settings...")
+            import gc, time
+            gc.collect()
+            time.sleep(3)
+            retry_cmd = [c if c != "ultrafast" else "ultrafast" for c in cmd]
+            # Force lower CRF-equivalent via bitrate cap to reduce encoder memory footprint
+            if "-c:v" in retry_cmd:
+                idx = retry_cmd.index("-c:v")
+                retry_cmd = retry_cmd[:idx+2] + ["-maxrate", "2500k", "-bufsize", "2500k"] + retry_cmd[idx+2:]
+            retry_result = subprocess.run(retry_cmd, capture_output=True, text=True)
+            if retry_result.returncode == 0:
+                print("Retry succeeded")
+                result = retry_result
+            else:
+                print(f"RETRY ALSO FAILED: return code {retry_result.returncode}")
+                raise RuntimeError(f"ffmpeg failed with return code {result.returncode} (retry also failed: {retry_result.returncode})")
+        else:
+            raise RuntimeError(f"ffmpeg failed with return code {result.returncode}")
 
     latest_path = "output/final_video.mp4"
     shutil.copy(output_path, latest_path)
