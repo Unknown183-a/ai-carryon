@@ -50,5 +50,31 @@
     ],
     "topic": "what a neophone looks like",
     "generated_at": "2026-07-07T11:00:32Z"
+  },
+  {
+    "winner": {
+      "title": "Everyone's Wrong About This Keyboard \ud83d\udca1",
+      "pattern": "contrarian",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Everyone's Wrong About This Keyboard \ud83d\udca1",
+        "pattern": "contrarian",
+        "score": 8
+      },
+      {
+        "title": "Warning: Bad Keyboard \ud83d\udea8",
+        "pattern": "warning",
+        "score": 8
+      },
+      {
+        "title": "5 Reasons It's Good \ud83d\udda5\ufe0f",
+        "pattern": "number",
+        "score": 8
+      }
+    ],
+    "topic": "Is this keyboard good?",
+    "generated_at": "2026-07-07T12:00:44Z"
   }
 ]
