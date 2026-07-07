@@ -85,14 +85,17 @@ class Database:
                 );
 
                 CREATE TABLE IF NOT EXISTS ab_title_tests (
-                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                    topic           TEXT,
-                    winner_title    TEXT,
-                    winner_pattern  TEXT,
-                    winner_score    INTEGER,
-                    all_variations  TEXT,
-                    generated_at    TEXT,
-                    actual_views    INTEGER DEFAULT NULL
+                    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                    topic              TEXT,
+                    winner_title       TEXT,
+                    winner_pattern     TEXT,
+                    winner_score       INTEGER,
+                    all_variations     TEXT,
+                    generated_at       TEXT,
+                    actual_views       INTEGER DEFAULT NULL,
+                    actual_views_24h   INTEGER DEFAULT NULL,
+                    actual_checked_at  TEXT DEFAULT NULL,
+                    video_id           TEXT DEFAULT NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS posted_topics (
@@ -116,6 +119,26 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_posted_topics_channel
                     ON posted_topics(channel, posted_at);
             """)
+        self._migrate_ab_title_tests_columns()
+
+    def _migrate_ab_title_tests_columns(self):
+        """
+        Self-healing migration: adds columns to ab_title_tests if an
+        existing (older) database is missing them. Runs on every startup,
+        safe to run repeatedly — a fresh CREATE TABLE above already has
+        these columns, so this is a no-op for new databases.
+        """
+        with self._conn() as conn:
+            existing = [row["name"] for row in conn.execute("PRAGMA table_info(ab_title_tests)")]
+            additions = {
+                "actual_views_24h": "INTEGER DEFAULT NULL",
+                "actual_checked_at": "TEXT DEFAULT NULL",
+                "video_id": "TEXT DEFAULT NULL",
+            }
+            for col, decl in additions.items():
+                if col not in existing:
+                    conn.execute(f"ALTER TABLE ab_title_tests ADD COLUMN {col} {decl}")
+                    print(f"Migrated ab_title_tests: added column {col}")
 
     # ── Videos ────────────────────────────────────────────────────────────
 
