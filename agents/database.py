@@ -200,6 +200,25 @@ class Database:
             """, (topic, winner_title, winner_pattern, winner_score,
                   json.dumps(all_variations), generated_at))
 
+    def link_ab_test_to_video(self, winner_title, video_id):
+        """
+        Link the most recent unlinked ab_title_tests row matching this
+        winner_title to the freshly uploaded video_id. Called right after
+        a successful upload, when both values are available in the same run.
+        """
+        with self._conn() as conn:
+            row = conn.execute("""
+                SELECT id FROM ab_title_tests
+                WHERE winner_title = ? AND video_id IS NULL
+                ORDER BY generated_at DESC LIMIT 1
+            """, (winner_title,)).fetchone()
+            if row:
+                conn.execute("""
+                    UPDATE ab_title_tests SET video_id = ? WHERE id = ?
+                """, (video_id, row["id"]))
+                return True
+            return False
+
     def get_ab_tests(self, limit=200):
         with self._conn() as conn:
             rows = conn.execute("""

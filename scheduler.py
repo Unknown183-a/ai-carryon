@@ -199,6 +199,16 @@ def generate_and_upload(force=False):
             thumbnail_path=thumbnail_image
         )
 
+        # Link this upload back to its AB title test, if any
+        if seo.get("ab_winner"):
+            try:
+                from agents.database import db
+                linked = db.link_ab_test_to_video(seo["ab_winner"], video_id)
+                if linked:
+                    log(f"Linked AB test to video_id {video_id}")
+            except Exception as link_err:
+                log(f"AB test link skipped: {link_err}")
+
         log("Posting to Instagram Reels...")
         try:
             from agents.instagram_agent import post_reel
