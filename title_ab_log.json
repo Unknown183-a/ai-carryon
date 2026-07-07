@@ -76,5 +76,31 @@
     ],
     "topic": "Is this keyboard good?",
     "generated_at": "2026-07-07T12:00:44Z"
+  },
+  {
+    "winner": {
+      "title": "Can Curved Monitors Fix? \ud83e\udd14",
+      "pattern": "question",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Can Curved Monitors Fix? \ud83e\udd14",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Everyone's Wrong About Curved \ud83d\udda5\ufe0f",
+        "pattern": "contrarian",
+        "score": 8
+      },
+      {
+        "title": "Warning: Curved Monitor \ud83d\udea8",
+        "pattern": "warning",
+        "score": 7
+      }
+    ],
+    "topic": "BUYING CURVED MONITOR FOR PERSONAL SETUP!!! #brokenfix #problemfix #smartphone #screenbreak",
+    "generated_at": "2026-07-07T19:42:59Z"
   }
 ]
