@@ -231,6 +231,8 @@ def track_views_job():
         try:
             from agents.data_persistence import backup_view_history
             backup_view_history()
+            from agents.data_persistence import backup_sqlite_db
+            backup_sqlite_db()
         except Exception as be:
             log(f"Backup skipped: {be}")
     except Exception as e:

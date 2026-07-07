@@ -4,6 +4,7 @@ import json
 import base64
 import urllib.request
 import urllib.error
+from datetime import datetime, timezone
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 REPO = "Unknown183-a/ai-carryon"
@@ -97,3 +98,73 @@ def backup_view_history():
     except Exception as e:
         print(f"Backup failed: {e}")
         return False
+
+
+# ─────────────────────────────────────────────
+# SQLite DB backup (added — closes the gap where
+# aicarryon.db itself was never backed up, only
+# the legacy view_history.json)
+# ─────────────────────────────────────────────
+
+def backup_sqlite_db(db_path="output/aicarryon.db", repo_path="output/aicarryon.db"):
+    if not GITHUB_TOKEN:
+        print("No GITHUB_TOKEN — skipping DB backup")
+        return
+
+    if not os.path.exists(db_path):
+        print(f"No DB file found at {db_path} — skipping backup")
+        return
+
+    repo = os.environ.get("GITHUB_REPO", "")
+    if not repo:
+        print("No GITHUB_REPO set — skipping DB backup")
+        return
+
+    api_url = f"https://api.github.com/repos/{repo}/contents/{repo_path}"
+
+    with open(db_path, "rb") as f:
+        content_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    # Check if file already exists (need sha to update)
+    sha = None
+    try:
+        req = urllib.request.Request(
+            api_url,
+            headers={"Authorization": f"Bearer {GITHUB_TOKEN}"},
+        )
+        with urllib.request.urlopen(req) as resp:
+            existing = json.loads(resp.read().decode("utf-8"))
+            sha = existing.get("sha")
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            print(f"Could not check existing DB backup: {e}")
+    except Exception as e:
+        print(f"Could not check existing DB backup: {e}")
+
+    payload = {
+        "message": f"Backup aicarryon.db — {datetime.now(timezone.utc).isoformat()}",
+        "content": content_b64,
+    }
+    if sha:
+        payload["sha"] = sha
+
+    try:
+        req = urllib.request.Request(
+            api_url,
+            headers={
+                "Authorization": f"Bearer {GITHUB_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            data=json.dumps(payload).encode("utf-8"),
+            method="PUT",
+        )
+        with urllib.request.urlopen(req) as resp:
+            if resp.status in (200, 201):
+                size = os.path.getsize(db_path)
+                print(f"aicarryon.db backed up to GitHub ✅ ({size} bytes)")
+            else:
+                print(f"DB backup failed: {resp.status}")
+    except urllib.error.HTTPError as e:
+        print(f"DB backup failed: {e.code} {e.read()[:200]}")
+    except Exception as e:
+        print(f"DB backup failed: {e}")
