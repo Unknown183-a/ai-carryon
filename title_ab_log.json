@@ -1,0 +1,28 @@
+[
+  {
+    "winner": {
+      "title": "Are You a Pro Typist? \ud83e\udd14",
+      "pattern": "question",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Are You a Pro Typist? \ud83e\udd14",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Your Keyboard Habits Reveal You \ud83e\udd14",
+        "pattern": "personal",
+        "score": 8
+      },
+      {
+        "title": "They Don't Know Your Keyboard Type \ud83d\udda5\ufe0f",
+        "pattern": "revelation",
+        "score": 8
+      }
+    ],
+    "topic": "What Keyboard User are YOU?!",
+    "generated_at": "2026-07-07T10:27:03Z"
+  }
+]
