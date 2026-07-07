@@ -53,6 +53,12 @@ def mark_posted(topic):
     ts = datetime.datetime.utcnow().isoformat()
     with open(POSTED_FILE, "a") as f:
         f.write(f"{ts}|{topic}\n")
+    # Push updated posted_topics.txt to GitHub immediately
+    try:
+        from agents.data_persistence import backup_posted_topics
+        backup_posted_topics()
+    except Exception as e:
+        log(f"posted_topics backup skipped: {e}")
 
 
 def get_fresh_trending_topic(region_code="US", max_attempts=5):
@@ -256,11 +262,13 @@ if __name__ == "__main__":
 
     # Step 1: Restore view_history.json from GitHub
     try:
-        from agents.data_persistence import restore_view_history
+        from agents.data_persistence import restore_view_history, restore_ab_log, restore_posted_topics
         restore_view_history()
-        log("View history restored from GitHub")
+        restore_ab_log()
+        restore_posted_topics()
+        log("View history, AB log, and posted topics restored from GitHub")
     except Exception as e:
-        log(f"View history restore skipped: {e}")
+        log(f"Restore from GitHub skipped: {e}")
 
     # Step 2: Migrate JSON into SQLite so velocity data is available
     try:

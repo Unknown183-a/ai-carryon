@@ -259,6 +259,13 @@ def _log_result(result):
     with open(LOG_FILE, "w") as f:
         json.dump(logs, f, indent=2)
 
+    # Push updated title_ab_log.json to GitHub immediately
+    try:
+        from agents.data_persistence import backup_ab_log
+        backup_ab_log()
+    except Exception as e:
+        print(f"AB log backup skipped: {e}")
+
 
 if __name__ == "__main__":
     import sys

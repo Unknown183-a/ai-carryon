@@ -9,162 +9,158 @@ from datetime import datetime, timezone
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 REPO = "Unknown183-a/ai-carryon"
 BRANCH = "data"
-FILE_PATH = "view_history.json"
+
 HISTORY_FILE = "output/view_history.json"
-API_BASE = f"https://api.github.com/repos/{REPO}/contents/{FILE_PATH}"
-RAW_URL = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{FILE_PATH}"
+AB_LOG_FILE = "output/title_ab_log.json"
+POSTED_FILE = "output/posted_topics.txt"
+DB_FILE = "output/aicarryon.db"
 
 
-def restore_view_history():
-    """Pull latest view_history.json from GitHub data branch on startup"""
+def _api_base(repo_filename):
+    return f"https://api.github.com/repos/{REPO}/contents/{repo_filename}"
+
+
+def _raw_url(repo_filename):
+    return f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{repo_filename}"
+
+
+def _restore_file(repo_filename, local_path, binary=False):
+    """Generic: pull a file from the GitHub data branch to local_path."""
     try:
-        print("Restoring view history from GitHub...")
-        os.makedirs("output", exist_ok=True)
-        urllib.request.urlretrieve(f"{RAW_URL}?nocache={os.urandom(4).hex()}", HISTORY_FILE)
-        data = json.load(open(HISTORY_FILE))
-        total = sum(len(v["snapshots"]) for v in data.values())
-        print(f"Restored {len(data)} videos, {total} total snapshots")
+        os.makedirs(os.path.dirname(local_path) or ".", exist_ok=True)
+        url = f"{_raw_url(repo_filename)}?nocache={os.urandom(4).hex()}"
+        urllib.request.urlretrieve(url, local_path)
         return True
     except Exception as e:
-        print(f"No existing backup found (starting fresh): {e}")
+        print(f"No existing backup for {repo_filename} (starting fresh): {e}")
         return False
 
 
-def backup_view_history():
-    """Push view_history.json to GitHub data branch via API"""
+def _backup_file(local_path, repo_filename, commit_message):
+    """Generic: push a local file to the GitHub data branch via Contents API."""
     if not GITHUB_TOKEN:
-        print("No GITHUB_TOKEN — skipping backup")
+        print(f"No GITHUB_TOKEN — skipping backup of {repo_filename}")
         return False
 
-    if not os.path.exists(HISTORY_FILE):
-        print("No view history file to backup")
+    if not os.path.exists(local_path):
+        print(f"No local file at {local_path} — skipping backup")
         return False
 
     try:
-        # Read current file content
-        with open(HISTORY_FILE, "r") as f:
-            content = f.read()
+        with open(local_path, "rb") as f:
+            raw = f.read()
+        content_b64 = base64.b64encode(raw).decode("utf-8")
 
-        # Encode to base64
-        content_b64 = base64.b64encode(content.encode("utf-8")).decode("utf-8")
-
-        # Get current file SHA (needed for update)
         sha = None
         try:
             req = urllib.request.Request(
-                f"{API_BASE}?ref={BRANCH}",
+                f"{_api_base(repo_filename)}?ref={BRANCH}",
                 headers={
                     "Authorization": f"Bearer {GITHUB_TOKEN}",
                     "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28"
-                }
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
             )
             with urllib.request.urlopen(req) as resp:
                 file_info = json.loads(resp.read())
                 sha = file_info.get("sha")
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                sha = None  # File doesn't exist yet, will create
-            else:
+            if e.code != 404:
                 raise
 
-        # Prepare payload
         payload = {
-            "message": "Auto: update view history",
+            "message": commit_message,
             "content": content_b64,
-            "branch": BRANCH
+            "branch": BRANCH,
         }
         if sha:
             payload["sha"] = sha
 
-        # Push to GitHub
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
-            API_BASE,
+            _api_base(repo_filename),
             data=data,
             method="PUT",
             headers={
                 "Authorization": f"Bearer {GITHUB_TOKEN}",
                 "Accept": "application/vnd.github+json",
                 "Content-Type": "application/json",
-                "X-GitHub-Api-Version": "2022-11-28"
-            }
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
         )
         with urllib.request.urlopen(req) as resp:
-            result = json.loads(resp.read())
-            print(f"View history backed up to GitHub ✅ ({len(content)} bytes)")
+            json.loads(resp.read())
+            print(f"{repo_filename} backed up to GitHub ✅ ({len(raw)} bytes)")
             return True
 
     except Exception as e:
-        print(f"Backup failed: {e}")
+        print(f"Backup of {repo_filename} failed: {e}")
         return False
 
 
-# ─────────────────────────────────────────────
-# SQLite DB backup (added — closes the gap where
-# aicarryon.db itself was never backed up, only
-# the legacy view_history.json)
-# ─────────────────────────────────────────────
+# ── view_history.json (unchanged behavior, now via shared helpers) ────────
 
-def backup_sqlite_db(db_path="output/aicarryon.db", repo_path="output/aicarryon.db"):
-    if not GITHUB_TOKEN:
-        print("No GITHUB_TOKEN — skipping DB backup")
-        return
+def restore_view_history():
+    print("Restoring view history from GitHub...")
+    ok = _restore_file("view_history.json", HISTORY_FILE)
+    if ok:
+        try:
+            data = json.load(open(HISTORY_FILE))
+            total = sum(len(v["snapshots"]) for v in data.values())
+            print(f"Restored {len(data)} videos, {total} total snapshots")
+        except Exception as e:
+            print(f"Restored file but could not parse summary: {e}")
+    return ok
 
-    if not os.path.exists(db_path):
-        print(f"No DB file found at {db_path} — skipping backup")
-        return
 
-    repo = os.environ.get("GITHUB_REPO", "")
-    if not repo:
-        print("No GITHUB_REPO set — skipping DB backup")
-        return
+def backup_view_history():
+    return _backup_file(HISTORY_FILE, "view_history.json", "Auto: update view history")
 
-    api_url = f"https://api.github.com/repos/{repo}/contents/{repo_path}"
 
-    with open(db_path, "rb") as f:
-        content_b64 = base64.b64encode(f.read()).decode("utf-8")
+# ── title_ab_log.json (NEW — previously never backed up) ──────────────────
 
-    # Check if file already exists (need sha to update)
-    sha = None
-    try:
-        req = urllib.request.Request(
-            api_url,
-            headers={"Authorization": f"Bearer {GITHUB_TOKEN}"},
-        )
-        with urllib.request.urlopen(req) as resp:
-            existing = json.loads(resp.read().decode("utf-8"))
-            sha = existing.get("sha")
-    except urllib.error.HTTPError as e:
-        if e.code != 404:
-            print(f"Could not check existing DB backup: {e}")
-    except Exception as e:
-        print(f"Could not check existing DB backup: {e}")
+def restore_ab_log():
+    print("Restoring AB title log from GitHub...")
+    return _restore_file("title_ab_log.json", AB_LOG_FILE)
 
-    payload = {
-        "message": f"Backup aicarryon.db — {datetime.now(timezone.utc).isoformat()}",
-        "content": content_b64,
-    }
-    if sha:
-        payload["sha"] = sha
 
-    try:
-        req = urllib.request.Request(
-            api_url,
-            headers={
-                "Authorization": f"Bearer {GITHUB_TOKEN}",
-                "Content-Type": "application/json",
-            },
-            data=json.dumps(payload).encode("utf-8"),
-            method="PUT",
-        )
-        with urllib.request.urlopen(req) as resp:
-            if resp.status in (200, 201):
-                size = os.path.getsize(db_path)
-                print(f"aicarryon.db backed up to GitHub ✅ ({size} bytes)")
-            else:
-                print(f"DB backup failed: {resp.status}")
-    except urllib.error.HTTPError as e:
-        print(f"DB backup failed: {e.code} {e.read()[:200]}")
-    except Exception as e:
-        print(f"DB backup failed: {e}")
+def backup_ab_log():
+    return _backup_file(AB_LOG_FILE, "title_ab_log.json", "Auto: update AB title log")
+
+
+# ── posted_topics.txt (NEW — previously never backed up) ──────────────────
+
+def restore_posted_topics():
+    print("Restoring posted topics from GitHub...")
+    return _restore_file("posted_topics.txt", POSTED_FILE)
+
+
+def backup_posted_topics():
+    return _backup_file(POSTED_FILE, "posted_topics.txt", "Auto: update posted topics")
+
+
+# ── aicarryon.db (NEW — direct DB backup, belt-and-suspenders alongside
+#    the JSON-based migrate_from_json path) ────────────────────────────────
+
+def restore_sqlite_db():
+    print("Restoring aicarryon.db from GitHub (if present)...")
+    return _restore_file("aicarryon.db", DB_FILE)
+
+
+def backup_sqlite_db():
+    return _backup_file(DB_FILE, "aicarryon.db", f"Backup aicarryon.db — {datetime.now(timezone.utc).isoformat()}")
+
+
+# ── Convenience: restore/backup everything at once ─────────────────────────
+
+def restore_all():
+    restore_view_history()
+    restore_ab_log()
+    restore_posted_topics()
+
+
+def backup_all():
+    backup_view_history()
+    backup_ab_log()
+    backup_posted_topics()
+    backup_sqlite_db()
