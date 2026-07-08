@@ -166,8 +166,26 @@ def generate_and_upload(force=False):
     else:
         log("FORCE MODE: bypassing schedule gate and daily cap")
 
+    # --- Mutex lock: prevent overlapping generation runs ---
+    lock_path = "output/generation.lock"
+    if os.path.exists(lock_path):
+        lock_age = time.time() - os.path.getmtime(lock_path)
+        if lock_age < 1800:  # 30 min — generous vs. typical 5-15 min run
+            log(f"Generation already in progress (lock age {lock_age:.0f}s) — skipping to avoid concurrent run")
+            return
+        else:
+            log(f"Stale lock found (age {lock_age:.0f}s) — previous run likely crashed, proceeding")
+
+    os.makedirs("output", exist_ok=True)
+    with open(lock_path, "w") as f:
+        f.write(str(time.time()))
+
     log("=== Starting scheduled video generation ===")
     try:
+        from agents.checkpoint import (
+            save_checkpoint, is_stage_done, get_stage_data,
+            clear_checkpoint, list_checkpoints,
+        )
         from agents.research_agent import research
         from agents.script_agent import create_script
         from agents.seo_agent import generate_seo
@@ -179,48 +197,99 @@ def generate_and_upload(force=False):
         from agents.video_agent import create_video
         from agents.upload_agent import upload_video
 
-        log("Fetching trending YouTube topic...")
-        topic = get_fresh_trending_topic(region_code="US")
-        log(f"Trending topic: {topic}")
+        # Resume a crashed run if one exists, instead of always starting fresh
+        pending = list_checkpoints()
+        if pending:
+            cp = pending[0]
+            topic = cp["topic"]
+            log(f"Resuming incomplete generation for topic: {topic} (last stage: {cp.get('last_stage')})")
+        else:
+            log("Fetching trending YouTube topic...")
+            topic = get_fresh_trending_topic(region_code="US")
+            log(f"Trending topic: {topic}")
 
-        log("Researching...")
-        research_data = research(topic)
+        if is_stage_done(topic, "research"):
+            research_data = get_stage_data(topic, "research")
+            log("Resuming: research already done")
+        else:
+            log("Researching...")
+            research_data = research(topic)
+            save_checkpoint(topic, "research", research_data)
 
-        log("Writing script...")
-        script = create_script(research_data)
+        if is_stage_done(topic, "script"):
+            script = get_stage_data(topic, "script")
+            log("Resuming: script already done")
+        else:
+            log("Writing script...")
+            script = create_script(research_data)
+            save_checkpoint(topic, "script", script)
 
-        log("Generating SEO...")
-        seo = generate_seo(topic, script)
+        if is_stage_done(topic, "seo"):
+            seo = get_stage_data(topic, "seo")
+            log("Resuming: seo already done")
+        else:
+            log("Generating SEO...")
+            seo = generate_seo(topic, script)
+            save_checkpoint(topic, "seo", seo)
 
         log("Generating thumbnail text...")
         generate_thumbnail_text(topic)
 
-        log("Generating thumbnail image...")
-        thumbnail_image = generate_thumbnail(seo["title"], topic)
+        if is_stage_done(topic, "thumbnail") and get_stage_data(topic, "thumbnail") and os.path.exists(get_stage_data(topic, "thumbnail")):
+            thumbnail_image = get_stage_data(topic, "thumbnail")
+            log("Resuming: thumbnail already done")
+        else:
+            log("Generating thumbnail image...")
+            thumbnail_image = generate_thumbnail(seo["title"], topic)
+            save_checkpoint(topic, "thumbnail", thumbnail_image)
 
-        log("Generating background images...")
-        image_paths, image_errors = generate_backgrounds(topic, script, num_images=4)
-        if not image_paths:
-            log(f"ERROR: No images — {image_errors}")
-            return
+        if is_stage_done(topic, "images") and get_stage_data(topic, "images") and all(os.path.exists(p) for p in get_stage_data(topic, "images")):
+            image_paths = get_stage_data(topic, "images")
+            log("Resuming: images already done")
+        else:
+            log("Generating background images...")
+            image_paths, image_errors = generate_backgrounds(topic, script, num_images=4)
+            if not image_paths:
+                log(f"ERROR: No images — {image_errors}")
+                return
+            save_checkpoint(topic, "images", image_paths)
 
-        log("Generating voiceover...")
-        voice_file = generate_voice(script)
+        if is_stage_done(topic, "voice") and get_stage_data(topic, "voice") and os.path.exists(get_stage_data(topic, "voice")):
+            voice_file = get_stage_data(topic, "voice")
+            log("Resuming: voice already done")
+        else:
+            log("Generating voiceover...")
+            voice_file = generate_voice(script)
+            save_checkpoint(topic, "voice", voice_file)
 
-        log("Generating captions...")
-        create_srt(script, voice_file)
+        if not is_stage_done(topic, "captions"):
+            log("Generating captions...")
+            create_srt(script, voice_file)
+            save_checkpoint(topic, "captions", True)
+        else:
+            log("Resuming: captions already done")
 
-        log("Creating video...")
-        video_file = create_video()
+        if is_stage_done(topic, "video") and get_stage_data(topic, "video") and os.path.exists(get_stage_data(topic, "video")):
+            video_file = get_stage_data(topic, "video")
+            log("Resuming: video already rendered")
+        else:
+            log("Creating video...")
+            video_file = create_video()
+            save_checkpoint(topic, "video", video_file)
 
-        log("Uploading to YouTube...")
-        video_id, video_url = upload_video(
-            video_path=video_file,
-            title=seo["title"],
-            description=seo["description"],
-            hashtags=seo["hashtags"],
-            thumbnail_path=thumbnail_image
-        )
+        if is_stage_done(topic, "upload"):
+            video_id, video_url = get_stage_data(topic, "upload")
+            log(f"Resuming: already uploaded previously — {video_url} — skipping re-upload")
+        else:
+            log("Uploading to YouTube...")
+            video_id, video_url = upload_video(
+                video_path=video_file,
+                title=seo["title"],
+                description=seo["description"],
+                hashtags=seo["hashtags"],
+                thumbnail_path=thumbnail_image
+            )
+            save_checkpoint(topic, "upload", [video_id, video_url])
 
         # Link this upload back to its AB title test, if any
         if seo.get("ab_winner"):
@@ -244,6 +313,8 @@ def generate_and_upload(force=False):
         mark_posted(topic)
         log(f"SUCCESS: YouTube: {video_url}")
 
+        clear_checkpoint(topic)
+
         from agents.cleanup_agent import cleanup_after_upload
         cleanup_after_upload(video_file, log_fn=log)
 
@@ -251,6 +322,9 @@ def generate_and_upload(force=False):
         import traceback
         log(f"ERROR: {str(e)}")
         log(f"TRACEBACK: {traceback.format_exc()}")
+    finally:
+        if os.path.exists(lock_path):
+            os.remove(lock_path)
 
 
 # Check every hour — generate+upload only when current hour matches a top velocity window
