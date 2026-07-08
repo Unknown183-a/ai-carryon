@@ -20,19 +20,19 @@ def _api_base(repo_filename):
     return f"https://api.github.com/repos/{REPO}/contents/{repo_filename}"
 
 
-def _raw_url(repo_filename):
-    return f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{repo_filename}"
+def _raw_url(repo_filename, branch=None):
+    return f"https://raw.githubusercontent.com/{REPO}/{branch or BRANCH}/{repo_filename}"
 
 
-def _restore_file(repo_filename, local_path, binary=False):
-    """Generic: pull a file from the GitHub data branch to local_path."""
+def _restore_file(repo_filename, local_path, binary=False, branch=None):
+    """Generic: pull a file from a GitHub branch to local_path."""
     try:
         os.makedirs(os.path.dirname(local_path) or ".", exist_ok=True)
-        url = f"{_raw_url(repo_filename)}?nocache={os.urandom(4).hex()}"
+        url = f"{_raw_url(repo_filename, branch)}?nocache={os.urandom(4).hex()}"
         urllib.request.urlretrieve(url, local_path)
         return True
     except Exception as e:
-        print(f"No existing backup for {repo_filename} (starting fresh): {e}")
+        print(f"No existing backup for {repo_filename} on branch {branch or BRANCH} (starting fresh): {e}")
         return False
 
 
@@ -142,9 +142,9 @@ def backup_posted_topics():
 # ── aicarryon.db (NEW — direct DB backup, belt-and-suspenders alongside
 #    the JSON-based migrate_from_json path) ────────────────────────────────
 
-def restore_sqlite_db():
-    print("Restoring aicarryon.db from GitHub (if present)...")
-    return _restore_file("aicarryon.db", DB_FILE)
+def restore_sqlite_db(branch=None, local_path=None):
+    print(f"Restoring aicarryon.db from GitHub branch {branch or BRANCH} (if present)...")
+    return _restore_file("aicarryon.db", local_path or DB_FILE, branch=branch)
 
 
 def backup_sqlite_db():

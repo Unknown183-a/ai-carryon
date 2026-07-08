@@ -27,6 +27,9 @@ LIVE_APP_URL = "https://ai-carryon-production.up.railway.app"
 
 DB_PATH = os.environ.get("DB_PATH", "output/aicarryon.db")
 
+from agents.dashboard_sync import sync_all_channel_data
+_sync_status = sync_all_channel_data()
+
 # ─────────────────────────────────────────────
 # Pull safe, read-only stats from SQLite (no secrets, no operational data)
 # ─────────────────────────────────────────────
