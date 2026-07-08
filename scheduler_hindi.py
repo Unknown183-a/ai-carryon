@@ -56,11 +56,25 @@ def mark_posted_today(topic):
         f.write(f"{today}|{topic}\n")
 
 
+_adaptive_hours_cache = {"value": None, "computed_at": None}
+_ADAPTIVE_HOURS_CACHE_TTL_SECONDS = 180  # recompute at most every 3 minutes
+
+
 def get_adaptive_hours():
     """
     Get the top N best upload hours from real Hindi velocity data.
     Falls back to spread-out defaults if not enough data yet.
+
+    Cached for _ADAPTIVE_HOURS_CACHE_TTL_SECONDS — the underlying velocity
+    query does a full pass over all snapshots, and this is now polled every
+    60s by the main loop, so we avoid recomputing on every single cycle.
     """
+    now_ts = datetime.datetime.utcnow().timestamp()
+    cached = _adaptive_hours_cache
+    if cached["value"] is not None and cached["computed_at"] is not None:
+        if now_ts - cached["computed_at"] < _ADAPTIVE_HOURS_CACHE_TTL_SECONDS:
+            return cached["value"]
+
     try:
         from agents_hindi.velocity_agent import get_best_upload_windows_hindi
         windows = get_best_upload_windows_hindi(top_n=VIDEOS_PER_DAY)
@@ -68,6 +82,8 @@ def get_adaptive_hours():
         if len(good_windows) >= VIDEOS_PER_DAY:
             hours = sorted([w["hour"] for w in good_windows[:VIDEOS_PER_DAY]])
             log(f"Adaptive hours from real data (UTC): {hours}")
+            _adaptive_hours_cache["value"] = hours
+            _adaptive_hours_cache["computed_at"] = now_ts
             return hours
     except Exception as e:
         log(f"Could not get adaptive hours: {e}")
@@ -75,6 +91,8 @@ def get_adaptive_hours():
     # Fallback — spread across day in UTC (roughly matches 8AM/1PM/7PM IST)
     fallback = [2, 7, 13]  # UTC hours ≈ 7:30AM, 12:30PM, 6:30PM IST
     log(f"Not enough Hindi data yet — using fallback hours (UTC): {fallback}")
+    _adaptive_hours_cache["value"] = fallback
+    _adaptive_hours_cache["computed_at"] = now_ts
     return fallback
 
 
@@ -260,7 +278,11 @@ def track_views_hindi_job():
 
 
 # Check every hour if this is a good time to generate — fully adaptive
-schedule.every().hour.at(":00").do(generate_and_upload_hindi)
+# NOTE: exact-minute schedule.at(":00") intentionally not used for generation
+# — a Railway restart landing on that exact instant silently skips the whole
+# hour with no catch-up. Generation is driven by a continuous poll in the
+# main loop instead (see __main__), resilient to restarts at any point
+# during the window.
 
 # Track Hindi views every hour
 schedule.every(1).hours.do(track_views_hindi_job)
@@ -300,6 +322,27 @@ if __name__ == "__main__":
         log("TEST MODE: will force generate_and_upload_hindi(force=True) in 5 minutes — bypassing schedule gate")
         threading.Timer(300, lambda: generate_and_upload_hindi(force=True)).start()
 
+    generated_hours_today = set()
+    last_date = datetime.date.today()
+
     while True:
         schedule.run_pending()
+
+        now = datetime.datetime.utcnow()
+        if datetime.date.today() != last_date:
+            generated_hours_today = set()
+            last_date = datetime.date.today()
+
+        try:
+            should_run, reason = should_generate_now()
+            if should_run and now.hour not in generated_hours_today:
+                if get_posted_count_today() >= VIDEOS_PER_DAY:
+                    generated_hours_today.add(now.hour)
+                else:
+                    log(f"Poll trigger: {reason}")
+                    generated_hours_today.add(now.hour)
+                    generate_and_upload_hindi(force=True)
+        except Exception as pe:
+            log(f"Poll check error: {pe}")
+
         time.sleep(60)

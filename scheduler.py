@@ -88,8 +88,26 @@ def get_fresh_trending_topic(region_code="US", max_attempts=5):
     return topic + " - extra"
 
 
+_top_hours_cache = {"value": None, "computed_at": None}
+_TOP_HOURS_CACHE_TTL_SECONDS = 180  # recompute at most every 3 minutes
+
+
 def get_top_upload_hours(n=3, min_gap_hours=1):
-    """Pick top N distinct upload hours by real velocity. No averaging."""
+    """
+    Pick top N distinct upload hours by real velocity. No averaging.
+
+    Cached for _TOP_HOURS_CACHE_TTL_SECONDS since the underlying query
+    (get_peak_hours) does a full in-memory pass over every snapshot row —
+    cheap today, but grows with snapshot count, and this function is now
+    polled every 30s by the main loop. Caching keeps the poll loop's
+    restart-resilience benefit without recomputing on every single cycle.
+    """
+    now_ts = datetime.datetime.utcnow().timestamp()
+    cached = _top_hours_cache
+    if cached["value"] is not None and cached["computed_at"] is not None:
+        if now_ts - cached["computed_at"] < _TOP_HOURS_CACHE_TTL_SECONDS:
+            return cached["value"]
+
     try:
         from agents.database import db
         peak_hours = db.get_peak_hours()
@@ -111,12 +129,17 @@ def get_top_upload_hours(n=3, min_gap_hours=1):
             if len(chosen) == n:
                 break
         if len(chosen) >= 1:
-            log(f"Top upload hours from real data (UTC): {sorted(chosen)}")
-            return sorted(chosen)
+            result = sorted(chosen)
+            log(f"Top upload hours from real data (UTC): {result}")
+            _top_hours_cache["value"] = result
+            _top_hours_cache["computed_at"] = now_ts
+            return result
     except Exception as e:
         log(f"Could not get top upload hours: {e}")
     fallback = [4, 12, 19]
     log(f"Using fallback upload hours (UTC): {fallback}")
+    _top_hours_cache["value"] = fallback
+    _top_hours_cache["computed_at"] = now_ts
     return fallback
 
 
@@ -231,7 +254,12 @@ def generate_and_upload(force=False):
 
 
 # Check every hour — generate+upload only when current hour matches a top velocity window
-schedule.every().hour.at(":00").do(generate_and_upload)
+# NOTE: hourly schedule.at(":00") intentionally NOT used for generation —
+# it only fires at the exact minute mark, so a Railway restart landing on
+# that instant silently skips the whole hour with no catch-up. Generation
+# is instead driven by a continuous poll in the main loop (see __main__),
+# which checks every 30s whether we're in a top hour and haven't generated
+# for it yet — resilient to restarts at any point during the window.
 
 
 def track_views_job():
@@ -312,6 +340,28 @@ if __name__ == "__main__":
         log("TEST MODE: will force generate_and_upload(force=True) in 5 minutes — bypassing schedule gate")
         threading.Timer(300, lambda: generate_and_upload(force=True)).start()
 
+    generated_hours_today = set()
+    last_date = datetime.datetime.utcnow().date()
+
     while True:
         schedule.run_pending()
+
+        now = datetime.datetime.utcnow()
+        if now.date() != last_date:
+            generated_hours_today = set()
+            last_date = now.date()
+
+        try:
+            should_run, reason = should_upload_now()
+            if should_run and now.hour not in generated_hours_today:
+                posted_today = get_recent_topics(hours=24)
+                if len(posted_today) >= 3:
+                    generated_hours_today.add(now.hour)
+                else:
+                    log(f"Poll trigger: {reason}")
+                    generated_hours_today.add(now.hour)
+                    generate_and_upload(force=True)
+        except Exception as pe:
+            log(f"Poll check error: {pe}")
+
         time.sleep(30)
