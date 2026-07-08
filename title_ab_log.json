@@ -154,5 +154,31 @@
     ],
     "topic": "iPhone 17 Pro Max Camera Test #shorts",
     "generated_at": "2026-07-08T04:30:12Z"
+  },
+  {
+    "winner": {
+      "title": "Your Smart Home Mistake \ud83c\udfe0",
+      "pattern": "personal",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Your Smart Home Mistake \ud83c\udfe0",
+        "pattern": "personal",
+        "score": 8
+      },
+      {
+        "title": "Stop Believing Smart Homes \ud83d\udca1",
+        "pattern": "contrarian",
+        "score": 8
+      },
+      {
+        "title": "Did I Waste $52k \ud83c\udfe0",
+        "pattern": "curiosity",
+        "score": 8
+      }
+    ],
+    "topic": "How I wasted $52,000 in my Dream Smart Home",
+    "generated_at": "2026-07-08T04:43:35Z"
   }
 ]
