@@ -218,6 +218,13 @@ def generate_and_upload_hindi(force=False):
         mark_posted_today(topic)
         log(f"SUCCESS: Upload ho gaya! {video_url}")
 
+        # Push updated DB (video, AB test, posted topic) to GitHub immediately
+        try:
+            from agents.data_persistence import backup_sqlite_db
+            backup_sqlite_db()
+        except Exception as be:
+            log(f"DB backup skipped: {be}")
+
         from agents.cleanup_agent import cleanup_after_upload
         cleanup_after_upload(video, log_fn=log)
 
@@ -233,6 +240,11 @@ def track_views_hindi_job():
         from agents_hindi.view_tracker_agent import track_views_hindi
         history = track_views_hindi()
         log(f"Tracked {len(history)} Hindi videos")
+        try:
+            from agents.data_persistence import backup_sqlite_db
+            backup_sqlite_db()
+        except Exception as be:
+            log(f"DB backup skipped: {be}")
     except Exception as e:
         import traceback
         log(f"ERROR (Hindi view tracking): {str(e)}")
@@ -247,6 +259,23 @@ schedule.every(1).hours.do(track_views_hindi_job)
 
 if __name__ == "__main__":
     log("Hindi Scheduler shuru hua! (Fully Adaptive Mode)")
+
+    # Restore aicarryon.db from the data-hindi GitHub branch before anything else.
+    # Hindi writes straight to SQLite (no JSON intermediary), so we restore the
+    # DB file itself rather than migrating from JSON like the English scheduler.
+    try:
+        from agents.data_persistence import restore_sqlite_db
+        restore_sqlite_db()
+        log("aicarryon.db restored from GitHub (data-hindi branch)")
+    except Exception as e:
+        log(f"DB restore skipped (starting fresh): {e}")
+
+    # Touch db to ensure schema/self-heal migration runs against the restored file
+    try:
+        from agents.database import db
+        db._init_tables()
+    except Exception as e:
+        log(f"DB init check skipped: {e}")
 
     from agents.cleanup_agent import sweep_old_videos
     sweep_old_videos(max_age_hours=24, log_fn=log)

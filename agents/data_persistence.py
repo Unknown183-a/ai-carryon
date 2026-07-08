@@ -7,8 +7,8 @@ import urllib.error
 from datetime import datetime, timezone
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
-REPO = "Unknown183-a/ai-carryon"
-BRANCH = "data"
+REPO = os.getenv("GITHUB_REPO", "Unknown183-a/ai-carryon")
+BRANCH = os.getenv("GITHUB_DATA_BRANCH", "data")
 
 HISTORY_FILE = "output/view_history.json"
 AB_LOG_FILE = "output/title_ab_log.json"
