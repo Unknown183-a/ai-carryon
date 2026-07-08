@@ -24,5 +24,31 @@
     ],
     "topic": "iPhone Drop Test from 30 Meters!",
     "generated_at": "2026-07-08T12:05:38Z"
+  },
+  {
+    "winner": {
+      "title": "Can We Save 360 Games? \ud83e\udd14",
+      "pattern": "question",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Can We Save 360 Games? \ud83e\udd14",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Act Now: Archive 360 \u26a1\ufe0f",
+        "pattern": "urgency",
+        "score": 8
+      },
+      {
+        "title": "Stop Archiving Xbox 360 \ud83d\udeab",
+        "pattern": "contrarian",
+        "score": 6
+      }
+    ],
+    "topic": "Archiving Xbox 360 titles. #xbox #xbox360 #howto #diy",
+    "generated_at": "2026-07-08T18:04:07Z"
   }
 ]
