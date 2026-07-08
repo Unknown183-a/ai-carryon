@@ -1,106 +1,28 @@
 [
   {
     "winner": {
-      "title": "5 Drops from 30m \ud83d\udcf1",
-      "pattern": "number",
-      "score": 8
-    },
-    "variations": [
-      {
-        "title": "5 Drops from 30m \ud83d\udcf1",
-        "pattern": "number",
-        "score": 8
-      },
-      {
-        "title": "Did You Know iPhone Survives 30m Drop? \ud83d\udcf1",
-        "pattern": "curiosity",
-        "score": 8
-      },
-      {
-        "title": "Warning: Drop iPhone \ud83d\udcf1",
-        "pattern": "warning",
-        "score": 7
-      }
-    ],
-    "topic": "iPhone Drop Test from 30 Meters!",
-    "generated_at": "2026-07-08T12:05:38Z"
-  },
-  {
-    "winner": {
-      "title": "Can We Save 360 Games? \ud83e\udd14",
+      "title": "Does ChatGPT Waste Water? \ud83d\udca7",
       "pattern": "question",
       "score": 8
     },
     "variations": [
       {
-        "title": "Can We Save 360 Games? \ud83e\udd14",
+        "title": "Does ChatGPT Waste Water? \ud83d\udca7",
         "pattern": "question",
         "score": 8
       },
       {
-        "title": "Act Now: Archive 360 \u26a1\ufe0f",
-        "pattern": "urgency",
-        "score": 8
-      },
-      {
-        "title": "Stop Archiving Xbox 360 \ud83d\udeab",
-        "pattern": "contrarian",
-        "score": 6
-      }
-    ],
-    "topic": "Archiving Xbox 360 titles. #xbox #xbox360 #howto #diy",
-    "generated_at": "2026-07-08T18:04:07Z"
-  },
-  {
-    "winner": {
-      "title": "5 Reasons Curved \ud83d\udda5\ufe0f",
-      "pattern": "number",
-      "score": 8
-    },
-    "variations": [
-      {
-        "title": "5 Reasons Curved \ud83d\udda5\ufe0f",
-        "pattern": "number",
-        "score": 8
-      },
-      {
-        "title": "Warning: Curved Monitor \ud83d\udea8",
-        "pattern": "warning",
-        "score": 8
-      },
-      {
-        "title": "Did You Know Curved \ud83d\udcca",
-        "pattern": "curiosity",
-        "score": 6
-      }
-    ],
-    "topic": "BUYING CURVED MONITOR FOR PERSONAL SETUP!!! #brokenfix #problemfix #smartphone #screenbreak",
-    "generated_at": "2026-07-08T18:07:18Z"
-  },
-  {
-    "winner": {
-      "title": "Did You Know Curved Monitors Fix Eye Strain? \ud83e\udd2f",
-      "pattern": "curiosity",
-      "score": 8
-    },
-    "variations": [
-      {
-        "title": "Did You Know Curved Monitors Fix Eye Strain? \ud83e\udd2f",
-        "pattern": "curiosity",
-        "score": 8
-      },
-      {
-        "title": "They Don't Know Curved \ud83d\udda5\ufe0f",
+        "title": "They Don't Want You to Know ChatGPT Wastes Water \ud83d\udca7",
         "pattern": "revelation",
-        "score": 7
+        "score": 8
       },
       {
-        "title": "5 Curved Monitor \ud83d\udc4d",
-        "pattern": "number",
-        "score": 6
+        "title": "Stop Believing ChatGPT Wastes Water \ud83d\udca7",
+        "pattern": "contrarian",
+        "score": 8
       }
     ],
-    "topic": "BUYING CURVED MONITOR FOR PERSONAL SETUP!!! #brokenfix #problemfix #smartphone #screenbreak",
-    "generated_at": "2026-07-08T18:19:15Z"
+    "topic": "How ChatGPT WASTES water..",
+    "generated_at": "2026-07-08T19:18:10Z"
   }
 ]
