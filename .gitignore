@@ -13,3 +13,6 @@ output/
 *.json
 !requirements.txt
 .env.save
+token_hindi.json
+client_secret_hindi.json
+get_hindi_token.py
