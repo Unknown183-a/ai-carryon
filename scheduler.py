@@ -364,6 +364,7 @@ if __name__ == "__main__":
             if should_run and now.hour not in generated_hours_today:
                 posted_today = get_recent_topics(hours=24)
                 if len(posted_today) >= 3:
+                    log(f"Poll check: {reason}, but daily cap reached ({len(posted_today)} posted in last 24h) — skipping")
                     generated_hours_today.add(now.hour)
                 else:
                     log(f"Poll trigger: {reason}")

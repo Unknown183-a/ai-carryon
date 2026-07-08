@@ -265,8 +265,9 @@ class Database:
 
     # ── Posted Topics ──────────────────────────────────────────────────────
 
-    def mark_posted(self, topic, channel="english"):
-        posted_at = datetime.now(timezone.utc).isoformat()
+    def mark_posted(self, topic, channel="english", posted_at=None):
+        if posted_at is None:
+            posted_at = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute("""
                 INSERT INTO posted_topics (topic, channel, posted_at)
@@ -375,7 +376,7 @@ class Database:
                         line = line.strip()
                         if "|" in line:
                             ts, topic = line.split("|", 1)
-                            self.mark_posted(topic.strip())
+                            self.mark_posted(topic.strip(), posted_at=ts.strip())
                             migrated["posted"] += 1
                 print(f"✅ Migrated {migrated['posted']} posted topics")
             except Exception as e:
