@@ -128,5 +128,31 @@
     ],
     "topic": "Smart Appliances!, Tools Items, New Gadgets, Versatile Utensils, #shorts #gadgets",
     "generated_at": "2026-07-08T04:12:30Z"
+  },
+  {
+    "winner": {
+      "title": "Did You Know iPhone 17 Pro Max \ud83d\udcf8",
+      "pattern": "curiosity",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Did You Know iPhone 17 Pro Max \ud83d\udcf8",
+        "pattern": "curiosity",
+        "score": 8
+      },
+      {
+        "title": "Can iPhone 17 Pro Max Camera Beat DSLR? \ud83d\udcf8",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Stop Using Old Cameras: iPhone 17 Pro Max \ud83d\udcf8",
+        "pattern": "urgency",
+        "score": 8
+      }
+    ],
+    "topic": "iPhone 17 Pro Max Camera Test #shorts",
+    "generated_at": "2026-07-08T04:30:12Z"
   }
 ]
