@@ -158,6 +158,18 @@ def _parse_ts(ts_raw):
         return None
     if isinstance(ts_raw, (int, float)):
         return datetime.fromtimestamp(ts_raw, tz=timezone.utc)
+
+    # Try native ISO parsing first — handles microseconds and +00:00 offsets,
+    # e.g. "2026-07-07T11:21:52.292960+00:00" (actual snapshot timestamp format)
+    try:
+        dt = datetime.fromisoformat(ts_raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, TypeError):
+        pass
+
+    # Fallback formats for other timestamp styles seen in this codebase
     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d"):
         try:
             dt = datetime.strptime(ts_raw, fmt)
