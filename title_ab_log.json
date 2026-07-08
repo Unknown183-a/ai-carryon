@@ -1,184 +1,28 @@
 [
   {
     "winner": {
-      "title": "Are You a Pro Typist? \ud83e\udd14",
-      "pattern": "question",
+      "title": "5 Drops from 30m \ud83d\udcf1",
+      "pattern": "number",
       "score": 8
     },
     "variations": [
       {
-        "title": "Are You a Pro Typist? \ud83e\udd14",
-        "pattern": "question",
-        "score": 8
-      },
-      {
-        "title": "Your Keyboard Habits Reveal You \ud83e\udd14",
-        "pattern": "personal",
-        "score": 8
-      },
-      {
-        "title": "They Don't Know Your Keyboard Type \ud83d\udda5\ufe0f",
-        "pattern": "revelation",
-        "score": 8
-      }
-    ],
-    "topic": "What Keyboard User are YOU?!",
-    "generated_at": "2026-07-07T10:27:03Z"
-  },
-  {
-    "winner": {
-      "title": "What's a Neophone? \ud83d\udcf1",
-      "pattern": "question",
-      "score": 8
-    },
-    "variations": [
-      {
-        "title": "What's a Neophone? \ud83d\udcf1",
-        "pattern": "question",
-        "score": 8
-      },
-      {
-        "title": "Warning: Neophone Looks Aren't \ud83d\udea8",
-        "pattern": "warning",
-        "score": 8
-      },
-      {
-        "title": "5 Neophone Features \ud83d\udcf1",
+        "title": "5 Drops from 30m \ud83d\udcf1",
         "pattern": "number",
         "score": 8
-      }
-    ],
-    "topic": "what a neophone looks like",
-    "generated_at": "2026-07-07T11:00:32Z"
-  },
-  {
-    "winner": {
-      "title": "Everyone's Wrong About This Keyboard \ud83d\udca1",
-      "pattern": "contrarian",
-      "score": 8
-    },
-    "variations": [
-      {
-        "title": "Everyone's Wrong About This Keyboard \ud83d\udca1",
-        "pattern": "contrarian",
-        "score": 8
       },
       {
-        "title": "Warning: Bad Keyboard \ud83d\udea8",
-        "pattern": "warning",
-        "score": 8
-      },
-      {
-        "title": "5 Reasons It's Good \ud83d\udda5\ufe0f",
-        "pattern": "number",
-        "score": 8
-      }
-    ],
-    "topic": "Is this keyboard good?",
-    "generated_at": "2026-07-07T12:00:44Z"
-  },
-  {
-    "winner": {
-      "title": "Can Curved Monitors Fix? \ud83e\udd14",
-      "pattern": "question",
-      "score": 8
-    },
-    "variations": [
-      {
-        "title": "Can Curved Monitors Fix? \ud83e\udd14",
-        "pattern": "question",
-        "score": 8
-      },
-      {
-        "title": "Everyone's Wrong About Curved \ud83d\udda5\ufe0f",
-        "pattern": "contrarian",
-        "score": 8
-      },
-      {
-        "title": "Warning: Curved Monitor \ud83d\udea8",
-        "pattern": "warning",
-        "score": 7
-      }
-    ],
-    "topic": "BUYING CURVED MONITOR FOR PERSONAL SETUP!!! #brokenfix #problemfix #smartphone #screenbreak",
-    "generated_at": "2026-07-07T19:42:59Z"
-  },
-  {
-    "winner": {
-      "title": "Your Home Is Changing \ud83c\udfe0",
-      "pattern": "personal",
-      "score": 7
-    },
-    "variations": [
-      {
-        "title": "Your Home Is Changing \ud83c\udfe0",
-        "pattern": "personal",
-        "score": 7
-      },
-      {
-        "title": "Nobody Knew Appliances \ud83d\udee0\ufe0f",
-        "pattern": "revelation",
-        "score": 7
-      },
-      {
-        "title": "Can Smart Appliances \ud83e\udd14",
-        "pattern": "question",
-        "score": 7
-      }
-    ],
-    "topic": "Smart Appliances!, Tools Items, New Gadgets, Versatile Utensils, #shorts #gadgets",
-    "generated_at": "2026-07-08T04:12:30Z"
-  },
-  {
-    "winner": {
-      "title": "Did You Know iPhone 17 Pro Max \ud83d\udcf8",
-      "pattern": "curiosity",
-      "score": 8
-    },
-    "variations": [
-      {
-        "title": "Did You Know iPhone 17 Pro Max \ud83d\udcf8",
+        "title": "Did You Know iPhone Survives 30m Drop? \ud83d\udcf1",
         "pattern": "curiosity",
         "score": 8
       },
       {
-        "title": "Can iPhone 17 Pro Max Camera Beat DSLR? \ud83d\udcf8",
-        "pattern": "question",
-        "score": 8
-      },
-      {
-        "title": "Stop Using Old Cameras: iPhone 17 Pro Max \ud83d\udcf8",
-        "pattern": "urgency",
-        "score": 8
+        "title": "Warning: Drop iPhone \ud83d\udcf1",
+        "pattern": "warning",
+        "score": 7
       }
     ],
-    "topic": "iPhone 17 Pro Max Camera Test #shorts",
-    "generated_at": "2026-07-08T04:30:12Z"
-  },
-  {
-    "winner": {
-      "title": "Your Smart Home Mistake \ud83c\udfe0",
-      "pattern": "personal",
-      "score": 8
-    },
-    "variations": [
-      {
-        "title": "Your Smart Home Mistake \ud83c\udfe0",
-        "pattern": "personal",
-        "score": 8
-      },
-      {
-        "title": "Stop Believing Smart Homes \ud83d\udca1",
-        "pattern": "contrarian",
-        "score": 8
-      },
-      {
-        "title": "Did I Waste $52k \ud83c\udfe0",
-        "pattern": "curiosity",
-        "score": 8
-      }
-    ],
-    "topic": "How I wasted $52,000 in my Dream Smart Home",
-    "generated_at": "2026-07-08T04:43:35Z"
+    "topic": "iPhone Drop Test from 30 Meters!",
+    "generated_at": "2026-07-08T12:05:38Z"
   }
 ]
