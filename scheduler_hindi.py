@@ -240,6 +240,14 @@ def track_views_hindi_job():
         from agents_hindi.view_tracker_agent import track_views_hindi
         history = track_views_hindi()
         log(f"Tracked {len(history)} Hindi videos")
+
+        try:
+            from agents.close_ab_loop import close_loop
+            close_loop(channel="hindi")
+            log("Closed AB-title loop (actual_views_24h updated where due)")
+        except Exception as ce:
+            log(f"close_ab_loop skipped: {ce}")
+
         try:
             from agents.data_persistence import backup_sqlite_db
             backup_sqlite_db()
