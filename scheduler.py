@@ -272,6 +272,14 @@ def track_views_job():
         from agents.view_tracker_agent import track_views
         history = track_views()
         log(f"Tracked {len(history)} videos")
+
+        try:
+            from agents.close_ab_loop import close_loop
+            close_loop(channel="english")
+            log("Closed AB-title loop (actual_views_24h updated where due)")
+        except Exception as ce:
+            log(f"close_ab_loop skipped: {ce}")
+
         try:
             from agents.data_persistence import backup_view_history
             backup_view_history()
