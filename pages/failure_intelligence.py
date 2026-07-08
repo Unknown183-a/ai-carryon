@@ -13,6 +13,10 @@ import plotly.express as px
 from agents.database import db
 
 st.set_page_config(page_title="Failure Intelligence", page_icon="🔍", layout="wide")
+
+from agents.dashboard_sync import sync_all_channel_data
+_sync_status = sync_all_channel_data()
+
 st.title("🔍 Failure Intelligence — Phase 5 (v1)")
 st.caption("Real 24h performance data, closed via the AB-title loop. No pattern detection yet — raw visibility first.")
 

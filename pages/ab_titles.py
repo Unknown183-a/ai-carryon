@@ -15,6 +15,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 st.set_page_config(page_title="A/B Titles · AI CarryON", page_icon="🎯", layout="wide")
 
+from agents.dashboard_sync import sync_all_channel_data
+_sync_status = sync_all_channel_data()
+
+
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 if APP_PASSWORD:
     if "authenticated" not in st.session_state:

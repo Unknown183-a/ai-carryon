@@ -8,6 +8,10 @@ st.set_page_config(
     layout="wide"
 )
 
+from agents.dashboard_sync import sync_all_channel_data
+_sync_status = sync_all_channel_data()
+
+
 st.markdown("""
 <style>
 /* ── Base ── */
