@@ -138,6 +138,13 @@ def fetch_new_comments(max_results=50):
                 if comment_id in already_seen:
                     continue
 
+                # Skip if this thread already has ANY reply — whether posted
+                # manually by the channel owner or by someone else. We only
+                # want to act on genuinely untouched comments.
+                reply_count = item["snippet"].get("totalReplyCount", 0)
+                if reply_count > 0:
+                    continue
+
                 snippet = top_comment["snippet"]
                 fetched.append({
                     "comment_id": comment_id,
