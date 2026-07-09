@@ -25,7 +25,7 @@ import datetime
 # Config
 # ─────────────────────────────────────────────
 
-AUTO_REPLY = False  # flip to True to actually publish replies to YouTube
+AUTO_REPLY = True  # flip to True to actually publish replies to YouTube 
 
 COMMENT_HISTORY_FILE = "output/comment_history_hindi.json"
 TOPIC_REQUESTS_FILE = "output/topic_requests_hindi.json"
