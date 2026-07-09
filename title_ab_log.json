@@ -50,5 +50,31 @@
     ],
     "topic": "What Keyboard User are YOU?!",
     "generated_at": "2026-07-09T05:00:58Z"
+  },
+  {
+    "winner": {
+      "title": "Warning: Know Keyboard Type \ud83d\udea8",
+      "pattern": "warning",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Warning: Know Keyboard Type \ud83d\udea8",
+        "pattern": "warning",
+        "score": 8
+      },
+      {
+        "title": "5 Types of Keyboard Users \ud83d\udcbb",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Did You Know Your Keyboard Type? \ud83e\udd14",
+        "pattern": "curiosity",
+        "score": 8
+      }
+    ],
+    "topic": "What Keyboard User are YOU?!",
+    "generated_at": "2026-07-09T05:01:27Z"
   }
 ]
