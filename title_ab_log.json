@@ -24,5 +24,31 @@
     ],
     "topic": "How ChatGPT WASTES water..",
     "generated_at": "2026-07-08T19:18:10Z"
+  },
+  {
+    "winner": {
+      "title": "Did You Know Your Typing Style \ud83e\udd14",
+      "pattern": "curiosity",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Did You Know Your Typing Style \ud83e\udd14",
+        "pattern": "curiosity",
+        "score": 8
+      },
+      {
+        "title": "Are You a Pro Typist? \ud83e\udd14",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Stop Using Wrong Keys Now \ud83d\udea8",
+        "pattern": "urgency",
+        "score": 8
+      }
+    ],
+    "topic": "What Keyboard User are YOU?!",
+    "generated_at": "2026-07-09T05:00:58Z"
   }
 ]
