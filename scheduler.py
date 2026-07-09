@@ -369,6 +369,15 @@ def track_views_job():
 
 schedule.every(1).hours.do(track_views_job)
 
+def comment_reply_job():
+    try:
+        from agents.comment_reply_agent import process_comments
+        process_comments(log_fn=log)
+    except Exception as e:
+        log(f"Comment reply job error: {e}")
+
+schedule.every(1).hours.do(comment_reply_job)
+
 if __name__ == "__main__":
     log("Scheduler started!")
     log("Generation: adaptive — top 3 velocity hours, max 3/day")

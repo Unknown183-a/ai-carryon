@@ -287,6 +287,15 @@ def track_views_hindi_job():
 # Track Hindi views every hour
 schedule.every(1).hours.do(track_views_hindi_job)
 
+def comment_reply_job_hindi():
+    try:
+        from agents_hindi.comment_reply_agent import process_comments_hindi
+        process_comments_hindi(log_fn=log)
+    except Exception as e:
+        log(f"Comment reply job error: {e}")
+
+schedule.every(1).hours.do(comment_reply_job_hindi)
+
 if __name__ == "__main__":
     log("Hindi Scheduler shuru hua! (Fully Adaptive Mode)")
 
