@@ -102,5 +102,31 @@
     ],
     "topic": "Is this keyboard good?",
     "generated_at": "2026-07-09T06:41:21Z"
+  },
+  {
+    "winner": {
+      "title": "5 Reasons It's Great \ud83d\udda5\ufe0f",
+      "pattern": "number",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "5 Reasons It's Great \ud83d\udda5\ufe0f",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Is This Keyboard Perfect? \ud83d\udda5\ufe0f",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Stop Using Bad Keyboards \u2328\ufe0f",
+        "pattern": "urgency",
+        "score": 8
+      }
+    ],
+    "topic": "Is this keyboard good?",
+    "generated_at": "2026-07-09T06:41:39Z"
   }
 ]
