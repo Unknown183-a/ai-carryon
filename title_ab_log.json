@@ -1,28 +1,236 @@
 [
   {
     "winner": {
-      "title": "Stop Using Bad Keyboards Now \ud83d\udda5\ufe0f",
-      "pattern": "urgency",
+      "title": "Does ChatGPT Waste Water? \ud83d\udca7",
+      "pattern": "question",
       "score": 8
     },
     "variations": [
       {
-        "title": "Stop Using Bad Keyboards Now \ud83d\udda5\ufe0f",
+        "title": "Does ChatGPT Waste Water? \ud83d\udca7",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "They Don't Want You to Know ChatGPT Wastes Water \ud83d\udca7",
+        "pattern": "revelation",
+        "score": 8
+      },
+      {
+        "title": "Stop Believing ChatGPT Wastes Water \ud83d\udca7",
+        "pattern": "contrarian",
+        "score": 8
+      }
+    ],
+    "topic": "How ChatGPT WASTES water..",
+    "generated_at": "2026-07-08T19:18:10Z"
+  },
+  {
+    "winner": {
+      "title": "Did You Know Your Typing Style \ud83e\udd14",
+      "pattern": "curiosity",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Did You Know Your Typing Style \ud83e\udd14",
+        "pattern": "curiosity",
+        "score": 8
+      },
+      {
+        "title": "Are You a Pro Typist? \ud83e\udd14",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Stop Using Wrong Keys Now \ud83d\udea8",
         "pattern": "urgency",
+        "score": 8
+      }
+    ],
+    "topic": "What Keyboard User are YOU?!",
+    "generated_at": "2026-07-09T05:00:58Z"
+  },
+  {
+    "winner": {
+      "title": "Warning: Know Keyboard Type \ud83d\udea8",
+      "pattern": "warning",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Warning: Know Keyboard Type \ud83d\udea8",
+        "pattern": "warning",
+        "score": 8
+      },
+      {
+        "title": "5 Types of Keyboard Users \ud83d\udcbb",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Did You Know Your Keyboard Type? \ud83e\udd14",
+        "pattern": "curiosity",
+        "score": 8
+      }
+    ],
+    "topic": "What Keyboard User are YOU?!",
+    "generated_at": "2026-07-09T05:01:27Z"
+  },
+  {
+    "winner": {
+      "title": "Everyone's Wrong About This Keyboard \ud83d\udda5\ufe0f",
+      "pattern": "contrarian",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Everyone's Wrong About This Keyboard \ud83d\udda5\ufe0f",
+        "pattern": "contrarian",
+        "score": 8
+      },
+      {
+        "title": "5 Reasons It's Great \ud83d\udda5\ufe0f",
+        "pattern": "number",
         "score": 8
       },
       {
         "title": "They Don't Want You to Know This Keyboard \ud83d\udda5\ufe0f",
         "pattern": "revelation",
         "score": 8
+      }
+    ],
+    "topic": "Is this keyboard good?",
+    "generated_at": "2026-07-09T06:41:21Z"
+  },
+  {
+    "winner": {
+      "title": "5 Reasons It's Great \ud83d\udda5\ufe0f",
+      "pattern": "number",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "5 Reasons It's Great \ud83d\udda5\ufe0f",
+        "pattern": "number",
+        "score": 8
       },
       {
-        "title": "Warning: Bad Keyboard \ud83d\udea8",
-        "pattern": "warning",
+        "title": "Is This Keyboard Perfect? \ud83d\udda5\ufe0f",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Stop Using Bad Keyboards \u2328\ufe0f",
+        "pattern": "urgency",
         "score": 8
       }
     ],
     "topic": "Is this keyboard good?",
-    "generated_at": "2026-07-10T04:26:36Z"
+    "generated_at": "2026-07-09T06:41:39Z"
+  },
+  {
+    "winner": {
+      "title": "Your Xbox 360 Games Are Disappearing \ud83d\udea8",
+      "pattern": "personal",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Your Xbox 360 Games Are Disappearing \ud83d\udea8",
+        "pattern": "personal",
+        "score": 8
+      },
+      {
+        "title": "Stop Losing Xbox 360 Games \u26a1",
+        "pattern": "urgency",
+        "score": 8
+      },
+      {
+        "title": "Warning: Archive Xbox 360 Wrong \ud83d\udea8",
+        "pattern": "warning",
+        "score": 8
+      }
+    ],
+    "topic": "Archiving Xbox 360 titles. #xbox #xbox360 #howto #diy",
+    "generated_at": "2026-07-09T11:00:25Z"
+  },
+  {
+    "winner": {
+      "title": "Nobody Told You iPhone 17 Pro Max Camera Capabilities \ud83d\udcf8",
+      "pattern": "revelation",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Nobody Told You iPhone 17 Pro Max Camera Capabilities \ud83d\udcf8",
+        "pattern": "revelation",
+        "score": 8
+      },
+      {
+        "title": "5 Pro Tips iPhone 17 Cam \ud83d\udcf8",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Act Now: iPhone17 Cam \ud83d\udcf8",
+        "pattern": "urgency",
+        "score": 8
+      }
+    ],
+    "topic": "iPhone 17 Pro Max Camera Test #shorts",
+    "generated_at": "2026-07-09T12:00:27Z"
+  },
+  {
+    "winner": {
+      "title": "Did You Know U-Shaped AC \ud83e\udd2f",
+      "pattern": "curiosity",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Did You Know U-Shaped AC \ud83e\udd2f",
+        "pattern": "curiosity",
+        "score": 8
+      },
+      {
+        "title": "5 Ventajas del Aire U \ud83c\udf21\ufe0f",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Warning: U Window AC \ud83d\udea8",
+        "pattern": "warning",
+        "score": 7
+      }
+    ],
+    "topic": "Aire acondicionado inteligente inversor de ventana en forma de U",
+    "generated_at": "2026-07-09T12:45:48Z"
+  },
+  {
+    "winner": {
+      "title": "5 Reasons This Keyboard Rocks \ud83d\udda5\ufe0f",
+      "pattern": "number",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "5 Reasons This Keyboard Rocks \ud83d\udda5\ufe0f",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Your Keyboard Affects You \ud83d\udcbb",
+        "pattern": "personal",
+        "score": 7
+      },
+      {
+        "title": "Did You Know This Keyboard? \ud83e\udd14",
+        "pattern": "curiosity",
+        "score": 6
+      }
+    ],
+    "topic": "Is this keyboard good?",
+    "generated_at": "2026-07-10T12:00:42Z"
   }
 ]
