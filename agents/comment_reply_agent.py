@@ -1,7 +1,7 @@
 # agents/comment_reply_agent.py
 """
 Comment Reply Agent — fetches new YouTube comments, classifies them,
-generates friendly/professional replies, and (optionally) publishes them.
+generates human-sounding replies, and (optionally) publishes them.
 
 Reuses the existing authenticated YouTube client from agents.upload_agent —
 no duplicate OAuth flow. Reuses the existing Groq LLM setup pattern already
@@ -13,13 +13,16 @@ Does not modify any existing agent or scheduler. Pluggable standalone:
     process_comments()
 
 Config:
-    AUTO_REPLY = False  -> only generate + save replies locally, don't publish
+    AUTO_REPLY = False -> only generate + save replies locally, don't publish
     AUTO_REPLY = True   -> also publish replies to YouTube via the API
 """
 
 import os
 import json
 import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ─────────────────────────────────────────────
 # Config
@@ -239,23 +242,51 @@ def generate_reply(comment_text, category):
     Generate a reply for a classified comment.
 
     Returns the literal string "NO_REPLY" for Spam/Offensive categories,
-    or a short, friendly, human-sounding reply otherwise.
+    or a short, casual, human-sounding reply otherwise.
     """
     if category in NO_REPLY_CATEGORIES:
         return "NO_REPLY"
 
     llm = _get_llm()
 
-    prompt = f"""Write a reply to this YouTube comment. The comment was classified as: {category}
+    extra_note = ""
+    if category == "AI Related":
+        extra_note = """
+This comment is accusing/asking if the content is AI-generated or AI-made.
+Don't get defensive, don't over-explain, don't deny weirdly. A real creator
+in this niche would either own it casually, joke about it, or brush it off
+lightly — not write a formal denial or a formal admission."""
+
+    prompt = f"""Reply to this YouTube comment as the actual creator of the channel replying
+casually from their phone. NOT as a support agent, NOT as an assistant.
+
+The comment was classified as: {category}
+{extra_note}
 
 STRICT RULES:
-- Friendly, polite, helpful, human-sounding, professional
-- Under {MAX_REPLY_WORDS} words
-- No emojis
-- Never rude, never argue, never hallucinate facts you don't know
-- If it's a question you can't confidently answer, politely say you're not sure rather than guessing
-- Do not mention that you are an AI unless the comment specifically asks
+- Sound like a real person typing fast on their phone, not a customer service rep
+- Under {MAX_REPLY_WORDS} words, but shorter is usually better (5-15 words is often enough)
+- Use contractions, casual lowercase, mild internet phrasing where natural
+- React to what they SPECIFICALLY said — no generic "I understand your concern" phrasing
+- Never say "I understand", "thank you for your feedback", "can you clarify/specify", or anything that sounds like a script
+- It's fine to be a little blunt, funny, sarcastic, or dismissive if the comment is negative or trolling — match the energy
+- No emojis unless the comment itself is very casual/funny
+- Never rude to the point of being nasty, never argue for multiple sentences, never hallucinate facts
+- If it's a question you can't confidently answer, keep it short and honest, don't guess
+- Do not mention you are an AI unless directly and specifically asked
 - Reply with ONLY the reply text, nothing else — no quotes, no preamble
+
+Examples of the tone you should match:
+"lol fair enough"
+"nah man it's just editing, not that deep"
+"haha yeah that part got me too"
+"appreciate it, more coming soon"
+"it's satire, don't take it too serious"
+
+Examples of tone to NEVER use:
+"I understand you have strong feelings, can you specify what concerns you?"
+"Thank you for your feedback, we appreciate your input."
+"I understand your concern regarding this matter."
 
 Comment: "{comment_text}"
 

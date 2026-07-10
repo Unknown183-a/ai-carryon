@@ -13,19 +13,22 @@ Does not modify any existing agent or scheduler. Pluggable standalone:
     process_comments_hindi()
 
 Config:
-    AUTO_REPLY = False  -> only generate + save replies locally, don't publish
+    AUTO_REPLY = False -> only generate + save replies locally, don't publish
     AUTO_REPLY = True   -> also publish replies to YouTube via the API
 """
 
 import os
 import json
 import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ─────────────────────────────────────────────
 # Config
 # ─────────────────────────────────────────────
 
-AUTO_REPLY = True  # flip to True to actually publish replies to YouTube 
+AUTO_REPLY = True  # flip to True to actually publish replies to YouTube
 
 COMMENT_HISTORY_FILE = "output/comment_history_hindi.json"
 TOPIC_REQUESTS_FILE = "output/topic_requests_hindi.json"
@@ -245,9 +248,9 @@ Category:"""
 
 def generate_reply(comment_text, category):
     """
-    Generate a reply for a classified comment, in Hindi/Hinglish to match
-    this channel's actual voice (mirrors the Hinglish tone used in this
-    channel's video titles and scripts elsewhere in agents_hindi/).
+    Generate a reply for a classified comment, in casual Hindi/Hinglish
+    matching how a real desi content creator actually replies on
+    Instagram/YouTube comments — not formal, not textbook Hindi.
 
     Returns the literal string "NO_REPLY" for Spam/Offensive categories.
     """
@@ -256,18 +259,49 @@ def generate_reply(comment_text, category):
 
     llm = _get_llm()
 
-    prompt = f"""Write a reply to this YouTube comment. The comment was classified as: {category}
+    extra_note = ""
+    if category == "AI Related":
+        extra_note = """
+Yeh comment content ke AI-generated hone ke baare mein hai ya us par shak kar
+raha hai. Defensive mat bano, lambi safai mat do. Ek real creator isko halke
+mein leta hai — casually maan leta hai, mazak udata hai, ya ignore kar deta
+hai. Formal denial ya formal admission bilkul nahi likhna."""
+
+    prompt = f"""Is YouTube comment ka reply likho jaise channel ka asli creator apne
+phone se casually type kar raha ho. Support agent ya assistant jaisa BILKUL nahi.
+
+Comment ki category: {category}
+{extra_note}
 
 STRICT RULES:
-- Reply in natural Hinglish (Hindi + English mix) if the original comment is in
-  Hindi or Hinglish; reply in plain English if the original comment is in English
-- Friendly, polite, helpful, human-sounding, professional
-- Under {MAX_REPLY_WORDS} words
-- No emojis
-- Never rude, never argue, never hallucinate facts you don't know
-- If it's a question you can't confidently answer, politely say you're not sure rather than guessing
-- Do not mention that you are an AI unless the comment specifically asks
-- Reply with ONLY the reply text, nothing else — no quotes, no preamble
+- Agar original comment Hindi/Hinglish mein hai to natural Hinglish mein reply karo
+  (jaise real creators Instagram/YouTube comments mein type karte hain — casual,
+  chhoti spelling shortcuts, formal Hindi nahi)
+- Agar original comment pure English mein hai to casual English mein reply karo
+- {MAX_REPLY_WORDS} words se kam, lekin chhota reply (5-15 words) aksar best hota hai
+- Jo comment mein specifically likha hai usi par react karo — generic "aapki
+  baat samajh sakta hoon" type phrasing bilkul nahi
+- Kabhi mat likho: "main samajh sakta hoon", "aapka feedback appreciate karte hain",
+  ya koi bhi scripted/customer-service jaisi line
+- Agar comment negative ya troll jaisa hai to thoda blunt, funny ya sarcastic
+  hona theek hai — energy match karo
+- Emoji mat use karo jab tak comment khud bahut casual/funny na ho
+- Kabhi bhi nasty level tak rude mat bano, lambi bahas mat karo, jhoothe facts mat bolo
+- Agar question ka confident jawab nahi pata to short aur honest raho, guess mat karo
+- AI hone ka zikar tab tak mat karo jab tak comment directly na pooche
+- Sirf reply text do — koi quotes, koi preamble nahi
+
+Tone jaisa hona chahiye, examples:
+"haha sahi pakde ho"
+"bhai yeh toh bas editing hai, itna sochne wali baat nahi"
+"lol fair point"
+"thoda aur wait karo, jaldi aayega"
+"yeh satire hai bhai, serious mat lo"
+
+Tone jo KABHI use nahi karna:
+"main samajh sakta hoon aapki chinta, kya aap bata sakte hain?"
+"aapke feedback ke liye dhanyavaad, hum aapki baat ki kadar karte hain"
+"main aapki concern samajhta hoon"
 
 Comment: "{comment_text}"
 

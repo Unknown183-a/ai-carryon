@@ -1,5 +1,7 @@
 # agents/trending_agent.py
 import os
+import re
+import json
 import random
 import googleapiclient.discovery
 from datetime import datetime, timedelta, timezone
@@ -8,6 +10,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+
+RECENT_TOPICS_FILE = "output/recent_trending_topics.json"
+RECENT_DAYS = 7  # don't repeat a topic used within this many days
 
 # ONLY Science & Technology category
 CATEGORY_IDS = ["28"]
@@ -47,13 +52,134 @@ TECH_BLOCKLIST = [
 
 def is_tech_topic(title: str) -> bool:
     title_lower = title.lower()
-    # Reject if blocklist word found
     if any(kw in title_lower for kw in TECH_BLOCKLIST):
         return False
-    # Accept if tech signal found
     if any(kw in title_lower for kw in TECH_MUST_HAVE):
         return True
     return False
+
+
+# ─────────────────────────────────────────────
+# Recent-topic memory (prevents repeats)
+# ─────────────────────────────────────────────
+
+def _normalize(title: str) -> str:
+    """Lowercase, strip punctuation/emoji/hashtags, collapse whitespace."""
+    t = title.lower()
+    t = re.sub(r"#\w+", "", t)              # remove hashtags
+    t = re.sub(r"[^\w\s]", " ", t)          # remove punctuation/emoji
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _load_recent():
+    if os.path.exists(RECENT_TOPICS_FILE):
+        try:
+            with open(RECENT_TOPICS_FILE) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return []
+    else:
+        return []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=RECENT_DAYS)
+    fresh = []
+    for entry in data:
+        try:
+            ts = datetime.fromisoformat(entry["timestamp"])
+            if ts >= cutoff:
+                fresh.append(entry)
+        except Exception:
+            continue
+    return fresh
+
+
+def _save_recent(title: str):
+    os.makedirs("output", exist_ok=True)
+    recent = _load_recent()
+    recent.append({
+        "title": title,
+        "normalized": _normalize(title),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    with open(RECENT_TOPICS_FILE, "w") as f:
+        json.dump(recent, f, indent=2, ensure_ascii=False)
+
+
+def _is_repeat(title: str, recent_entries) -> bool:
+    norm = _normalize(title)
+    for entry in recent_entries:
+        if entry["normalized"] == norm:
+            return True
+        # near-duplicate check: same first 5 words
+        a = norm.split()[:3]
+        b = entry["normalized"].split()[:3]
+        if a and a == b:
+            return True
+    return False
+
+
+def _load_uploaded_titles():
+    """
+    Permanently exclude topics that were already turned into a real
+    uploaded video, regardless of how long ago. Reads directly from
+    output/aicarryon.db (videos table).
+    """
+    import sqlite3
+    db_path = os.environ.get("DB_PATH", "output/aicarryon.db")
+    uploaded = []
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("SELECT title FROM videos WHERE channel = 'english' OR channel IS NULL")
+        rows = cur.fetchall()
+        conn.close()
+        for (title,) in rows:
+            if title:
+                uploaded.append({"title": title, "normalized": _normalize(title)})
+    except Exception as e:
+        print(f"Trending agent: could not load uploaded titles from DB: {e}")
+    return uploaded
+
+
+# ─────────────────────────────────────────────
+# Fetch: recent search (primary) + mostPopular chart (fallback)
+# ─────────────────────────────────────────────
+
+def _fetch_recent_search(youtube, region_code, hours=96, max_results=50):
+    """Genuinely fresh videos from the last N hours, sorted by view count."""
+    published_after = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    try:
+        search_resp = youtube.search().list(
+            part="snippet",
+            type="video",
+            order="viewCount",
+            publishedAfter=published_after,
+            regionCode=region_code,
+            videoCategoryId="28",
+            maxResults=max_results,
+        ).execute()
+        return [item["snippet"]["title"] for item in search_resp.get("items", [])]
+    except Exception as e:
+        print(f"Trending agent recent-search error: {e}")
+        return []
+
+
+def _fetch_most_popular(youtube, region_code, max_results=50):
+    try:
+        response = youtube.videos().list(
+            part="snippet,statistics",
+            chart="mostPopular",
+            regionCode=region_code,
+            maxResults=max_results,
+            videoCategoryId="28",
+        ).execute()
+        return response.get("items", [])
+    except Exception as e:
+        print(f"Trending agent mostPopular error: {e}")
+        return []
 
 
 def get_trending_topic(region_code="US"):
@@ -62,20 +188,20 @@ def get_trending_topic(region_code="US"):
             "youtube", "v3", developerKey=YOUTUBE_API_KEY
         )
 
-        all_videos = []
+        recent_used = _load_recent() + _load_uploaded_titles()
 
-        # Fetch from Science & Technology only
-        request = youtube.videos().list(
-            part="snippet,statistics",
-            chart="mostPopular",
-            regionCode=region_code,
-            maxResults=50,
-            videoCategoryId="28"
-        )
-        response = request.execute()
-        all_videos.extend(response.get("items", []))
+        # Primary: genuinely fresh videos from last 48h
+        fresh_titles = _fetch_recent_search(youtube, region_code, hours=96)
+        candidates = [t for t in fresh_titles if all(ord(c) < 128 for c in t) and is_tech_topic(t)]
+        candidates = [t for t in candidates if not _is_repeat(t, recent_used)]
 
-        # Score and filter
+        if candidates:
+            chosen = random.choice(candidates[:20])
+            _save_recent(chosen)
+            return chosen
+
+        # Fallback: mostPopular chart, scored by views (old behavior)
+        all_videos = _fetch_most_popular(youtube, region_code)
         scored = []
         for video in all_videos:
             snippet = video["snippet"]
@@ -83,17 +209,14 @@ def get_trending_topic(region_code="US"):
             title = snippet["title"]
             views = int(stats.get("viewCount", 0))
 
-            # English only
             if not all(ord(c) < 128 for c in title):
                 continue
-
-            # Must pass tech filter
             if not is_tech_topic(title):
+                continue
+            if _is_repeat(title, recent_used):
                 continue
 
             score = views
-
-            # Boost recent videos
             try:
                 published = datetime.fromisoformat(
                     snippet["publishedAt"].replace("Z", "+00:00")
@@ -108,16 +231,70 @@ def get_trending_topic(region_code="US"):
         if scored:
             scored.sort(reverse=True)
             top_pool = [title for _, title in scored[:10]]
-            return random.choice(top_pool)
+            chosen = random.choice(top_pool)
+            _save_recent(chosen)
+            return chosen
 
     except Exception as e:
         print(f"Trending agent error: {e}")
 
-    return _fallback_topic()
+    chosen = _fallback_topic()
+    _save_recent(chosen)
+    return chosen
+
+
+def _get_llm():
+    from langchain_groq import ChatGroq
+    return ChatGroq(
+        model="llama-3.3-70b-versatile",
+        temperature=0.9,
+        groq_api_key=os.getenv("GROQ_API_KEY"),
+    )
+
+
+def _generate_dynamic_topic(recent_used, attempts=3):
+    """
+    Ask the LLM to invent a fresh tech video topic when the static
+    fallback list has been exhausted. Retries a few times if the LLM
+    happens to produce something too close to a recently used topic.
+    """
+    try:
+        llm = _get_llm()
+    except Exception as e:
+        print(f"Trending agent: LLM unavailable for dynamic fallback: {e}")
+        return None
+
+    used_titles = [e["title"] for e in recent_used][-25:]  # keep prompt short
+    used_list = "\n".join(f"- {t}" for t in used_titles) if used_titles else "(none yet)"
+
+    prompt = f"""Generate ONE punchy YouTube video title idea about a technology or AI topic
+(new gadgets, AI tools, robots, phones, space tech, chips, EVs, etc). It should sound
+like a viral tech-news short, similar in style to these already-used titles — but
+NOT similar in content or wording to ANY of them:
+
+{used_list}
+
+Rules:
+- Under 12 words
+- No quotes, no hashtags, no emojis
+- Reply with ONLY the title text, nothing else"""
+
+    for _ in range(attempts):
+        try:
+            response = llm.invoke(prompt)
+            title = response.content.strip().strip('"')
+            if title and not _is_repeat(title, recent_used):
+                return title
+        except Exception as e:
+            print(f"Trending agent: dynamic fallback generation failed: {e}")
+            break
+
+    return None
 
 
 def _fallback_topic():
-    """Proven high-performing tech topics."""
+    """Proven high-performing tech topics, excluding recently used ones.
+    Falls through to LLM-generated topics if the static list is exhausted."""
     fallbacks = [
         "New AI robot that can do everything humans can",
         "Apple just revealed iPhone 17 Pro hidden features",
@@ -134,5 +311,32 @@ def _fallback_topic():
         "New electric vehicle beats Tesla at half the price",
         "This free AI tool is replacing expensive software",
         "Google just launched the most powerful AI assistant ever",
+        "This new chip is faster than anything on the market",
+        "Apple's secret AI project just leaked online",
+        "This robot can now cook a full meal by itself",
+        "New drone technology can fly for 10 hours straight",
+        "This smart home gadget sold out in one day",
+        "Scientists just built a computer that thinks like a brain",
+        "This AI can write full apps in seconds",
+        "New satellite internet is faster than fiber",
+        "This gadget turns your phone into a laptop",
+        "New battery tech charges your phone in 5 minutes",
+        "This AI model just passed a real medical exam",
+        "New VR headset feels indistinguishable from reality",
+        "This startup just built a flying car that actually works",
+        "New chip inside your phone can run AI offline",
+        "This robot dog can now open doors and climb stairs",
     ]
+    recent_used = _load_recent() + _load_uploaded_titles()
+    unused = [t for t in fallbacks if not _is_repeat(t, recent_used)]
+
+    if unused:
+        return random.choice(unused)
+
+    # Static list exhausted — generate a fresh one dynamically
+    dynamic = _generate_dynamic_topic(recent_used)
+    if dynamic:
+        return dynamic
+
+    # Absolute last resort: reuse an old one rather than crash
     return random.choice(fallbacks)
