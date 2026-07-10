@@ -101,8 +101,35 @@ def apply_ken_burns(img, frame_idx, total_frames, direction="zoom_in"):
     cropped = img.crop((left, top, left + min(new_w, w), top + min(new_h, h)))
     return cropped.resize((SHORTS_WIDTH, SHORTS_HEIGHT), Image.LANCZOS)
 
+def _strip_emoji(text):
+    """
+    Remove emoji and other characters DejaVu Sans can't render, so they
+    never show up as broken tofu boxes in burned-in captions/thumbnails.
+    Keeps normal punctuation, letters, numbers, and common symbols.
+    """
+    import re
+    # Covers most emoji/pictograph/symbol ranges plus variation selectors
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F300-\U0001FAFF"  # symbols & pictographs, emoticons, transport, supplemental
+        "\U00002600-\U000027BF"  # misc symbols, dingbats
+        "\U0001F1E6-\U0001F1FF"  # regional indicator symbols (flags)
+        "\U00002190-\U000021FF"  # arrows
+        "\U00002B00-\U00002BFF"  # misc symbols and arrows
+        "\U0000FE0F"              # variation selector (emoji presentation)
+        "\U0000200D"              # zero-width joiner (emoji sequences)
+        "]+",
+        flags=re.UNICODE,
+    )
+    cleaned = emoji_pattern.sub("", text)
+    # Collapse any leftover double spaces from removed emoji
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
 def draw_caption(frame_img, text, font_path=FONT_PATH):
     draw = ImageDraw.Draw(frame_img)
+    text = _strip_emoji(text)
     text = text.upper()
     max_width = int(SHORTS_WIDTH * 0.88)
     font_size = 95
