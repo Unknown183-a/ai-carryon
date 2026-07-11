@@ -336,5 +336,31 @@
     ],
     "topic": "Impossible to Remove Police Device - Cracked",
     "generated_at": "2026-07-11T14:00:39Z"
+  },
+  {
+    "winner": {
+      "title": "Your iPhone Has a Serious Issue \ud83d\udcf1",
+      "pattern": "personal",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Your iPhone Has a Serious Issue \ud83d\udcf1",
+        "pattern": "personal",
+        "score": 8
+      },
+      {
+        "title": "Stop Using This iPhone Now \ud83d\udcf1",
+        "pattern": "urgency",
+        "score": 8
+      },
+      {
+        "title": "Everyone's Wrong About iPhone Issues \ud83d\udcf1",
+        "pattern": "contrarian",
+        "score": 8
+      }
+    ],
+    "topic": "This iPhone has a serious problem #tech #apple #iphone",
+    "generated_at": "2026-07-11T15:00:30Z"
   }
 ]
