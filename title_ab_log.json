@@ -284,5 +284,31 @@
     ],
     "topic": "iPhone 17 Pro Max Camera Test #shorts",
     "generated_at": "2026-07-10T14:00:35Z"
+  },
+  {
+    "winner": {
+      "title": "Can GPT 5.6 Sol Lead? \ud83e\udd14",
+      "pattern": "question",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Can GPT 5.6 Sol Lead? \ud83e\udd14",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "They Don't Know GPT 5.6 \ud83e\udd16",
+        "pattern": "revelation",
+        "score": 8
+      },
+      {
+        "title": "Stop Believing GPT 5.6 Sol Hype \ud83e\udd16",
+        "pattern": "contrarian",
+        "score": 8
+      }
+    ],
+    "topic": "OpenAI is so back... GPT 5.6 Sol first look",
+    "generated_at": "2026-07-11T13:00:16Z"
   }
 ]
