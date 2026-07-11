@@ -310,5 +310,31 @@
     ],
     "topic": "OpenAI is so back... GPT 5.6 Sol first look",
     "generated_at": "2026-07-11T13:00:16Z"
+  },
+  {
+    "winner": {
+      "title": "They Don't Know: Impossible Device \ud83d\udea8",
+      "pattern": "revelation",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "They Don't Know: Impossible Device \ud83d\udea8",
+        "pattern": "revelation",
+        "score": 8
+      },
+      {
+        "title": "Everyone's Wrong About Police Tracker Removal \ud83d\udca1",
+        "pattern": "contrarian",
+        "score": 8
+      },
+      {
+        "title": "Warning: Don't Touch Cracked Police Device \ud83d\udea8",
+        "pattern": "warning",
+        "score": 8
+      }
+    ],
+    "topic": "Impossible to Remove Police Device - Cracked",
+    "generated_at": "2026-07-11T14:00:39Z"
   }
 ]
