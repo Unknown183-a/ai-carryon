@@ -414,5 +414,31 @@
     ],
     "topic": "I Tested iPhone Shortcut \"Viruses\"",
     "generated_at": "2026-07-12T15:00:36Z"
+  },
+  {
+    "winner": {
+      "title": "Your Old Keyboard Has Awesome Mechanisms \ud83d\udda5\ufe0f",
+      "pattern": "personal",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Your Old Keyboard Has Awesome Mechanisms \ud83d\udda5\ufe0f",
+        "pattern": "personal",
+        "score": 8
+      },
+      {
+        "title": "Can Old Keyboards Beat New Ones? \ud83d\udda5\ufe0f",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Did You Know Old Keyboards Had Better Switches? \ud83d\udda5\ufe0f",
+        "pattern": "curiosity",
+        "score": 8
+      }
+    ],
+    "topic": "old keyboards with AWESOME mechanisms",
+    "generated_at": "2026-07-13T12:00:48Z"
   }
 ]
