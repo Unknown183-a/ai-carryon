@@ -1,0 +1,16 @@
+flask
+gunicorn
+requests
+python-dotenv
+langchain-groq
+langchain-google-genai
+edge-tts
+gTTS
+moviepy
+pillow
+imageio
+imageio-ffmpeg
+numpy
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
