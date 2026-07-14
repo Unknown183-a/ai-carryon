@@ -23,6 +23,7 @@ GITHUB_URL = "https://github.com/Unknown183-a/ai-carryon"
 LINKEDIN_URL = "https://linkedin.com/in/amit-kumar-731563317"
 ENGLISH_CHANNEL_URL = "https://youtube.com/@AIcarryONAI"
 HINDI_CHANNEL_URL = "https://youtube.com/@AIcarryONHindi"
+CRICKET_CHANNEL_URL = "https://youtube.com/@YourActualHandle"  # update to your real handle once set
 LIVE_APP_URL = "https://ai-carryon-production.up.railway.app"
 
 DB_PATH = os.environ.get("DB_PATH", "output/aicarryon.db")
@@ -107,17 +108,19 @@ st.title("🤖 AI CarryON")
 st.subheader("An autonomous system that researches, writes, voices, edits, and uploads YouTube videos — then learns from how they perform.")
 
 st.markdown(
-    "Two fully independent channels (English + Hindi), each running its own "
+    "Three fully independent channels (English + Hindi + Cricket), each running its own "
     "scheduler, script generation, A/B title testing, and adaptive upload-time logic — "
     "with zero manual intervention after deploy."
 )
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.link_button("🎬 Watch: English Channel", ENGLISH_CHANNEL_URL, use_container_width=True)
 with col2:
     st.link_button("🎬 Watch: Hindi Channel", HINDI_CHANNEL_URL, use_container_width=True)
 with col3:
+    st.link_button("🏏 Watch: Cricket Channel", CRICKET_CHANNEL_URL, use_container_width=True)
+with col4:
     st.link_button("💻 View Source on GitHub", GITHUB_URL, use_container_width=True)
 
 st.caption(f"Also live: [{LIVE_APP_URL}]({LIVE_APP_URL}) · [LinkedIn]({LINKEDIN_URL})")
