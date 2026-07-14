@@ -777,61 +777,54 @@ with hindi_tab:
                         st.info("💡 Auto-upload OFF hai. Toggle on karo YouTube par seedha upload karne ke liye.")
 
 # ════════════════════════════════════════════════════════════════
-# CRICKET CHANNEL (manual upload only — no automated pipeline UI yet)
+# CRICKET CHANNEL (fully automated — same pipeline as Render)
 # ════════════════════════════════════════════════════════════════
 with cricket_tab:
     st.title("🏏 AI CarryON - Cricket Channel")
-    st.markdown("Manually upload a rendered match recap video to the cricket channel.")
-    st.caption("This channel runs its own automated pipeline on Render (trending match → script → video → upload). This tab is a manual override / backup upload path only.")
+    st.markdown("Finds a recently finished match, writes the recap, generates voice/video, and uploads to YouTube — fully automatic.")
+    st.caption("This runs the same pipeline that fires automatically on Render every ~20 min. Use this to trigger a cycle manually anytime.")
 
     st.markdown("---")
 
-    cricket_video_file = st.file_uploader(
-        "Upload video file (MP4)",
-        type=["mp4"],
-        key="cricket_video_upload"
+    cricket_generate_clicked = st.button(
+        "🔥 Find Trending Match & Generate + Upload",
+        type="primary",
+        key="cricket_auto_generate_btn"
     )
 
-    cricket_title = st.text_input("Title", key="cricket_title_input", placeholder="e.g. India's Stunning Last-Over Chase Against Australia")
-    cricket_description = st.text_area("Description", key="cricket_desc_input", height=100, placeholder="Match recap description...")
-    cricket_hashtags_raw = st.text_input("Hashtags (space or comma separated)", key="cricket_hashtags_input", placeholder="#Cricket #IPL #Shorts")
+    if cricket_generate_clicked:
+        with st.spinner("Checking for recently finished matches..."):
+            try:
+                from agents_cricket.trending_agent import get_finished_matches
+                matches = get_finished_matches(limit=5)
+            except Exception as e:
+                st.error(f"Error fetching matches: {e}")
+                matches = []
 
-    cricket_upload_clicked = st.button("📤 Upload to YouTube — Cricket Channel", type="primary", key="cricket_upload_btn")
-
-    if cricket_upload_clicked:
-        if not cricket_video_file:
-            st.warning("Please upload a video file first.")
-        elif not cricket_title.strip():
-            st.warning("Please enter a title.")
+        if not matches:
+            st.warning("No recently finished T20/ODI/Test matches found right now. Try again later.")
         else:
-            with st.spinner("📤 Uploading to Cricket YouTube channel..."):
+            st.info(f"Found {len(matches)} finished match(es) — processing the newest one not already posted...")
+
+            with st.spinner("Running full pipeline: research → script → SEO → voice → video → upload... this can take 1-2 minutes"):
                 try:
-                    import tempfile
-                    import os as _os
+                    from scheduler_cricket import run_cricket_cycle
+                    result = run_cricket_cycle()
+                except Exception as e:
+                    st.error(f"Pipeline error: {e}")
+                    result = None
 
-                    # Save uploaded file to a temp path — upload_video() expects a filesystem path
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-                        tmp.write(cricket_video_file.read())
-                        tmp_path = tmp.name
-
-                    hashtags_list = [h for h in cricket_hashtags_raw.replace(",", " ").split() if h.startswith("#")]
-                    if not hashtags_list:
-                        hashtags_list = ["#Cricket", "#Shorts"]
-
-                    from agents_cricket.upload_agent import upload_video as cricket_upload_fn
-                    video_id, video_url = cricket_upload_fn(
-                        video_path=tmp_path,
-                        title=cricket_title.strip(),
-                        description=cricket_description.strip(),
-                        hashtags=hashtags_list,
-                    )
-
-                    _os.remove(tmp_path)
-
+            if result:
+                status = result.get("status")
+                if status == "uploaded":
                     st.success("✅ Uploaded to Cricket channel!")
                     st.balloons()
+                    st.markdown(f"**Title:** {result.get('title','')}")
+                    video_url = result.get("video_url", "")
                     st.markdown(f"**▶️ Watch here:** [{video_url}]({video_url})")
-
-                except Exception as e:
-                    st.error(str(e))
-
+                elif status == "no_new_match":
+                    st.info("All recently finished matches have already been posted. Nothing new right now.")
+                elif status == "scorecard_fetch_failed":
+                    st.warning(f"Could not fetch the scorecard for {result.get('match','')}. Try again shortly.")
+                else:
+                    st.info(f"Result: {result}")
