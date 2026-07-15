@@ -23,7 +23,7 @@ def run_cricket_cycle():
     from agents_cricket.upload_agent import upload_video
     from agents.voice_agent import generate_voice
     from agents.caption_agent import create_srt
-    from agents.video_agent import create_video
+    from agents_cricket.video_agent import create_video
 
     posted = cricket_db.get_all_posted_match_ids()
     matches = get_finished_matches(limit=5)
