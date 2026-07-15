@@ -11,20 +11,7 @@ import json
 from dotenv import load_dotenv
 load_dotenv()
 
-POSTED_PATH = "output/cricket_posted.json"
-
-
-def _load_posted():
-    if os.path.exists(POSTED_PATH):
-        with open(POSTED_PATH) as f:
-            return set(json.load(f))
-    return set()
-
-
-def _save_posted(posted_ids):
-    os.makedirs("output", exist_ok=True)
-    with open(POSTED_PATH, "w") as f:
-        json.dump(list(posted_ids), f)
+from agents_cricket.database import db as cricket_db
 
 
 def run_cricket_cycle():
@@ -38,7 +25,7 @@ def run_cricket_cycle():
     from agents.caption_agent import create_srt
     from agents.video_agent import create_video
 
-    posted = _load_posted()
+    posted = cricket_db.get_all_posted_match_ids()
     matches = get_finished_matches(limit=5)
     print(f"Found {len(matches)} finished matches")
 
@@ -70,8 +57,7 @@ def run_cricket_cycle():
     )
     print(f"Uploaded: {video_url}")
 
-    posted.add(new_match["id"])
-    _save_posted(posted)
+    cricket_db.mark_posted(new_match["id"], new_match.get("name", ""))
 
     return {"status": "uploaded", "video_url": video_url, "title": seo["title"]}
 
