@@ -15,6 +15,16 @@ from agents_cricket.database import db as cricket_db
 
 
 def run_cricket_cycle():
+    import traceback
+    try:
+        return _run_cricket_cycle_inner()
+    except Exception as e:
+        print(f"CRICKET PIPELINE CRASHED: {e}")
+        traceback.print_exc()
+        return {"status": "error", "error": str(e)}
+
+
+def _run_cricket_cycle_inner():
     from agents_cricket.trending_agent import get_finished_matches
     from agents_cricket.research_agent import get_match_summary
     from agents_cricket.script_agent import create_cricket_script

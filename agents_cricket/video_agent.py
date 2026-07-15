@@ -1,17 +1,9 @@
 # agents_cricket/video_agent.py
-"""
-Lightweight video renderer for Render's free tier (512MB RAM, 0.15 CPU).
-Trades some visual polish for reliability: lower resolution, simple
-crossfade zoom instead of per-frame Ken Burns math, no held frame buffers.
-"""
+"""Lightweight, low-memory video renderer for Render's free tier.
+No Ken Burns zoom for now — static crop-to-fit clips, correctness first."""
 import os
-from moviepy import (
-    ImageClip, AudioFileClip, CompositeVideoClip, TextClip,
-    concatenate_videoclips, vfx
-)
+from moviepy import ImageClip, AudioFileClip, concatenate_videoclips
 
-# Portrait Shorts, but smaller than your English/Hindi 1080x1920 —
-# this alone cuts render memory roughly 4x
 WIDTH, HEIGHT = 540, 960
 FPS = 20
 
@@ -23,10 +15,7 @@ def _make_clip(image_path, duration):
     clip = clip.cropped(
         x_center=clip.w / 2, y_center=clip.h / 2, width=WIDTH, height=HEIGHT
     )
-    # simple, cheap zoom — no per-frame PIL math, moviepy handles it lazily
-    clip = clip.with_effects([vfx.Resize(lambda t: 1 + 0.04 * (t / duration))])
-    clip = clip.with_duration(duration)
-    return clip
+    return clip.with_duration(duration)
 
 
 def create_video(audio_path="output/voice.mp3", images_folder="assets/backgrounds",
@@ -54,7 +43,7 @@ def create_video(audio_path="output/voice.mp3", images_folder="assets/background
         fps=FPS,
         codec="libx264",
         audio_codec="aac",
-        preset="ultrafast",   # trades file size for speed/memory — right call on 0.15 CPU
+        preset="ultrafast",
         threads=1,
         logger=None,
     )
