@@ -8,6 +8,22 @@ from google.auth.transport.requests import Request
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
+# Broader scopes needed for view tracking (read channel stats, playlists, videos).
+# If the cricket token was only ever authorized with youtube.upload, readonly
+# calls will fail with insufficient_scope — in that case the token needs to be
+# regenerated once locally with both scopes and re-pickled/base64'd into
+# CRICKET_YOUTUBE_TOKEN_B64. track_views_cricket() handles that failure gracefully.
+SCOPES_READ = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+]
+
+
+def get_youtube_client_readonly():
+    """Read-capable client for view tracking (channels, playlists, videos.list).
+    Reuses the same pickled cricket credentials as upload — see SCOPES_READ note above."""
+    return authenticate_youtube()
+
 
 def authenticate_youtube():
     creds = None

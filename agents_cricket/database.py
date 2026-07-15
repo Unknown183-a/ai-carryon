@@ -71,6 +71,11 @@ class CricketDatabase:
                         posted_at   TEXT NOT NULL
                     );
 
+                    CREATE TABLE IF NOT EXISTS cricket_meta (
+                        key         TEXT PRIMARY KEY,
+                        value       TEXT
+                    );
+
                     CREATE INDEX IF NOT EXISTS idx_cricket_snapshots_video_id
                         ON cricket_snapshots(video_id);
                 """)
@@ -115,6 +120,48 @@ class CricketDatabase:
                 """, (video_id,))
                 return [dict(r) for r in cur.fetchall()]
 
+    def get_all_snapshots(self):
+        """Return all snapshots grouped by video_id — same shape as
+        agents/database.py's get_all_snapshots(), so agents_cricket.velocity_agent
+        can reuse the exact same velocity-computation logic as English/Hindi."""
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM cricket_videos")
+                videos = cur.fetchall()
+                result = {}
+                for video in videos:
+                    vid_id = video["video_id"]
+                    cur.execute("""
+                        SELECT views, likes, comments, timestamp
+                        FROM cricket_snapshots WHERE video_id = %s
+                        ORDER BY timestamp ASC
+                    """, (vid_id,))
+                    snaps = [dict(r) for r in cur.fetchall()]
+                    result[vid_id] = {
+                        "title": video["title"],
+                        "published": video["published"],
+                        "match_id": video["match_id"],
+                        "snapshots": snaps,
+                    }
+                return result
+
+    # ── Meta (key/value, used to throttle YouTube API calls) ──────────────
+
+    def get_meta(self, key):
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT value FROM cricket_meta WHERE key = %s", (key,))
+                row = cur.fetchone()
+                return row["value"] if row else None
+
+    def set_meta(self, key, value):
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO cricket_meta (key, value) VALUES (%s, %s)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                """, (key, value))
+
     # ── Posted Matches (replaces cricket_posted.json) ──────────────────────
 
     def mark_posted(self, match_id, match_name="", posted_at=None):
@@ -144,5 +191,14 @@ class CricketDatabase:
                 return {r["match_id"] for r in cur.fetchall()}
 
 
-# Singleton instance — same pattern as agents/database.py's `db`
-db = CricketDatabase()
+# Singleton instance — same pattern as agents/database.py's `db`.
+# Wrapped in try/except: the Render worker always has DATABASE_URL set, but
+# the Railway dashboard is a separate environment and may not (yet). Callers
+# (velocity_agent, dashboard pages) check `db_init_error` and show a helpful
+# message rather than the whole page crashing on import.
+db_init_error = None
+try:
+    db = CricketDatabase()
+except Exception as e:
+    db = None
+    db_init_error = str(e)

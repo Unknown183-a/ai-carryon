@@ -19,3 +19,11 @@ get_hindi_token.py
 token_b64_new.txt
 get_english_token.py
 assets/thumbnails/bg.jpg
+cricket_token.pickle
+token.pickle
+token_hindi.json
+client_secret.json
+client_secret_hindi.json
+client_secrets.json
+token_b64_new.txt
+*.pickle

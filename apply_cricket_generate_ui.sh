@@ -1,3 +1,8 @@
+#!/bin/bash
+set -e
+
+mkdir -p $(dirname pages/1_Dashboard.py)
+cat > pages/1_Dashboard.py << 'CRICKETEOF'
 import streamlit as st
 import os
 import glob
@@ -1116,3 +1121,5 @@ with cricket_tab:
                     st.warning(f"Could not fetch the scorecard for {result.get('match','')}. Try again shortly.")
                 else:
                     st.info(f"Result: {result}")
+CRICKETEOF
+echo 'Wrote pages/1_Dashboard.py'

@@ -11,7 +11,9 @@ import json
 from dotenv import load_dotenv
 load_dotenv()
 
-from agents_cricket.database import db as cricket_db
+from agents_cricket.database import db as cricket_db, db_init_error as cricket_db_init_error
+
+VIEW_TRACK_INTERVAL_SECONDS = 55 * 60  # ~hourly, throttled since /trigger fires every ~20 min
 
 
 def run_cricket_cycle():
@@ -24,6 +26,24 @@ def run_cricket_cycle():
         return {"status": "error", "error": str(e)}
 
 
+def _maybe_track_views():
+    """Runs cricket view tracking at most once per VIEW_TRACK_INTERVAL_SECONDS,
+    so every /trigger ping (every ~20 min) doesn't burn YouTube API quota."""
+    from datetime import datetime, timezone
+
+    try:
+        last = cricket_db.get_meta("last_view_track_at")
+        if last:
+            elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds()
+            if elapsed < VIEW_TRACK_INTERVAL_SECONDS:
+                return
+        from agents_cricket.view_tracker_agent import track_views_cricket
+        track_views_cricket()
+        cricket_db.set_meta("last_view_track_at", datetime.now(timezone.utc).isoformat())
+    except Exception as e:
+        print(f"Cricket view tracking skipped: {e}")
+
+
 def _run_cricket_cycle_inner():
     from agents_cricket.trending_agent import get_finished_matches
     from agents_cricket.research_agent import get_match_summary
@@ -34,6 +54,12 @@ def _run_cricket_cycle_inner():
     from agents.voice_agent import generate_voice
     from agents.caption_agent import create_srt
     from agents_cricket.video_agent import create_video
+    from datetime import datetime, timezone
+
+    if cricket_db is None:
+        return {"status": "error", "error": f"Cricket DB unavailable: {cricket_db_init_error}"}
+
+    _maybe_track_views()
 
     posted = cricket_db.get_all_posted_match_ids()
     matches = get_finished_matches(limit=5)
@@ -68,6 +94,12 @@ def _run_cricket_cycle_inner():
     print(f"Uploaded: {video_url}")
 
     cricket_db.mark_posted(new_match["id"], new_match.get("name", ""))
+    cricket_db.upsert_video(
+        video_id=video_id,
+        title=seo["title"],
+        published=datetime.now(timezone.utc).isoformat(),
+        match_id=new_match["id"],
+    )
 
     return {"status": "uploaded", "video_url": video_url, "title": seo["title"]}
 

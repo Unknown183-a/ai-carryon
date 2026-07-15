@@ -39,8 +39,9 @@ st.caption("Upload at the exact hour your audience is most active.")
 
 # ── Channel selector ────────────────────────────────────────────────────────
 
-channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON"], horizontal=True)
+channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON", "Cricket AI CarryON"], horizontal=True)
 is_hindi = channel == "Hindi AI CarryON"
+is_cricket = channel == "Cricket AI CarryON"
 
 col_refresh, _ = st.columns([1, 5])
 with col_refresh:
@@ -51,9 +52,19 @@ with col_refresh:
 # ── Load data ─────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=300)
-def load_recommendation(hindi: bool):
+def load_recommendation(hindi: bool, cricket: bool):
     try:
-        if hindi:
+        if cricket:
+            from agents_cricket.velocity_agent import load_and_analyse_cricket, get_best_upload_hour_cricket
+            analysis = load_and_analyse_cricket()
+            if "error" in analysis:
+                return {"error": analysis["error"]}
+            best_hour = get_best_upload_hour_cricket()
+            windows = analysis["best_upload_windows"]
+            peak_hours = analysis["peak_hours"]
+            total_points = analysis["total_velocity_points"]
+            source = "Cricket Postgres (Supabase)"
+        elif hindi:
             from agents_hindi.velocity_agent import load_and_analyse_hindi, get_best_upload_hour_hindi
             analysis = load_and_analyse_hindi()
             best_hour = get_best_upload_hour_hindi()
@@ -80,7 +91,7 @@ def load_recommendation(hindi: bool):
         return {"error": str(e)}
 
 with st.spinner("Analyzing view velocity data..."):
-    data = load_recommendation(is_hindi)
+    data = load_recommendation(is_hindi, is_cricket)
 
 if "error" in data:
     st.error(f"Error: {data['error']}")
@@ -115,7 +126,8 @@ st.divider()
 
 # ── 24h velocity chart ─────────────────────────────────────────────────────
 
-st.subheader(f"📈 {'Hindi' if is_hindi else 'English'} view velocity by hour (UTC)")
+_channel_label = "Cricket" if is_cricket else ("Hindi" if is_hindi else "English")
+st.subheader(f"📈 {_channel_label} view velocity by hour (UTC)")
 
 try:
     hours = list(range(24))
@@ -194,8 +206,10 @@ with st.expander("How adaptive scheduling works"):
 3. It groups velocities by the UTC hour they were recorded
 4. The hour with the highest average velocity = best upload time
 
-**English and Hindi channels are tracked completely separately** — different audiences,
+**English, Hindi, and Cricket channels are tracked completely separately** — different audiences,
 different timezones, different peak hours. This page shows whichever channel you select above.
+Cricket's data lives in its own Supabase Postgres database (Render free tier has no persistent
+disk), while English/Hindi share the SQLite database.
 
 **Scheduler behavior:**
 - If best hour is within 90 minutes → waits and uploads at that hour

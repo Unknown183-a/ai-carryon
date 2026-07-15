@@ -136,7 +136,7 @@ if stats["db_available"] and stats["total_videos"]:
     s1, s2, s3 = st.columns(3)
     s1.metric("Videos tracked", stats["total_videos"])
     s2.metric("Snapshots collected", f"{stats['total_snapshots']:,}")
-    s3.metric("Channels running", "2 (English + Hindi)")
+    s3.metric("Channels running", "3 (English + Hindi + Cricket)")
     st.caption("Pulled live from the production database — this is real operational data, not a mockup.")
     st.divider()
 

@@ -20,3 +20,4 @@ langchain-google-genai
 google-genai
 sarvamai
 pydub
+psycopg2-binary
