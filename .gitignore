@@ -27,3 +27,4 @@ client_secret_hindi.json
 client_secrets.json
 token_b64_new.txt
 *.pickle
+.env

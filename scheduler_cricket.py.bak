@@ -14,7 +14,7 @@ load_dotenv()
 from agents_cricket.database import db as cricket_db, db_init_error as cricket_db_init_error
 
 VIEW_TRACK_INTERVAL_SECONDS = 55 * 60  # ~hourly, throttled since /trigger fires every ~20 min
-DAILY_UPLOAD_CAP = 5  # max cricket uploads per day, stored in cricket_db (survives restarts)
+DAILY_UPLOAD_CAP = 3  # max cricket uploads per day, stored in cricket_db (survives restarts)
 
 
 def run_cricket_cycle():
@@ -76,8 +76,8 @@ def _increment_daily_cap():
 
 
 def _run_cricket_cycle_inner():
-    from agents_cricket.trending_agent import get_all_topics
-    from agents_cricket.research_agent import get_summary_for_topic
+    from agents_cricket.trending_agent import get_finished_matches
+    from agents_cricket.research_agent import get_match_summary
     from agents_cricket.script_agent import create_cricket_script
     from agents_cricket.seo_agent import generate_cricket_seo
     from agents_cricket.image_agent import generate_backgrounds
@@ -93,12 +93,12 @@ def _run_cricket_cycle_inner():
     _maybe_track_views()
 
     posted = cricket_db.get_all_posted_match_ids()
-    topics = get_all_topics(limit=8)
-    print(f"Found {len(topics)} topics (news/live/upcoming/finished)")
+    matches = get_finished_matches(limit=5)
+    print(f"Found {len(matches)} finished matches")
 
-    new_match = next((t for t in topics if t["id"] not in posted), None)
+    new_match = next((m for m in matches if m["id"] not in posted), None)
     if not new_match:
-        print("No new topics to post.")
+        print("No new finished matches to post.")
         return {"status": "no_new_match"}
 
     uploads_today = _check_daily_cap()
@@ -106,15 +106,14 @@ def _run_cricket_cycle_inner():
         print(f"Daily cricket upload cap reached ({uploads_today}/{DAILY_UPLOAD_CAP}) — skipping.")
         return {"status": "daily_cap_reached", "uploads_today": uploads_today}
 
-    topic_label = new_match.get("name") or new_match.get("title", "")
-    print(f"Processing ({new_match.get('topic_type')}): {topic_label}")
+    print(f"Processing: {new_match['name']}")
 
-    summary, structured = get_summary_for_topic(new_match)
+    summary = get_match_summary(new_match)
     if not summary:
-        print("Could not fetch summary — skipping this cycle.")
-        return {"status": "summary_fetch_failed", "topic": topic_label}
+        print("Could not fetch scorecard — skipping this cycle.")
+        return {"status": "scorecard_fetch_failed", "match": new_match["name"]}
 
-    script = create_cricket_script(summary, standout_player=structured.get("standout_player"))
+    script = create_cricket_script(summary)
     print(f"Script ({len(script.split())} words): {script[:80]}...")
 
     seo = generate_cricket_seo(summary, script)
@@ -122,7 +121,7 @@ def _run_cricket_cycle_inner():
 
     generate_voice(script, output_path="output/voice.mp3")
     create_srt(script, audio_path="output/voice.mp3")
-    generate_backgrounds(summary, num_images=4, structured=structured)
+    generate_backgrounds(summary, num_images=4)
     video_path = create_video()  # writes to output/final_video.mp4 per your existing agent
 
     video_id, video_url = upload_video(
@@ -130,7 +129,7 @@ def _run_cricket_cycle_inner():
     )
     print(f"Uploaded: {video_url}")
 
-    cricket_db.mark_posted(new_match["id"], new_match.get("name") or new_match.get("title", ""))
+    cricket_db.mark_posted(new_match["id"], new_match.get("name", ""))
     cricket_db.upsert_video(
         video_id=video_id,
         title=seo["title"],

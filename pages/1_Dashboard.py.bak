@@ -870,14 +870,14 @@ if cricket_page == "📊 Analytics":
 
 with cricket_tab:
     st.title("🏏 AI CarryON - Cricket Channel")
-    st.markdown("Finds a live or recently finished Indian cricket match, writes a one-moment highlight recap, generates voice/video, and uploads to YouTube.")
+    st.markdown("Finds a recently finished match, writes the recap, generates voice/video, and uploads to YouTube.")
 
     cricket_auto_upload = st.toggle(
         "Auto-upload to YouTube after generation", value=False, key="cricket_auto_upload_toggle"
     )
 
     st.markdown("---")
-    st.markdown("**Step 1 — Find a live or recently finished match**")
+    st.markdown("**Step 1 — Find a recently finished match**")
 
     col_find, col_quick = st.columns(2)
     with col_find:
@@ -888,11 +888,11 @@ with cricket_tab:
         )
 
     if cricket_find_clicked:
-        with st.spinner("Checking CricAPI for live or recently finished matches..."):
+        with st.spinner("Checking CricAPI for recently finished matches..."):
             try:
-                from agents_cricket.trending_agent import get_all_topics
+                from agents_cricket.trending_agent import get_finished_matches
                 from agents_cricket.database import db as _cdb_find, db_init_error as _cdb_find_err
-                cricket_matches = get_all_topics(limit=8)
+                cricket_matches = get_finished_matches(limit=5)
                 cricket_posted_ids = _cdb_find.get_all_posted_match_ids() if _cdb_find else set()
                 st.session_state["cricket_matches"] = cricket_matches
                 st.session_state["cricket_posted_ids"] = cricket_posted_ids
@@ -906,14 +906,12 @@ with cricket_tab:
     cricket_posted_ids = st.session_state.get("cricket_posted_ids", set())
 
     if cricket_find_clicked and not cricket_matches:
-        st.warning("No live or recently finished Indian T20/ODI/Test matches found right now. Try again later.")
+        st.warning("No recently finished T20/ODI/Test matches found right now. Try again later.")
 
     if cricket_matches:
         cricket_match_options = {}
         for m in cricket_matches:
-            m_label = m.get("name") or m.get("title", "")
-            m_status = m.get("status") or m.get("topic_type", "")
-            label = f"[{m.get('topic_type','?')}] {m_label} — {m_status}"
+            label = f"{m['name']} — {m['status']}"
             if m["id"] in cricket_posted_ids:
                 label += " ✅ already posted"
             cricket_match_options[label] = m
@@ -936,20 +934,17 @@ with cricket_tab:
                       "cricket_video_file", "cricket_match_done"]:
                 st.session_state.pop(k, None)
             try:
-                with st.spinner("📚 Researching topic..."):
-                    from agents_cricket.research_agent import get_summary_for_topic
-                    cricket_summary, cricket_structured = get_summary_for_topic(cricket_selected_match)
+                with st.spinner("📚 Researching match scorecard..."):
+                    from agents_cricket.research_agent import get_match_summary
+                    cricket_summary = get_match_summary(cricket_selected_match)
                 if not cricket_summary:
-                    st.error("Could not fetch details for this topic. Try another one from the list above.")
+                    st.error("Could not fetch the scorecard for this match. Try another one from the list above.")
                     st.stop()
                 st.session_state["cricket_summary"] = cricket_summary
-                st.session_state["cricket_structured"] = cricket_structured
 
                 with st.spinner("✍️ Writing recap script..."):
                     from agents_cricket.script_agent import create_cricket_script
-                    st.session_state["cricket_script"] = create_cricket_script(
-                        cricket_summary, standout_player=cricket_structured.get("standout_player")
-                    )
+                    st.session_state["cricket_script"] = create_cricket_script(cricket_summary)
 
                 with st.spinner("📈 Generating SEO..."):
                     from agents_cricket.seo_agent import generate_cricket_seo
@@ -959,9 +954,7 @@ with cricket_tab:
 
                 with st.spinner("🎨 Generating background images..."):
                     from agents_cricket.image_agent import generate_backgrounds
-                    img_paths, img_errors = generate_backgrounds(
-                        cricket_summary, num_images=4, structured=cricket_structured
-                    )
+                    img_paths, img_errors = generate_backgrounds(cricket_summary, num_images=4)
                     st.session_state["cricket_images"] = img_paths
                     st.session_state["cricket_img_errors"] = img_errors
 
@@ -1088,16 +1081,16 @@ with cricket_tab:
     st.caption("Runs the exact same pipeline that fires automatically on Render every ~20 min, with no preview step.")
 
     if cricket_quick_clicked:
-        with st.spinner("Checking for live or recently finished matches..."):
+        with st.spinner("Checking for recently finished matches..."):
             try:
-                from agents_cricket.trending_agent import get_all_topics
-                quick_matches = get_all_topics(limit=8)
+                from agents_cricket.trending_agent import get_finished_matches
+                quick_matches = get_finished_matches(limit=5)
             except Exception as e:
-                st.error(f"Error fetching topics: {e}")
+                st.error(f"Error fetching matches: {e}")
                 quick_matches = []
 
         if not quick_matches:
-            st.warning("No live or recently finished Indian T20/ODI/Test matches found right now. Try again later.")
+            st.warning("No recently finished T20/ODI/Test matches found right now. Try again later.")
         else:
             st.info(f"Found {len(quick_matches)} finished match(es) — processing the newest one not already posted...")
 
@@ -1118,8 +1111,8 @@ with cricket_tab:
                     video_url = result.get("video_url", "")
                     st.markdown(f"**▶️ Watch here:** [{video_url}]({video_url})")
                 elif status == "no_new_match":
-                    st.info("All recent topics have already been posted. Nothing new right now.")
-                elif status == "summary_fetch_failed":
-                    st.warning(f"Could not fetch details for {result.get('topic','')}. Try again shortly.")
+                    st.info("All recently finished matches have already been posted. Nothing new right now.")
+                elif status == "scorecard_fetch_failed":
+                    st.warning(f"Could not fetch the scorecard for {result.get('match','')}. Try again shortly.")
                 else:
                     st.info(f"Result: {result}")

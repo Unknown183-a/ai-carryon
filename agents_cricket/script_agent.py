@@ -37,39 +37,56 @@ def safe_invoke(prompt):
         return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
 
 
-def create_cricket_script(match_summary):
-    """Analyst-style recap, 80-100 words, matches your Shorts length constraint."""
-    prompt = f"""You are a cricket analyst writing a YouTube Shorts recap script.
+def create_cricket_script(match_summary, standout_player=None):
+    """One-moment highlight script, ~30-45 seconds of speech (roughly 75-105
+    words at the pace used in voice_agent.py), NOT a full match recap.
+    Written in Hindi (Devanagari script) so it matches the Sarvam hi-IN voice."""
+    focus_line = (
+        f"AAPKO ISI EK PLAYER KE MOMENT PAR FOCUS KARNA HAI: {standout_player}. "
+        f"Sirf isi player ke performance/moment ko highlight karein."
+    ) if standout_player else ""
+    prompt = f"""Aap ek cricket analyst hain jo YouTube Shorts ke liye script likhte hain.
+Script poori tarah HINDI mein likhein, Devanagari lipi mein — koi English translation ya
+Hinglish nahi.
 
 Match data:
 {match_summary}
 
-STRICT RULES:
-- Total word count: EXACTLY 80 to 100 words
-- First line MUST be a hook — the turning point, a record, or a shocking stat
-- Fast-paced, punchy sentences, analyst tone (like a sports recap channel)
-- Mention the standout player and the key moment (a collapse, a chase, a record)
-- End with "Follow for more cricket recaps"
-- Plain text only, NO symbols, NO hashtags, NO stage directions, NO labels like "Hook:"
+BAHUT ZAROORI: Pura match recap MAT karein. Sirf ek sabse interesting/shocking
+moment ya highlight chunein (jaise ek match-winning over, ek record-breaking
+shot, ek dramatic collapse, ya ek standout player ka key moment) aur SIRF
+uss ek moment par poori script focus karein.
 
-Return ONLY the script text, nothing else."""
+{focus_line}
+SAKHT NIYAM (STRICT RULES):
+- Yeh 30-45 second ka audio hona chahiye — kul shabd sankhya: 75 se 105 shabd
+- Pehli line ek HOOK honi chahiye us specific moment ke baare mein
+- Sirf EK moment par tikey rahein, poora match cover mat karein
+- Tez raftar, chhoti-chhoti punchy sentences, sports analyst wala tone
+- Us moment se juda standout player ka naam zaroor lein
+- Aakhri line: "Aur cricket recaps ke liye follow karein"
+- Sirf plain Hindi text, koi symbols nahi, koi hashtags nahi, koi stage directions
+  nahi, koi labels jaise "Hook:" nahi
+
+Sirf script text return karein, Devanagari mein, aur kuch nahi."""
 
     response = safe_invoke(prompt)
     script = response.content.strip()
 
     words = script.split()
     for attempt in range(2):
-        if len(words) >= 80:
+        if len(words) >= 75:
             break
         prompt2 = (
-            f"This script is only {len(words)} words. Expand it to EXACTLY 90 words.\n"
-            f"Keep the same hook and topic, add specific stats.\n"
-            f"Return ONLY the expanded script.\n\nScript:\n{script}"
+            f"Yeh script sirf {len(words)} shabd ka hai. Ise 90 shabd tak badhayein.\n"
+            f"Wahi ek moment aur hook rakhein — poora match cover MAT karein.\n"
+            f"Poori tarah Hindi (Devanagari) mein likhein.\n"
+            f"Sirf expanded script return karein.\n\nScript:\n{script}"
         )
         script = safe_invoke(prompt2).content.strip()
         words = script.split()
 
-    if len(words) > 100:
-        script = " ".join(words[:100])
+    if len(words) > 105:
+        script = " ".join(words[:105])
 
     return script
