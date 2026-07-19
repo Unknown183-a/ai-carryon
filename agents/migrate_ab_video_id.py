@@ -1,31 +1,17 @@
 """
-migrate_ab_video_id.py — adds video_id column to ab_title_tests
-so AB tests can be linked directly to uploaded videos instead of
-relying on fragile title-string matching.
+migrate_ab_video_id.py — OBSOLETE under Firestore.
 
-Safe to run multiple times.
+Used to run `ALTER TABLE ab_title_tests ADD COLUMN video_id` on the old
+SQLite database. Firestore is schemaless and agents/database.py's
+log_ab_test() already writes a video_id field (defaulting to None) on
+every new row, so there's nothing to migrate. Kept as a no-op so any
+leftover cron/manual invocations don't error out.
 """
 
-import sqlite3
-import os
-
-DB_PATH = os.environ.get("DB_PATH", "output/aicarryon.db")
 
 def migrate():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
+    print("No-op under Firestore — video_id is already part of every ab_title_tests doc.")
 
-    cur.execute("PRAGMA table_info(ab_title_tests)")
-    columns = [row[1] for row in cur.fetchall()]
-
-    if "video_id" not in columns:
-        cur.execute("ALTER TABLE ab_title_tests ADD COLUMN video_id TEXT")
-        print("Added video_id column.")
-    else:
-        print("video_id already exists — skipping.")
-
-    conn.commit()
-    conn.close()
 
 if __name__ == "__main__":
     migrate()

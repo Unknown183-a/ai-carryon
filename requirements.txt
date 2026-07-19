@@ -9,7 +9,6 @@ google-auth-oauthlib
 google-auth-httplib2
 gTTS
 edge-tts
-schedule
 imageio
 imageio-ffmpeg
 numpy
@@ -20,4 +19,5 @@ langchain-google-genai
 google-genai
 sarvamai
 pydub
+google-cloud-firestore
 psycopg2-binary

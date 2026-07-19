@@ -15,18 +15,17 @@ Usage:
     python3 agents/failure_agent.py hindi     # one channel only
 """
 
-import sqlite3
 import os
 import sys
 import json
 import logging
 import statistics
 from datetime import datetime, timezone
+from agents.database import db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.environ.get("DB_PATH", "output/aicarryon.db")
 REPORT_PATH = os.environ.get("FAILURE_REPORT_PATH", "output/failure_report.json")
 
 FAILURE_PERCENTILE = 0.25
@@ -34,25 +33,21 @@ MIN_SAMPLES_FOR_CHANNEL = 5
 
 
 def analyze(channel=None):
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-
-    query = """
-        SELECT t.id, t.topic, t.winner_title, t.winner_pattern, t.winner_score,
-               t.actual_views_24h, t.video_id, v.channel, v.published
-        FROM ab_title_tests t
-        JOIN videos v ON v.video_id = t.video_id
-        WHERE t.actual_views_24h IS NOT NULL
-    """
-    params = []
-    if channel:
-        query += " AND v.channel = ?"
-        params.append(channel)
-
-    cur.execute(query, params)
-    rows = cur.fetchall()
-    conn.close()
+    # Firestore has no JOIN — pull closed-loop tests, then look up each
+    # video's channel/published individually and join in Python.
+    raw_rows = db.get_closed_loop_tests()
+    rows = []
+    for r in raw_rows:
+        if not r.get("video_id"):
+            continue
+        video = db.get_video(r["video_id"])
+        if not video:
+            continue
+        if channel and video.get("channel") != channel:
+            continue
+        r["channel"] = video.get("channel")
+        r["published"] = video.get("published")
+        rows.append(r)
 
     if not rows:
         logger.info("No closed-loop AB test data yet (actual_views_24h all NULL). Nothing to analyze.")

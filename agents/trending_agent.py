@@ -125,16 +125,14 @@ def _load_uploaded_titles():
     uploaded video, regardless of how long ago. Reads directly from
     output/aicarryon.db (videos table).
     """
-    import sqlite3
-    db_path = os.environ.get("DB_PATH", "output/aicarryon.db")
+    from agents.database import db
     uploaded = []
     try:
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        cur.execute("SELECT title FROM videos WHERE channel = 'english' OR channel IS NULL")
-        rows = cur.fetchall()
-        conn.close()
-        for (title,) in rows:
+        videos = db.get_all_videos()
+        for v in videos:
+            if v.get("channel") not in ("english", None):
+                continue
+            title = v.get("title")
             if title:
                 uploaded.append({"title": title, "normalized": _normalize(title)})
     except Exception as e:

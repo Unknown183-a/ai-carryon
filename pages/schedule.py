@@ -63,7 +63,7 @@ def load_recommendation(hindi: bool, cricket: bool):
             windows = analysis["best_upload_windows"]
             peak_hours = analysis["peak_hours"]
             total_points = analysis["total_velocity_points"]
-            source = "Cricket Postgres (Supabase)"
+            source = "Cricket Firestore"
         elif hindi:
             from agents_hindi.velocity_agent import load_and_analyse_hindi, get_best_upload_hour_hindi
             analysis = load_and_analyse_hindi()
@@ -71,7 +71,7 @@ def load_recommendation(hindi: bool, cricket: bool):
             windows = analysis["best_upload_windows"]
             peak_hours = analysis["peak_hours"]
             total_points = analysis["total_velocity_points"]
-            source = "Hindi SQLite"
+            source = "Hindi Firestore"
         else:
             from agents.adaptive_scheduler import get_schedule_recommendation, get_best_upload_windows, get_peak_hours_analysis
             rec = get_schedule_recommendation()
@@ -208,8 +208,9 @@ with st.expander("How adaptive scheduling works"):
 
 **English, Hindi, and Cricket channels are tracked completely separately** — different audiences,
 different timezones, different peak hours. This page shows whichever channel you select above.
-Cricket's data lives in its own Supabase Postgres database (Render free tier has no persistent
-disk), while English/Hindi share the SQLite database.
+All three channels now share one Firestore database on Cloud Run, kept isolated by
+collection prefix — Cricket uses its own `cricket_`-prefixed collections rather than
+a separate database.
 
 **Scheduler behavior:**
 - If best hour is within 90 minutes → waits and uploads at that hour

@@ -1,10 +1,35 @@
-import schedule
-import time
+"""
+scheduler.py — single-run entrypoint for Cloud Run Jobs.
+
+Previously an infinite loop (`schedule` + `while True` + `time.sleep(30)`)
+that polled every 30s inside an always-on Railway worker. Cloud Run Jobs
+don't work that way — Cloud Scheduler triggers a fresh container once per
+interval, it runs to completion, and exits. So the polling loop is gone;
+this file now does ONE pass per invocation:
+
+  1. Cleanup sweep
+  2. View tracking + AB-loop closing (every invocation)
+  3. Comment replies (every invocation)
+  4. Generation — ONLY if the current UTC hour is a top-velocity slot AND
+     the daily cap hasn't been hit (same logic as before, just checked
+     once instead of polled)
+
+Deploy Cloud Scheduler to trigger this hourly (matches the old 30s-poll's
+effective hourly granularity, since top-hour slots are whole hours anyway).
+See DEPLOY.md for the exact `gcloud scheduler jobs create` command.
+
+Also removed: the GitHub JSON restore/backup dance (agents/data_persistence)
+that used to run on every startup — that existed because Railway/Render's
+disk wasn't reliably persistent. Firestore is persistent by default, so
+none of that is needed anymore.
+"""
+
 import os
+import time
 import datetime
 
+
 LOG_FILE = "output/scheduler_log.txt"
-POSTED_FILE = "output/posted_topics.txt"
 
 
 def log(message):
@@ -19,46 +44,16 @@ def log(message):
 
 
 def get_recent_topics(hours=24):
-    if not os.path.exists(POSTED_FILE):
-        return []
-
-    cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
-    recent = []
-
-    with open(POSTED_FILE, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line or "|" not in line:
-                continue
-            ts_str, topic = line.split("|", 1)
-            try:
-                ts = datetime.datetime.fromisoformat(ts_str)
-            except ValueError:
-                continue
-            if ts >= cutoff:
-                recent.append(topic.lower().strip())
-
-    return recent
+    from agents.database import db
+    return db.get_recent_posted(hours=hours, channel="english")
 
 
 def mark_posted(topic):
-    # Write to SQLite
+    from agents.database import db
     try:
-        from agents.database import db
         db.mark_posted(topic, channel="english")
     except Exception as e:
         log(f"DB mark_posted error: {e}")
-    # Also write to file (backup)
-    os.makedirs("output", exist_ok=True)
-    ts = datetime.datetime.utcnow().isoformat()
-    with open(POSTED_FILE, "a") as f:
-        f.write(f"{ts}|{topic}\n")
-    # Push updated posted_topics.txt to GitHub immediately
-    try:
-        from agents.data_persistence import backup_posted_topics
-        backup_posted_topics()
-    except Exception as e:
-        log(f"posted_topics backup skipped: {e}")
 
 
 def get_fresh_trending_topic(region_code="US", max_attempts=5):
@@ -74,7 +69,6 @@ def get_fresh_trending_topic(region_code="US", max_attempts=5):
             log(f"Topic already posted in last 24h, retrying ({attempt+1}/{max_attempts}): {topic}")
             continue
 
-        # Phase 1.5 — Saturation check
         saturation = check_saturation(topic)
         log(f"Saturation check: score={saturation['opportunity_score']} — {saturation['reason']}")
 
@@ -84,30 +78,13 @@ def get_fresh_trending_topic(region_code="US", max_attempts=5):
 
         return topic
 
-    # Exhausted retries — use last topic anyway
     return topic + " - extra"
 
 
-_top_hours_cache = {"value": None, "computed_at": None}
-_TOP_HOURS_CACHE_TTL_SECONDS = 180  # recompute at most every 3 minutes
-
-
 def get_top_upload_hours(n=3, min_gap_hours=1):
-    """
-    Pick top N distinct upload hours by real velocity. No averaging.
-
-    Cached for _TOP_HOURS_CACHE_TTL_SECONDS since the underlying query
-    (get_peak_hours) does a full in-memory pass over every snapshot row —
-    cheap today, but grows with snapshot count, and this function is now
-    polled every 30s by the main loop. Caching keeps the poll loop's
-    restart-resilience benefit without recomputing on every single cycle.
-    """
-    now_ts = datetime.datetime.utcnow().timestamp()
-    cached = _top_hours_cache
-    if cached["value"] is not None and cached["computed_at"] is not None:
-        if now_ts - cached["computed_at"] < _TOP_HOURS_CACHE_TTL_SECONDS:
-            return cached["value"]
-
+    """Pick top N distinct upload hours by real velocity. No averaging.
+    No longer cached — this now runs once per process (one Job execution),
+    so the old 3-minute TTL cache (built for a 30s poll loop) is pointless."""
     try:
         from agents.database import db
         peak_hours = db.get_peak_hours()
@@ -131,54 +108,32 @@ def get_top_upload_hours(n=3, min_gap_hours=1):
         if len(chosen) >= 1:
             result = sorted(chosen)
             log(f"Top upload hours from real data (UTC): {result}")
-            _top_hours_cache["value"] = result
-            _top_hours_cache["computed_at"] = now_ts
             return result
     except Exception as e:
         log(f"Could not get top upload hours: {e}")
     fallback = [4, 12, 19]
     log(f"Using fallback upload hours (UTC): {fallback}")
-    _top_hours_cache["value"] = fallback
-    _top_hours_cache["computed_at"] = now_ts
     return fallback
 
 
 def should_upload_now():
-    """Return (True, reason) if current UTC hour matches a top upload slot."""
     top_hours = get_top_upload_hours(n=3, min_gap_hours=1)
-    current_hour = __import__("datetime").datetime.utcnow().hour
+    current_hour = datetime.datetime.utcnow().hour
     if current_hour in top_hours:
         return True, f"Hour {current_hour:02d}:00 UTC is in top slots {top_hours}"
     return False, f"Hour {current_hour:02d}:00 UTC not in top slots {top_hours}"
 
 
-def generate_and_upload(force=False):
-    if not force:
-        should_run, reason = should_upload_now()
-        log(f"Schedule check: {reason}")
-        if not should_run:
-            return
+def run_generation_pipeline(topic_override=None):
+    """The actual content pipeline — unchanged from the original, aside from
+    the lock now being Firestore-based instead of a local lock file (a local
+    file wouldn't be visible to any other Cloud Run Job execution anyway)."""
+    from agents.database import db
 
-        posted_today = get_recent_topics(hours=24)
-        if len(posted_today) >= 3:
-            log("Daily cap reached (3 videos) — skipping this hour")
-            return
-    else:
-        log("FORCE MODE: bypassing schedule gate and daily cap")
-
-    # --- Mutex lock: prevent overlapping generation runs ---
-    lock_path = "output/generation.lock"
-    if os.path.exists(lock_path):
-        lock_age = time.time() - os.path.getmtime(lock_path)
-        if lock_age < 1800:  # 30 min — generous vs. typical 5-15 min run
-            log(f"Generation already in progress (lock age {lock_age:.0f}s) — skipping to avoid concurrent run")
-            return
-        else:
-            log(f"Stale lock found (age {lock_age:.0f}s) — previous run likely crashed, proceeding")
-
-    os.makedirs("output", exist_ok=True)
-    with open(lock_path, "w") as f:
-        f.write(str(time.time()))
+    acquired, age = db.try_acquire_lock("generation_english", ttl_seconds=1800)
+    if not acquired:
+        log(f"Generation already in progress elsewhere (lock age {age:.0f}s) — skipping to avoid concurrent run")
+        return
 
     log("=== Starting scheduled video generation ===")
     try:
@@ -197,12 +152,13 @@ def generate_and_upload(force=False):
         from agents.video_agent import create_video
         from agents.upload_agent import upload_video
 
-        # Resume a crashed run if one exists, instead of always starting fresh
         pending = list_checkpoints()
         if pending:
             cp = pending[0]
             topic = cp["topic"]
             log(f"Resuming incomplete generation for topic: {topic} (last stage: {cp.get('last_stage')})")
+        elif topic_override:
+            topic = topic_override
         else:
             log("Fetching trending YouTube topic...")
             topic = get_fresh_trending_topic(region_code="US")
@@ -291,10 +247,8 @@ def generate_and_upload(force=False):
             )
             save_checkpoint(topic, "upload", [video_id, video_url])
 
-        # Link this upload back to its AB title test, if any
         if seo.get("ab_winner"):
             try:
-                from agents.database import db
                 linked = db.link_ab_test_to_video(seo["ab_winner"], video_id)
                 if linked:
                     log(f"Linked AB test to video_id {video_id}")
@@ -323,17 +277,7 @@ def generate_and_upload(force=False):
         log(f"ERROR: {str(e)}")
         log(f"TRACEBACK: {traceback.format_exc()}")
     finally:
-        if os.path.exists(lock_path):
-            os.remove(lock_path)
-
-
-# Check every hour — generate+upload only when current hour matches a top velocity window
-# NOTE: hourly schedule.at(":00") intentionally NOT used for generation —
-# it only fires at the exact minute mark, so a Railway restart landing on
-# that instant silently skips the whole hour with no catch-up. Generation
-# is instead driven by a continuous poll in the main loop (see __main__),
-# which checks every 30s whether we're in a top hour and haven't generated
-# for it yet — resilient to restarts at any point during the window.
+        db.release_lock("generation_english")
 
 
 def track_views_job():
@@ -353,21 +297,11 @@ def track_views_job():
             log("Closed AB-title loop (actual_views_24h updated where due)")
         except Exception as ce:
             log(f"close_ab_loop skipped: {ce}")
-
-        try:
-            from agents.data_persistence import backup_view_history
-            backup_view_history()
-            from agents.data_persistence import backup_sqlite_db
-            backup_sqlite_db()
-        except Exception as be:
-            log(f"Backup skipped: {be}")
     except Exception as e:
         import traceback
         log(f"ERROR (view tracking): {str(e)}")
         log(f"TRACEBACK: {traceback.format_exc()}")
 
-
-schedule.every(1).hours.do(track_views_job)
 
 def comment_reply_job():
     try:
@@ -376,12 +310,9 @@ def comment_reply_job():
     except Exception as e:
         log(f"Comment reply job error: {e}")
 
-schedule.every(1).hours.do(comment_reply_job)
 
-if __name__ == "__main__":
-    log("Scheduler started!")
-    log("Generation: adaptive — top 3 velocity hours, max 3/day")
-    log("View tracking: every 1 hour")
+def main():
+    log("Scheduler run started (Cloud Run Job — single pass)")
 
     try:
         from agents.cleanup_agent import sweep_old_videos
@@ -389,71 +320,31 @@ if __name__ == "__main__":
     except Exception as e:
         log(f"Cleanup skipped: {e}")
 
-    # Step 1: Restore view_history.json from GitHub
-    try:
-        from agents.data_persistence import restore_view_history, restore_ab_log, restore_posted_topics
-        restore_view_history()
-        restore_ab_log()
-        restore_posted_topics()
-        log("View history, AB log, and posted topics restored from GitHub")
-    except Exception as e:
-        log(f"Restore from GitHub skipped: {e}")
-
-    # Step 2: Migrate JSON into SQLite so velocity data is available
-    try:
-        from agents.database import db
-        result = db.migrate_from_json(
-            view_history_path="output/view_history.json",
-            ab_log_path="output/title_ab_log.json",
-            posted_path="output/posted_topics.txt",
-        )
-        log(f"SQLite rebuilt from GitHub backup: {result}")
-    except Exception as e:
-        log(f"SQLite migration skipped: {e}")
-
-    # Step 3: Show which hours will be used today
-    try:
-        hours = get_top_upload_hours(n=3, min_gap_hours=1)
-        log(f"Upload slots today (UTC): {hours}")
-    except Exception as e:
-        log(f"Could not compute upload hours: {e}")
-
-    # Step 4: Initial view tracking snapshot
+    # Always run view tracking + comment replies on every invocation
     track_views_job()
+    comment_reply_job()
 
-    utc_now = datetime.datetime.utcnow()
-    ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
-    log(f"Current IST time: {ist_now.strftime('%H:%M:%S')}")
-    log(f"Next check (UTC): {schedule.next_run()}")
+    # Manual override for testing: FORCE_GENERATE=true bypasses the
+    # schedule gate and daily cap (replaces the old TEST_UPLOAD_ON_START
+    # threading.Timer, which doesn't make sense in a one-shot Job).
+    if os.environ.get("FORCE_GENERATE", "false").lower() == "true":
+        log("FORCE_GENERATE=true — bypassing schedule gate and daily cap")
+        run_generation_pipeline()
+        return
 
-    import threading
-    if os.environ.get("TEST_UPLOAD_ON_START", "false").lower() == "true":
-        log("TEST MODE: will force generate_and_upload(force=True) in 5 minutes — bypassing schedule gate")
-        threading.Timer(300, lambda: generate_and_upload(force=True)).start()
+    should_run, reason = should_upload_now()
+    log(f"Schedule check: {reason}")
+    if not should_run:
+        log("Not a top-velocity hour — skipping generation this run")
+        return
 
-    generated_hours_today = set()
-    last_date = datetime.datetime.utcnow().date()
+    posted_today = get_recent_topics(hours=24)
+    if len(posted_today) >= 3:
+        log(f"Daily cap reached ({len(posted_today)} posted in last 24h) — skipping generation this run")
+        return
 
-    while True:
-        schedule.run_pending()
+    run_generation_pipeline()
 
-        now = datetime.datetime.utcnow()
-        if now.date() != last_date:
-            generated_hours_today = set()
-            last_date = now.date()
 
-        try:
-            should_run, reason = should_upload_now()
-            if should_run and now.hour not in generated_hours_today:
-                posted_today = get_recent_topics(hours=24)
-                if len(posted_today) >= 3:
-                    log(f"Poll check: {reason}, but daily cap reached ({len(posted_today)} posted in last 24h) — skipping")
-                    generated_hours_today.add(now.hour)
-                else:
-                    log(f"Poll trigger: {reason}")
-                    generated_hours_today.add(now.hour)
-                    generate_and_upload(force=True)
-        except Exception as pe:
-            log(f"Poll check error: {pe}")
-
-        time.sleep(30)
+if __name__ == "__main__":
+    main()

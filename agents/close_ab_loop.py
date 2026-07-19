@@ -14,29 +14,21 @@ Usage:
     python3 agents/close_ab_loop.py hindi     # one channel only
 """
 
-import sqlite3
 import os
 import sys
 import logging
 from datetime import datetime, timedelta, timezone
+from agents.database import db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.environ.get("DB_PATH", "output/aicarryon.db")
-
 
 def close_loop(channel: str = None):
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-
-    cur.execute("SELECT * FROM ab_title_tests WHERE actual_views_24h IS NULL")
-    pending = cur.fetchall()
+    pending = db.get_pending_ab_tests()
 
     if not pending:
         logger.info("No pending AB tests to close.")
-        conn.close()
         return
 
     logger.info(f"Found {len(pending)} pending AB test(s) to check.")
@@ -56,26 +48,16 @@ def close_loop(channel: str = None):
 
         # 1. Prefer video_id if already linked
         if row_video_id:
-            vq = "SELECT video_id, published, channel FROM videos WHERE video_id = ?"
-            vp = [row_video_id]
-            if channel:
-                vq += " AND channel = ?"
-                vp.append(channel)
-            cur.execute(vq, vp)
-            video_row = cur.fetchone()
-            if video_row:
+            candidate = db.get_video(row_video_id)
+            if candidate and (not channel or candidate.get("channel") == channel):
+                video_row = candidate
                 matched_via = "video_id"
 
         # 2. Fall back to title-matching for older/unlinked rows
         if not video_row:
-            vq = "SELECT video_id, published, channel FROM videos WHERE title = ?"
-            vp = [winner_title]
-            if channel:
-                vq += " AND channel = ?"
-                vp.append(channel)
-            cur.execute(vq, vp)
-            video_row = cur.fetchone()
-            if video_row:
+            candidate = db.get_video_by_title(winner_title, channel=channel)
+            if candidate:
+                video_row = candidate
                 matched_via = "title"
 
         if not video_row:
@@ -97,7 +79,7 @@ def close_loop(channel: str = None):
             too_early += 1
             continue
 
-        actual_views = _get_closest_snapshot_views(cur, video_id, target_time)
+        actual_views = _get_closest_snapshot_views(video_id, target_time)
 
         if actual_views is None:
             no_snapshot += 1
@@ -107,12 +89,9 @@ def close_loop(channel: str = None):
         # Backfill video_id onto the row if it was matched via title
         # (so future runs use the fast path)
         if matched_via == "title" and not row_video_id:
-            cur.execute("UPDATE ab_title_tests SET video_id = ? WHERE id = ?", (video_id, row["id"]))
+            db.set_ab_test_video_id(row["id"], video_id)
 
-        cur.execute(
-            "UPDATE ab_title_tests SET actual_views_24h = ?, actual_checked_at = ? WHERE id = ?",
-            (actual_views, now.strftime("%Y-%m-%dT%H:%M:%SZ"), row["id"]),
-        )
+        db.close_ab_test(row["id"], actual_views, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
         updated += 1
         if matched_via == "video_id":
             linked_by_id += 1
@@ -121,21 +100,14 @@ def close_loop(channel: str = None):
 
         logger.info(f"'{winner_title[:50]}' ({video_id}, matched via {matched_via}): actual_views_24h = {actual_views}")
 
-    conn.commit()
-    conn.close()
-
     logger.info(
         f"Done. Updated {updated} (by video_id: {linked_by_id}, by title: {linked_by_title}) | "
         f"no video match: {no_video_match} | not 24h old yet: {too_early} | no snapshot yet: {no_snapshot}"
     )
 
 
-def _get_closest_snapshot_views(cur, video_id: str, target_time: datetime):
-    cur.execute(
-        "SELECT views, timestamp FROM snapshots WHERE video_id = ? ORDER BY timestamp ASC",
-        (video_id,),
-    )
-    rows = cur.fetchall()
+def _get_closest_snapshot_views(video_id: str, target_time: datetime):
+    rows = db.get_snapshots(video_id)
     if not rows:
         return None
 

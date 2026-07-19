@@ -79,16 +79,12 @@ def _load_uploaded_titles():
     Permanently exclude topics that were already turned into a real
     uploaded video on the Hindi channel, regardless of how long ago.
     """
-    import sqlite3
-    db_path = os.environ.get("DB_PATH", "output/aicarryon.db")
+    from agents.database import db
     uploaded = []
     try:
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        cur.execute("SELECT title FROM videos WHERE channel = 'hindi'")
-        rows = cur.fetchall()
-        conn.close()
-        for (title,) in rows:
+        videos = db.get_all_videos(channel="hindi")
+        for v in videos:
+            title = v.get("title")
             if title:
                 uploaded.append({"title": title, "normalized": _normalize(title)})
     except Exception as e:

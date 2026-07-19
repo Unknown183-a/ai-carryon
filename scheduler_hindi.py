@@ -1,13 +1,15 @@
-# scheduler_hindi.py
-import schedule
-import time
+# scheduler_hindi.py — single-run entrypoint for Cloud Run Jobs
+#
+# Same refactor as scheduler.py: no more infinite loop / schedule library /
+# GitHub restore-backup dance. One pass per invocation, triggered hourly by
+# Cloud Scheduler. See scheduler.py's module docstring for the full rationale.
+
 import os
 import datetime
 
 LOG_FILE = "output/scheduler_hindi_log.txt"
-POSTED_TODAY_FILE = "output/posted_today_hindi.txt"
 
-# How many videos per day to aim for (fully adaptive now)
+# How many videos per day to aim for (fully adaptive)
 VIDEOS_PER_DAY = 3
 
 
@@ -21,60 +23,26 @@ def log(message):
 
 
 def get_posted_today():
-    try:
-        from agents.database import db
-        return db.get_recent_posted(hours=24, channel="hindi")
-    except Exception as e:
-        log(f"DB read error, using file fallback: {e}")
-
-    today = datetime.date.today().isoformat()
-    posted = []
-    if os.path.exists(POSTED_TODAY_FILE):
-        with open(POSTED_TODAY_FILE, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith(today):
-                    posted.append(line.split("|", 1)[1])
-    return posted
+    from agents.database import db
+    return db.get_recent_posted(hours=24, channel="hindi")
 
 
 def get_posted_count_today():
-    """Count how many Hindi videos posted today — for adaptive daily cap."""
     return len(get_posted_today())
 
 
 def mark_posted_today(topic):
+    from agents.database import db
     try:
-        from agents.database import db
         db.mark_posted(topic, channel="hindi")
     except Exception as e:
         log(f"DB mark_posted error: {e}")
 
-    today = datetime.date.today().isoformat()
-    os.makedirs("output", exist_ok=True)
-    with open(POSTED_TODAY_FILE, "a") as f:
-        f.write(f"{today}|{topic}\n")
-
-
-_adaptive_hours_cache = {"value": None, "computed_at": None}
-_ADAPTIVE_HOURS_CACHE_TTL_SECONDS = 180  # recompute at most every 3 minutes
-
 
 def get_adaptive_hours():
-    """
-    Get the top N best upload hours from real Hindi velocity data.
-    Falls back to spread-out defaults if not enough data yet.
-
-    Cached for _ADAPTIVE_HOURS_CACHE_TTL_SECONDS — the underlying velocity
-    query does a full pass over all snapshots, and this is now polled every
-    60s by the main loop, so we avoid recomputing on every single cycle.
-    """
-    now_ts = datetime.datetime.utcnow().timestamp()
-    cached = _adaptive_hours_cache
-    if cached["value"] is not None and cached["computed_at"] is not None:
-        if now_ts - cached["computed_at"] < _ADAPTIVE_HOURS_CACHE_TTL_SECONDS:
-            return cached["value"]
-
+    """Top N best upload hours from real Hindi velocity data, falling back
+    to spread-out defaults if not enough data yet. No longer cached — this
+    runs once per process now, so the old TTL cache is unnecessary."""
     try:
         from agents_hindi.velocity_agent import get_best_upload_windows_hindi
         windows = get_best_upload_windows_hindi(top_n=VIDEOS_PER_DAY)
@@ -82,25 +50,16 @@ def get_adaptive_hours():
         if len(good_windows) >= VIDEOS_PER_DAY:
             hours = sorted([w["hour"] for w in good_windows[:VIDEOS_PER_DAY]])
             log(f"Adaptive hours from real data (UTC): {hours}")
-            _adaptive_hours_cache["value"] = hours
-            _adaptive_hours_cache["computed_at"] = now_ts
             return hours
     except Exception as e:
         log(f"Could not get adaptive hours: {e}")
 
-    # Fallback — spread across day in UTC (roughly matches 8AM/1PM/7PM IST)
     fallback = [2, 7, 13]  # UTC hours ≈ 7:30AM, 12:30PM, 6:30PM IST
     log(f"Not enough Hindi data yet — using fallback hours (UTC): {fallback}")
-    _adaptive_hours_cache["value"] = fallback
-    _adaptive_hours_cache["computed_at"] = now_ts
     return fallback
 
 
 def should_generate_now():
-    """
-    Check if current UTC hour is one of our adaptive best hours
-    AND we haven't already posted our daily quota.
-    """
     if get_posted_count_today() >= VIDEOS_PER_DAY:
         return False, "Daily quota reached"
 
@@ -114,18 +73,24 @@ def should_generate_now():
 
 
 def generate_and_upload_hindi(force=False):
+    from agents.database import db
+
     if force:
-        log("Schedule check: BYPASSED (test mode forced run)")
+        log("Schedule check: BYPASSED (FORCE_GENERATE)")
     else:
         should_run, reason = should_generate_now()
         log(f"Schedule check: {reason}")
         if not should_run:
             return
 
+    acquired, age = db.try_acquire_lock("generation_hindi", ttl_seconds=1800)
+    if not acquired:
+        log(f"Generation already in progress elsewhere (lock age {age:.0f}s) — skipping")
+        return
+
     log("=== Hindi video generation shuru hua ===")
 
     try:
-        # Step 1: Trending topic
         log("Hindi trending topic dhundh raha hai...")
         from agents_hindi.spy_agent import get_best_hindi_topic, get_hindi_trending_topics
         from agents_hindi.trending_agent import get_trending_topic
@@ -150,7 +115,6 @@ def generate_and_upload_hindi(force=False):
                     log(f"Alternative topic: {topic}")
                     break
 
-        # Phase 1.5 — Saturation check (Hindi)
         log("Saturation check ho raha hai...")
         try:
             from agents_hindi.saturation_agent import check_saturation_hindi
@@ -159,7 +123,6 @@ def generate_and_upload_hindi(force=False):
         except Exception as se:
             log(f"Saturation check skip: {se}")
 
-        # Phase 2 — Competitor comparison (Hindi)
         log("Competitor comparison ho raha hai...")
         try:
             from agents_hindi.comparison_agent import compare_topic_hindi
@@ -182,7 +145,6 @@ def generate_and_upload_hindi(force=False):
         script = create_script(research_data, topic=topic,
                                comparison_insights=comparison_insights)
 
-        # Phase 3 — A/B Title Testing (Hindi)
         log("A/B title testing ho raha hai...")
         ab_winner_title = None
         try:
@@ -236,13 +198,6 @@ def generate_and_upload_hindi(force=False):
         mark_posted_today(topic)
         log(f"SUCCESS: Upload ho gaya! {video_url}")
 
-        # Push updated DB (video, AB test, posted topic) to GitHub immediately
-        try:
-            from agents.data_persistence import backup_sqlite_db
-            backup_sqlite_db()
-        except Exception as be:
-            log(f"DB backup skipped: {be}")
-
         from agents.cleanup_agent import cleanup_after_upload
         cleanup_after_upload(video, log_fn=log)
 
@@ -250,6 +205,8 @@ def generate_and_upload_hindi(force=False):
         import traceback
         log(f"ERROR: {str(e)}")
         log(f"TRACEBACK: {traceback.format_exc()}")
+    finally:
+        db.release_lock("generation_hindi")
 
 
 def track_views_hindi_job():
@@ -265,27 +222,11 @@ def track_views_hindi_job():
             log("Closed AB-title loop (actual_views_24h updated where due)")
         except Exception as ce:
             log(f"close_ab_loop skipped: {ce}")
-
-        try:
-            from agents.data_persistence import backup_sqlite_db
-            backup_sqlite_db()
-        except Exception as be:
-            log(f"DB backup skipped: {be}")
     except Exception as e:
         import traceback
         log(f"ERROR (Hindi view tracking): {str(e)}")
         log(f"TRACEBACK: {traceback.format_exc()}")
 
-
-# Check every hour if this is a good time to generate — fully adaptive
-# NOTE: exact-minute schedule.at(":00") intentionally not used for generation
-# — a Railway restart landing on that exact instant silently skips the whole
-# hour with no catch-up. Generation is driven by a continuous poll in the
-# main loop instead (see __main__), resilient to restarts at any point
-# during the window.
-
-# Track Hindi views every hour
-schedule.every(1).hours.do(track_views_hindi_job)
 
 def comment_reply_job_hindi():
     try:
@@ -294,64 +235,25 @@ def comment_reply_job_hindi():
     except Exception as e:
         log(f"Comment reply job error: {e}")
 
-schedule.every(1).hours.do(comment_reply_job_hindi)
 
-if __name__ == "__main__":
-    log("Hindi Scheduler shuru hua! (Fully Adaptive Mode)")
+def main():
+    log("Hindi Scheduler run started (Cloud Run Job — single pass, Fully Adaptive Mode)")
 
-    # Restore aicarryon.db from the data-hindi GitHub branch before anything else.
-    # Hindi writes straight to SQLite (no JSON intermediary), so we restore the
-    # DB file itself rather than migrating from JSON like the English scheduler.
     try:
-        from agents.data_persistence import restore_sqlite_db
-        restore_sqlite_db()
-        log("aicarryon.db restored from GitHub (data-hindi branch)")
+        from agents.cleanup_agent import sweep_old_videos
+        sweep_old_videos(max_age_hours=24, log_fn=log)
     except Exception as e:
-        log(f"DB restore skipped (starting fresh): {e}")
-
-    # Touch db to ensure schema/self-heal migration runs against the restored file
-    try:
-        from agents.database import db
-        db._init_tables()
-    except Exception as e:
-        log(f"DB init check skipped: {e}")
-
-    from agents.cleanup_agent import sweep_old_videos
-    sweep_old_videos(max_age_hours=24, log_fn=log)
-    log(f"Checking every hour — generates when current UTC hour matches best velocity windows")
-    log(f"Target: {VIDEOS_PER_DAY} videos/day at data-driven peak hours")
+        log(f"Cleanup skipped: {e}")
 
     track_views_hindi_job()
+    comment_reply_job_hindi()
 
-    adaptive_hours = get_adaptive_hours()
-    log(f"Current best hours (UTC): {adaptive_hours}")
+    if os.environ.get("FORCE_GENERATE", "false").lower() == "true":
+        generate_and_upload_hindi(force=True)
+        return
 
-    import threading
-    if os.environ.get("TEST_UPLOAD_ON_START", "false").lower() == "true":
-        log("TEST MODE: will force generate_and_upload_hindi(force=True) in 5 minutes — bypassing schedule gate")
-        threading.Timer(300, lambda: generate_and_upload_hindi(force=True)).start()
+    generate_and_upload_hindi(force=False)
 
-    generated_hours_today = set()
-    last_date = datetime.date.today()
 
-    while True:
-        schedule.run_pending()
-
-        now = datetime.datetime.utcnow()
-        if datetime.date.today() != last_date:
-            generated_hours_today = set()
-            last_date = datetime.date.today()
-
-        try:
-            should_run, reason = should_generate_now()
-            if should_run and now.hour not in generated_hours_today:
-                if get_posted_count_today() >= VIDEOS_PER_DAY:
-                    generated_hours_today.add(now.hour)
-                else:
-                    log(f"Poll trigger: {reason}")
-                    generated_hours_today.add(now.hour)
-                    generate_and_upload_hindi(force=True)
-        except Exception as pe:
-            log(f"Poll check error: {pe}")
-
-        time.sleep(60)
+if __name__ == "__main__":
+    main()

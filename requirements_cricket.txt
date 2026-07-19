@@ -14,4 +14,4 @@ numpy
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
-psycopg2-binary
+google-cloud-firestore

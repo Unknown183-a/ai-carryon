@@ -5,9 +5,9 @@ This is the app entry point (root URL), so it loads first automatically.
 """
 
 import streamlit as st
-import sqlite3
 import os
 from datetime import datetime, timezone
+from agents.database import db
 
 st.set_page_config(
     page_title="AI CarryON — Autonomous YouTube Intelligence System",
@@ -26,34 +26,18 @@ HINDI_CHANNEL_URL = "https://youtube.com/@AIcarryONHindi"
 CRICKET_CHANNEL_URL = "https://youtube.com/@AIcarryONSports"  # update to your real handle once set
 LIVE_APP_URL = "https://ai-carryon-production.up.railway.app"
 
-DB_PATH = os.environ.get("DB_PATH", "output/aicarryon.db")
-
 from agents.dashboard_sync import sync_all_channel_data
 _sync_status = sync_all_channel_data()
 
 # ─────────────────────────────────────────────
-# Pull safe, read-only stats from SQLite (no secrets, no operational data)
+# Pull safe, read-only stats from Firestore (no secrets, no operational data)
 # ─────────────────────────────────────────────
 
 def get_public_stats():
-    stats = {
-        "total_videos": None,
-        "total_snapshots": None,
-        "db_available": False,
-    }
     try:
-        if os.path.exists(DB_PATH):
-            conn = sqlite3.connect(DB_PATH)
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(DISTINCT video_id) FROM snapshots")
-            stats["total_videos"] = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM snapshots")
-            stats["total_snapshots"] = cur.fetchone()[0]
-            stats["db_available"] = True
-            conn.close()
+        return db.get_public_stats()
     except Exception:
-        pass
-    return stats
+        return {"total_videos": None, "total_snapshots": None, "db_available": False}
 
 
 stats = get_public_stats()
@@ -184,20 +168,21 @@ Adaptive Hour Check (Phase 4)
    -> Voiceover (Edge TTS / Sarvam AI)
    -> Render + captions
    -> Upload to YouTube
-   -> Hourly view snapshot -> SQLite
+   -> Hourly view snapshot -> Firestore
 """, language="text")
 
 t1, t2 = st.columns(2)
 with t1:
-    st.markdown("**Two independent channels, shared infrastructure:**")
+    st.markdown("**Three independent channels, shared infrastructure:**")
     st.markdown("""
 - Separate schedulers, separate learning, separate audiences
-- Shared SQLite database, partitioned by `channel` so English and Hindi data never mix
-- Two Railway services (web dashboard + background worker) with a shared persistent volume
+- Shared Firestore database, partitioned by collection/`channel` field so English, Hindi, and
+  Cricket data never mix
+- Cloud Run service (dashboard) + Cloud Run Jobs (per-channel workers), triggered by Cloud Scheduler
 """)
 with t2:
     st.markdown("**Tech stack:**")
-    badges = ["Python", "Streamlit", "SQLite", "Railway", "Groq (LLaMA 3.3-70B)",
+    badges = ["Python", "Streamlit", "Firestore", "Cloud Run", "Groq (LLaMA 3.3-70B)",
               "Gemini", "Sarvam AI", "Edge TTS", "YouTube Data API", "Plotly"]
     st.markdown(" ".join(f'<span class="tech-badge">{b}</span>' for b in badges), unsafe_allow_html=True)
 

@@ -1,8 +1,8 @@
 # agents_cricket/view_tracker_agent.py
 """
-View tracking for the Cricket channel — writes to Supabase Postgres
-(agents_cricket.database) instead of the shared SQLite used by
-English/Hindi, since cricket runs on Render's free tier with no disk.
+View tracking for the Cricket channel — writes to Firestore via
+agents_cricket.database, using its own cricket_-prefixed collections in
+the same Firestore project English/Hindi already use.
 
 Called opportunistically from scheduler_cricket.py's run_cricket_cycle()
 (throttled to ~once/hour), and can also be triggered manually from the

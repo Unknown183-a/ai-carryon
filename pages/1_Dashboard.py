@@ -787,7 +787,7 @@ with cricket_tab:
 if cricket_page == "📊 Analytics":
     with cricket_tab:
         st.title("📊 Cricket Channel Analytics")
-        st.caption("Live stats pulled from the cricket channel's own YouTube credentials, and snapshot history from its Supabase Postgres database.")
+        st.caption("Live stats pulled from the cricket channel's own YouTube credentials, and snapshot history from its own Firestore collections.")
 
         col_refresh, col_track = st.columns([1, 2])
         with col_refresh:

@@ -1,6 +1,6 @@
 """
 pages/peak_hours.py — Phase 1 Dashboard: Velocity Analysis & Peak Upload Windows
-Reads from SQLite (primary) — works for both English and Hindi channels.
+Reads from Firestore — works for English, Hindi, and Cricket channels.
 """
 
 import sys
@@ -48,7 +48,7 @@ with col_refresh:
         st.cache_data.clear()
         st.rerun()
 
-# ── Load analysis from SQLite / Postgres ────────────────────────────────────
+# ── Load analysis from Firestore ────────────────────────────────────────────
 
 @st.cache_data(ttl=300)
 def load_analysis(hindi: bool, cricket: bool):
@@ -205,6 +205,6 @@ else:
     st.info("No ranked videos yet.")
 
 st.caption(
-    f"Channel: {channel} · Data refreshes every 5 min · Loaded from SQLite · "
+    f"Channel: {channel} · Data refreshes every 5 min · Loaded from Firestore · "
     f"Last computed: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"
 )

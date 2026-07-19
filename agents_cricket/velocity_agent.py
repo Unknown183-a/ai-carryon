@@ -2,8 +2,8 @@
 """
 Phase 1 velocity analysis for the Cricket channel — same math as
 agents/velocity_agent.py and agents_hindi/velocity_agent.py, but sources
-data from Supabase Postgres (agents_cricket.database) instead of SQLite,
-since cricket runs on Render's free tier with no persistent disk.
+data from Firestore via agents_cricket.database, same as the other two
+channels — all three now share one Firestore project on Cloud Run.
 
 Exposes the same function names/shapes as the Hindi module so
 pages/peak_hours.py and pages/schedule.py can add cricket as a third

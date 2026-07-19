@@ -1,6 +1,6 @@
 """
 pages/ab_titles.py — Phase 3 Dashboard: A/B Title Performance
-Reads from SQLite (primary) — works for both English and Hindi channels.
+Reads from Firestore — works for both English and Hindi channels.
 """
 
 import sys
@@ -41,7 +41,7 @@ st.caption("Which title patterns get the most clicks? Track and learn — per ch
 channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON"], horizontal=True)
 is_hindi = channel == "Hindi AI CarryON"
 
-# ── Load from SQLite, fallback to JSON ──────────────────────────────────────
+# ── Load from Firestore, fallback to JSON ────────────────────────────────────
 
 @st.cache_data(ttl=120)
 def load_logs(hindi: bool):
@@ -210,4 +210,4 @@ if st.button("🎯 Generate Title Variations", type="primary"):
             except Exception as e:
                 st.error(f"Error: {e}")
 
-st.caption(f"Channel: {channel} · {total_tests} tests logged · Source: SQLite")
+st.caption(f"Channel: {channel} · {total_tests} tests logged · Source: Firestore")

@@ -1,34 +1,44 @@
 """
-agents/database.py — Central SQLite database for AI CarryON
+agents/database.py — Central Firestore database for AI CarryON
 
-Replaces JSON files with a persistent SQLite database.
-JSON files kept as fallback — zero data loss.
+Migrated from SQLite (Railway/Render disk) to Firestore, since Cloud Run
+containers have no persistent local disk. Method signatures are UNCHANGED
+from the SQLite version, so nothing in agents/ or agents_hindi/ needs to
+be touched — only this file and the ~8 files that used to connect to
+sqlite3 directly (see MIGRATION_NOTES.md).
 
-Tables:
-  - videos          : YouTube video metadata
-  - snapshots       : Hourly view/like counts per video
-  - ab_title_tests  : A/B title test results
-  - posted_topics   : Topics already posted (deduplication)
-  - spy_cache       : Trending topic cache
+Collections:
+  - videos          : doc id = video_id
+  - videos/{id}/snapshots : subcollection, auto id
+  - ab_title_tests   : auto id
+  - posted_topics    : auto id
+  - spy_cache        : auto id
 
-Usage:
+Usage (unchanged):
     from agents.database import db
     db.add_snapshot(video_id, views, likes)
     snapshots = db.get_snapshots(video_id)
+
+Requires: google-cloud-firestore
+Auth: uses Application Default Credentials — on Cloud Run this is automatic
+      (the service's attached service account). Locally, run:
+          gcloud auth application-default login
+      or point FIRESTORE_EMULATOR_HOST at a local emulator for testing.
 """
 
 import os
-import sqlite3
 import json
-from datetime import datetime, timezone
-from contextlib import contextmanager
+from datetime import datetime, timezone, timedelta
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
+
 
 def _parse_ts_safe(ts_str):
     """
     Parse a timestamp that may be naive or timezone-aware, always
-    return a timezone-AWARE UTC datetime. This fixes the bug where
-    some snapshots were saved with utcnow() (naive) and others with
-    datetime.now(timezone.utc) (aware), causing subtraction to fail.
+    return a timezone-AWARE UTC datetime. Carried over unchanged from
+    the SQLite version — same bug class can still occur since we still
+    store timestamps as ISO strings.
     """
     from datetime import datetime as _dt, timezone as _tz
     s = ts_str.replace("Z", "+00:00")
@@ -38,361 +48,352 @@ def _parse_ts_safe(ts_str):
     return parsed
 
 
-# Store DB in output/ folder — mount as persistent volume on Render
-DB_PATH = os.environ.get("DB_PATH", "output/aicarryon.db")
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
 
 
 class Database:
-    def __init__(self, db_path=None):
-        self.db_path = db_path or DB_PATH
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        self._init_tables()
-
-    @contextmanager
-    def _conn(self):
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")  # better concurrent access
-        try:
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
-
-    def _init_tables(self):
-        """Create tables if they don't exist."""
-        with self._conn() as conn:
-            conn.executescript("""
-                CREATE TABLE IF NOT EXISTS videos (
-                    video_id    TEXT PRIMARY KEY,
-                    title       TEXT,
-                    published   TEXT,
-                    channel     TEXT DEFAULT 'english',
-                    created_at  TEXT DEFAULT (datetime('now'))
-                );
-
-                CREATE TABLE IF NOT EXISTS snapshots (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    video_id    TEXT NOT NULL,
-                    views       INTEGER DEFAULT 0,
-                    likes       INTEGER DEFAULT 0,
-                    comments    INTEGER DEFAULT 0,
-                    timestamp   TEXT NOT NULL,
-                    FOREIGN KEY (video_id) REFERENCES videos(video_id)
-                );
-
-                CREATE TABLE IF NOT EXISTS ab_title_tests (
-                    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-                    topic              TEXT,
-                    winner_title       TEXT,
-                    winner_pattern     TEXT,
-                    winner_score       INTEGER,
-                    all_variations     TEXT,
-                    generated_at       TEXT,
-                    actual_views       INTEGER DEFAULT NULL,
-                    actual_views_24h   INTEGER DEFAULT NULL,
-                    actual_checked_at  TEXT DEFAULT NULL,
-                    video_id           TEXT DEFAULT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS posted_topics (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    topic       TEXT NOT NULL,
-                    channel     TEXT DEFAULT 'english',
-                    posted_at   TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS spy_cache (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    channel     TEXT NOT NULL,
-                    topics      TEXT NOT NULL,
-                    cached_at   TEXT NOT NULL
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_snapshots_video_id
-                    ON snapshots(video_id);
-                CREATE INDEX IF NOT EXISTS idx_snapshots_timestamp
-                    ON snapshots(timestamp);
-                CREATE INDEX IF NOT EXISTS idx_posted_topics_channel
-                    ON posted_topics(channel, posted_at);
-            """)
-        self._migrate_ab_title_tests_columns()
-
-    def _migrate_ab_title_tests_columns(self):
-        """
-        Self-healing migration: adds columns to ab_title_tests if an
-        existing (older) database is missing them. Runs on every startup,
-        safe to run repeatedly — a fresh CREATE TABLE above already has
-        these columns, so this is a no-op for new databases.
-        """
-        with self._conn() as conn:
-            existing = [row["name"] for row in conn.execute("PRAGMA table_info(ab_title_tests)")]
-            additions = {
-                "actual_views_24h": "INTEGER DEFAULT NULL",
-                "actual_checked_at": "TEXT DEFAULT NULL",
-                "video_id": "TEXT DEFAULT NULL",
-            }
-            for col, decl in additions.items():
-                if col not in existing:
-                    conn.execute(f"ALTER TABLE ab_title_tests ADD COLUMN {col} {decl}")
-                    print(f"Migrated ab_title_tests: added column {col}")
+    def __init__(self, project=None, database=None):
+        # project defaults to GOOGLE_CLOUD_PROJECT / GCLOUD_PROJECT env var,
+        # which Cloud Run sets automatically. `database` lets you point at a
+        # named Firestore database other than "(default)" if you want to
+        # keep this fully separate from other Firebase data in the project.
+        kwargs = {}
+        if project:
+            kwargs["project"] = project
+        if database:
+            kwargs["database"] = database
+        self.client = firestore.Client(**kwargs)
 
     # ── Videos ────────────────────────────────────────────────────────────
 
     def upsert_video(self, video_id, title, published, channel="english"):
-        with self._conn() as conn:
-            conn.execute("""
-                INSERT INTO videos (video_id, title, published, channel)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(video_id) DO UPDATE SET
-                    title=excluded.title,
-                    published=excluded.published
-            """, (video_id, title, published, channel))
+        ref = self.client.collection("videos").document(video_id)
+        ref.set({
+            "video_id": video_id,
+            "title": title,
+            "published": published,
+            "channel": channel,
+            "created_at": firestore.SERVER_TIMESTAMP,
+        }, merge=True)
 
     def get_video(self, video_id):
-        with self._conn() as conn:
-            row = conn.execute(
-                "SELECT * FROM videos WHERE video_id = ?", (video_id,)
-            ).fetchone()
-            return dict(row) if row else None
+        doc = self.client.collection("videos").document(video_id).get()
+        return doc.to_dict() if doc.exists else None
 
     def get_all_videos(self, channel=None):
-        with self._conn() as conn:
-            if channel:
-                rows = conn.execute(
-                    "SELECT * FROM videos WHERE channel = ?", (channel,)
-                ).fetchall()
-            else:
-                rows = conn.execute("SELECT * FROM videos").fetchall()
-            return [dict(r) for r in rows]
+        col = self.client.collection("videos")
+        if channel:
+            query = col.where(filter=FieldFilter("channel", "==", channel))
+        else:
+            query = col
+        return [d.to_dict() for d in query.stream()]
 
     # ── Snapshots ──────────────────────────────────────────────────────────
+    # Stored as a subcollection under each video doc: videos/{id}/snapshots
 
     def add_snapshot(self, video_id, views, likes=0, comments=0, timestamp=None):
         if timestamp is None:
-            timestamp = datetime.now(timezone.utc).isoformat()
-        with self._conn() as conn:
-            conn.execute("""
-                INSERT INTO snapshots (video_id, views, likes, comments, timestamp)
-                VALUES (?, ?, ?, ?, ?)
-            """, (video_id, views, likes, comments, timestamp))
+            timestamp = _now_iso()
+        # Ensure the parent video doc exists so get_all_videos()/joins don't break
+        video_ref = self.client.collection("videos").document(video_id)
+        if not video_ref.get().exists:
+            video_ref.set({"video_id": video_id, "title": "", "published": "",
+                           "channel": "english", "created_at": firestore.SERVER_TIMESTAMP})
+        video_ref.collection("snapshots").add({
+            "video_id": video_id,
+            "views": views,
+            "likes": likes,
+            "comments": comments,
+            "timestamp": timestamp,
+        })
 
     def get_snapshots(self, video_id):
-        with self._conn() as conn:
-            rows = conn.execute("""
-                SELECT * FROM snapshots
-                WHERE video_id = ?
-                ORDER BY timestamp ASC
-            """, (video_id,)).fetchall()
-            return [dict(r) for r in rows]
+        col = self.client.collection("videos").document(video_id).collection("snapshots")
+        docs = col.order_by("timestamp", direction=firestore.Query.ASCENDING).stream()
+        return [d.to_dict() for d in docs]
 
     def get_all_snapshots(self):
-        """Return all snapshots grouped by video_id — same format as view_history.json"""
-        with self._conn() as conn:
-            videos = conn.execute("SELECT * FROM videos").fetchall()
-            result = {}
-            for video in videos:
-                vid_id = video["video_id"]
-                snapshots = conn.execute("""
-                    SELECT views, likes, comments, timestamp
-                    FROM snapshots WHERE video_id = ?
-                    ORDER BY timestamp ASC
-                """, (vid_id,)).fetchall()
-                result[vid_id] = {
-                    "title": video["title"],
-                    "published": video["published"],
-                    "channel": video["channel"],
-                    "snapshots": [dict(s) for s in snapshots],
-                }
-            return result
+        """Return all snapshots grouped by video_id — same format as before."""
+        result = {}
+        for video_doc in self.client.collection("videos").stream():
+            video = video_doc.to_dict()
+            vid_id = video["video_id"]
+            snaps = self.get_snapshots(vid_id)
+            result[vid_id] = {
+                "title": video.get("title"),
+                "published": video.get("published"),
+                "channel": video.get("channel"),
+                "snapshots": snaps,
+            }
+        return result
 
     # ── A/B Title Tests ────────────────────────────────────────────────────
 
     def log_ab_test(self, topic, winner_title, winner_pattern, winner_score,
                     all_variations, generated_at=None):
         if generated_at is None:
-            generated_at = datetime.now(timezone.utc).isoformat()
-        with self._conn() as conn:
-            conn.execute("""
-                INSERT INTO ab_title_tests
-                (topic, winner_title, winner_pattern, winner_score, all_variations, generated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (topic, winner_title, winner_pattern, winner_score,
-                  json.dumps(all_variations), generated_at))
+            generated_at = _now_iso()
+        _, doc_ref = self.client.collection("ab_title_tests").add({
+            "topic": topic,
+            "winner_title": winner_title,
+            "winner_pattern": winner_pattern,
+            "winner_score": winner_score,
+            "all_variations": json.dumps(all_variations),
+            "generated_at": generated_at,
+            "actual_views": None,
+            "actual_views_24h": None,
+            "actual_checked_at": None,
+            "video_id": None,
+        })
+        return doc_ref.id  # Firestore ids are strings, unlike SQLite's int rowid
 
     def link_ab_test_to_video(self, winner_title, video_id):
         """
         Link the most recent unlinked ab_title_tests row matching this
-        winner_title to the freshly uploaded video_id. Called right after
-        a successful upload, when both values are available in the same run.
+        winner_title to the freshly uploaded video_id.
+        NOTE: this query (equality + equality + order_by) needs a composite
+        index — Firestore will raise an error with a direct "create index"
+        link the first time it runs; click it once and it's done.
         """
-        with self._conn() as conn:
-            row = conn.execute("""
-                SELECT id FROM ab_title_tests
-                WHERE winner_title = ? AND video_id IS NULL
-                ORDER BY generated_at DESC LIMIT 1
-            """, (winner_title,)).fetchone()
-            if row:
-                conn.execute("""
-                    UPDATE ab_title_tests SET video_id = ? WHERE id = ?
-                """, (video_id, row["id"]))
-                return True
-            return False
+        col = self.client.collection("ab_title_tests")
+        query = (col.where(filter=FieldFilter("winner_title", "==", winner_title))
+                    .where(filter=FieldFilter("video_id", "==", None))
+                    .order_by("generated_at", direction=firestore.Query.DESCENDING)
+                    .limit(1))
+        docs = list(query.stream())
+        if docs:
+            docs[0].reference.update({"video_id": video_id})
+            return True
+        return False
 
     def get_ab_tests(self, limit=200):
-        with self._conn() as conn:
-            rows = conn.execute("""
-                SELECT * FROM ab_title_tests
-                ORDER BY generated_at DESC LIMIT ?
-            """, (limit,)).fetchall()
-            result = []
-            for r in rows:
-                d = dict(r)
-                d["all_variations"] = json.loads(d["all_variations"] or "[]")
+        col = self.client.collection("ab_title_tests")
+        query = col.order_by("generated_at", direction=firestore.Query.DESCENDING).limit(limit)
+        result = []
+        for doc in query.stream():
+            d = doc.to_dict()
+            d["id"] = doc.id
+            d["all_variations"] = json.loads(d.get("all_variations") or "[]")
+            result.append(d)
+        return result
+
+    def get_pending_ab_tests(self):
+        """ab_title_tests rows where actual_views_24h hasn't been filled in yet."""
+        result = []
+        for doc in self.client.collection("ab_title_tests").stream():
+            d = doc.to_dict()
+            d["id"] = doc.id
+            if d.get("actual_views_24h") is None:
                 result.append(d)
-            return result
+        return result
+
+    def get_video_by_title(self, title, channel=None):
+        """Fallback lookup for close_ab_loop.py's title-matching path."""
+        col = self.client.collection("videos")
+        query = col.where(filter=FieldFilter("title", "==", title))
+        if channel:
+            query = query.where(filter=FieldFilter("channel", "==", channel))
+        docs = list(query.limit(1).stream())
+        return docs[0].to_dict() if docs else None
+
+    def set_ab_test_video_id(self, test_id, video_id):
+        self.client.collection("ab_title_tests").document(str(test_id)).update({
+            "video_id": video_id
+        })
+
+    def close_ab_test(self, test_id, actual_views_24h, checked_at):
+        self.client.collection("ab_title_tests").document(str(test_id)).update({
+            "actual_views_24h": actual_views_24h,
+            "actual_checked_at": checked_at,
+        })
+
+    def get_closed_loop_tests(self):
+        """
+        All ab_title_tests rows where actual_views_24h has been filled in.
+        Firestore has no JOIN, so unlike the old SQLite query this does NOT
+        include the video's channel/published — callers that need those
+        should look them up per-row with get_video(row['video_id']).
+        """
+        result = []
+        for doc in self.client.collection("ab_title_tests").stream():
+            d = doc.to_dict()
+            d["id"] = doc.id
+            if d.get("actual_views_24h") is not None:
+                result.append(d)
+        return result
 
     def update_ab_actual_views(self, test_id, actual_views):
-        """Update with real YouTube views after 24h — for Phase 5 learning."""
-        with self._conn() as conn:
-            conn.execute("""
-                UPDATE ab_title_tests SET actual_views = ?
-                WHERE id = ?
-            """, (actual_views, test_id))
+        """test_id is now a Firestore doc-id string (was an int rowid under SQLite)."""
+        self.client.collection("ab_title_tests").document(str(test_id)).update({
+            "actual_views": actual_views
+        })
 
     # ── Posted Topics ──────────────────────────────────────────────────────
 
     def mark_posted(self, topic, channel="english", posted_at=None):
         if posted_at is None:
-            posted_at = datetime.now(timezone.utc).isoformat()
-        with self._conn() as conn:
-            conn.execute("""
-                INSERT INTO posted_topics (topic, channel, posted_at)
-                VALUES (?, ?, ?)
-            """, (topic, channel, posted_at))
+            posted_at = _now_iso()
+        self.client.collection("posted_topics").add({
+            "topic": topic,
+            "channel": channel,
+            "posted_at": posted_at,
+        })
 
     def get_recent_posted(self, hours=24, channel="english"):
-        from datetime import timedelta
+        """
+        NOTE: equality filter (channel) + range filter (posted_at) needs a
+        composite index. See firestore.indexes.json in this migration —
+        deploy it with `firebase deploy --only firestore:indexes` once,
+        ahead of time, so this doesn't fail on first run in production.
+        """
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-        with self._conn() as conn:
-            rows = conn.execute("""
-                SELECT topic FROM posted_topics
-                WHERE channel = ? AND posted_at >= ?
-            """, (channel, cutoff)).fetchall()
-            return [r["topic"].lower().strip() for r in rows]
+        col = self.client.collection("posted_topics")
+        query = (col.where(filter=FieldFilter("channel", "==", channel))
+                    .where(filter=FieldFilter("posted_at", ">=", cutoff)))
+        return [d.to_dict()["topic"].lower().strip() for d in query.stream()]
 
     # ── Spy Cache ──────────────────────────────────────────────────────────
 
     def save_spy_cache(self, channel, topics):
-        cached_at = datetime.now(timezone.utc).isoformat()
-        with self._conn() as conn:
-            conn.execute("""
-                INSERT INTO spy_cache (channel, topics, cached_at)
-                VALUES (?, ?, ?)
-            """, (channel, json.dumps(topics), cached_at))
+        self.client.collection("spy_cache").add({
+            "channel": channel,
+            "topics": json.dumps(topics),
+            "cached_at": _now_iso(),
+        })
 
     def get_spy_cache(self, channel, max_age_seconds=21600):
-        with self._conn() as conn:
-            row = conn.execute("""
-                SELECT * FROM spy_cache
-                WHERE channel = ?
-                ORDER BY cached_at DESC LIMIT 1
-            """, (channel,)).fetchone()
-            if not row:
-                return None
-            import time
-            from datetime import datetime as dt
-            cached_dt = dt.fromisoformat(row["cached_at"])
-            age = (datetime.now(timezone.utc) - cached_dt.replace(
-                tzinfo=timezone.utc)).total_seconds()
-            if age > max_age_seconds:
-                return None
-            return json.loads(row["topics"])
+        col = self.client.collection("spy_cache")
+        query = (col.where(filter=FieldFilter("channel", "==", channel))
+                    .order_by("cached_at", direction=firestore.Query.DESCENDING)
+                    .limit(1))
+        docs = list(query.stream())
+        if not docs:
+            return None
+        row = docs[0].to_dict()
+        cached_dt = datetime.fromisoformat(row["cached_at"])
+        age = (datetime.now(timezone.utc) - cached_dt).total_seconds()
+        if age > max_age_seconds:
+            return None
+        return json.loads(row["topics"])
 
-    # ── Migration from JSON ────────────────────────────────────────────────
+    # ── Migration from SQLite (run once, from your MacBook) ────────────────
+
+    def migrate_from_sqlite(self, sqlite_path="output/aicarryon.db"):
+        """
+        One-time backfill: reads your existing SQLite file and writes every
+        row into Firestore. Run this locally, pointed at your real
+        aicarryon.db, BEFORE cutting the schedulers over. Safe to re-run —
+        upsert_video/add_snapshot etc. don't need to error on duplicates,
+        but running it twice will duplicate snapshot/ab_test/posted rows
+        (they use .add(), not upsert), so only run it once per real DB file.
+        """
+        import sqlite3
+        if not os.path.exists(sqlite_path):
+            print(f"No SQLite file found at {sqlite_path}, nothing to migrate.")
+            return
+
+        conn = sqlite3.connect(sqlite_path)
+        conn.row_factory = sqlite3.Row
+        migrated = {"videos": 0, "snapshots": 0, "ab_tests": 0, "posted": 0, "spy_cache": 0}
+
+        for row in conn.execute("SELECT * FROM videos"):
+            self.upsert_video(row["video_id"], row["title"], row["published"], row["channel"])
+            migrated["videos"] += 1
+
+        for row in conn.execute("SELECT * FROM snapshots"):
+            self.add_snapshot(row["video_id"], row["views"], row["likes"],
+                               row["comments"], row["timestamp"])
+            migrated["snapshots"] += 1
+
+        for row in conn.execute("SELECT * FROM ab_title_tests"):
+            new_id = self.log_ab_test(
+                row["topic"], row["winner_title"], row["winner_pattern"],
+                row["winner_score"], json.loads(row["all_variations"] or "[]"),
+                row["generated_at"],
+            )
+            if row["video_id"]:
+                self.client.collection("ab_title_tests").document(new_id).update({
+                    "video_id": row["video_id"]
+                })
+            if row["actual_views"] is not None:
+                self.client.collection("ab_title_tests").document(new_id).update({
+                    "actual_views": row["actual_views"]
+                })
+            migrated["ab_tests"] += 1
+
+        for row in conn.execute("SELECT * FROM posted_topics"):
+            self.mark_posted(row["topic"], row["channel"], row["posted_at"])
+            migrated["posted"] += 1
+
+        for row in conn.execute("SELECT * FROM spy_cache"):
+            self.client.collection("spy_cache").add({
+                "channel": row["channel"], "topics": row["topics"], "cached_at": row["cached_at"]
+            })
+            migrated["spy_cache"] += 1
+
+        conn.close()
+        print(f"✅ Migrated to Firestore: {migrated}")
+        return migrated
 
     def migrate_from_json(self, view_history_path="output/view_history.json",
                           ab_log_path="output/title_ab_log.json",
                           posted_path="output/posted_topics.txt"):
         """
-        One-time migration from JSON files to SQLite.
-        Safe to run multiple times — won't duplicate data.
+        No-op under Firestore. This existed under SQLite because Railway/
+        Render's disk wasn't reliably persistent, so scheduler.py restored
+        JSON backups from GitHub and rebuilt the DB on every startup.
+        Firestore is persistent by default, so that whole restore dance is
+        gone — this stub just keeps scheduler.py from crashing until we
+        remove the call to it in the Cloud Run Job refactor.
         """
-        migrated = {"videos": 0, "snapshots": 0, "ab_tests": 0, "posted": 0}
+        return {"videos": 0, "snapshots": 0, "ab_tests": 0, "posted": 0}
 
-        # Migrate view_history.json
-        if os.path.exists(view_history_path):
-            try:
-                with open(view_history_path) as f:
-                    view_history = json.load(f)
-                for video_id, data in view_history.items():
-                    self.upsert_video(
-                        video_id,
-                        data.get("title", ""),
-                        data.get("published", ""),
-                    )
-                    migrated["videos"] += 1
-                    for snap in data.get("snapshots", []):
-                        self.add_snapshot(
-                            video_id,
-                            snap.get("views", 0),
-                            snap.get("likes", 0),
-                            snap.get("comments", 0),
-                            snap.get("timestamp"),
-                        )
-                        migrated["snapshots"] += 1
-                print(f"✅ Migrated {migrated['videos']} videos, {migrated['snapshots']} snapshots")
-            except Exception as e:
-                print(f"⚠️ view_history migration error: {e}")
+    # ── Locks (replaces the local generation.lock file) ────────────────────
 
-        # Migrate title_ab_log.json
-        if os.path.exists(ab_log_path):
-            try:
-                with open(ab_log_path) as f:
-                    ab_logs = json.load(f)
-                for entry in ab_logs:
-                    winner = entry.get("winner", {})
-                    self.log_ab_test(
-                        entry.get("topic", ""),
-                        winner.get("title", ""),
-                        winner.get("pattern", ""),
-                        winner.get("score", 0),
-                        entry.get("variations", []),
-                        entry.get("generated_at"),
-                    )
-                    migrated["ab_tests"] += 1
-                print(f"✅ Migrated {migrated['ab_tests']} A/B tests")
-            except Exception as e:
-                print(f"⚠️ AB log migration error: {e}")
+    def try_acquire_lock(self, name, ttl_seconds=1800):
+        """
+        Best-effort distributed lock so two overlapping Cloud Run Job
+        executions (e.g. Cloud Scheduler retry landing while a slow run is
+        still going) don't generate the same video twice. Not perfectly
+        atomic (no transaction), but matches the local-file lock's original
+        guarantees — good enough for this use case.
+        Returns (acquired: bool, age_seconds_of_existing_lock: float).
+        """
+        ref = self.client.collection("locks").document(name)
+        doc = ref.get()
+        now = datetime.now(timezone.utc)
+        if doc.exists:
+            locked_at = datetime.fromisoformat(doc.to_dict()["locked_at"])
+            age = (now - locked_at).total_seconds()
+            if age < ttl_seconds:
+                return False, age
+        ref.set({"locked_at": now.isoformat()})
+        return True, 0.0
 
-        # Migrate posted_topics.txt
-        if os.path.exists(posted_path):
-            try:
-                with open(posted_path) as f:
-                    for line in f:
-                        line = line.strip()
-                        if "|" in line:
-                            ts, topic = line.split("|", 1)
-                            self.mark_posted(topic.strip(), posted_at=ts.strip())
-                            migrated["posted"] += 1
-                print(f"✅ Migrated {migrated['posted']} posted topics")
-            except Exception as e:
-                print(f"⚠️ Posted topics migration error: {e}")
+    def release_lock(self, name):
+        self.client.collection("locks").document(name).delete()
 
-        return migrated
+    # ── Public stats ─────────────────────────────────────────────────────
 
-    # ── Analytics ──────────────────────────────────────────────────────────
+    def get_public_stats(self):
+        """Lightweight counts for app.py's public portfolio page."""
+        video_ids = set()
+        total_snapshots = 0
+        for doc in self.client.collection_group("snapshots").stream():
+            total_snapshots += 1
+            video_ids.add(doc.to_dict().get("video_id"))
+        return {
+            "total_videos": len(video_ids),
+            "total_snapshots": total_snapshots,
+            "db_available": True,
+        }
+
+    # ── Analytics (unchanged logic — just reads via get_all_snapshots) ─────
+
 
     def get_peak_hours(self):
-        """
-        Calculate peak upload hours from snapshot velocity data.
-        Returns dict {hour: avg_velocity} based on real view data.
-        """
         all_data = self.get_all_snapshots()
-
         from collections import defaultdict
         hour_velocities = defaultdict(list)
 
@@ -401,7 +402,7 @@ class Database:
             if len(snapshots) < 2:
                 continue
             for i in range(1, len(snapshots)):
-                prev = snapshots[i-1]
+                prev = snapshots[i - 1]
                 curr = snapshots[i]
                 try:
                     t1 = _parse_ts_safe(prev["timestamp"])
@@ -419,17 +420,16 @@ class Database:
         for hour in range(24):
             values = hour_velocities.get(hour, [])
             result[hour] = {
-                "avg_velocity": round(sum(values)/len(values), 4) if values else 0.0,
+                "avg_velocity": round(sum(values) / len(values), 4) if values else 0.0,
                 "sample_count": len(values),
             }
         return result
 
     def get_best_upload_hour(self):
-        """Return the single best hour to upload based on velocity data."""
         peak_hours = self.get_peak_hours()
         best = max(peak_hours.items(), key=lambda x: x[1]["avg_velocity"])
         if best[1]["sample_count"] < 3:
-            return None  # not enough data
+            return None
         return best[0]
 
 
