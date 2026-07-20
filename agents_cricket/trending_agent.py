@@ -31,6 +31,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 CRICAPI_KEY = os.getenv("CRICAPI_KEY", "")
+CRICAPI_KEY_2 = os.getenv("CRICAPI_KEY_2", "")
+
+def _cricapi_keys():
+    """Yields available CricAPI keys in fallback order."""
+    for k in (CRICAPI_KEY, CRICAPI_KEY_2):
+        if k:
+            yield k
 BASE_URL = "https://api.cricapi.com/v1"
 
 ALLOWED_MATCH_TYPES = {"t20", "odi", "test"}
@@ -99,27 +106,50 @@ def _is_marquee(m):
     )
 
 
+_current_matches_cache = None
+_current_matches_cache_at = None
+CURRENT_MATCHES_CACHE_TTL_SECONDS = 300  # 5 min — shared across get_live_matches/get_finished_matches
+
+
 def _fetch_current_matches():
-    if not CRICAPI_KEY:
-        print("CRICAPI_KEY not set — skipping trending fetch")
-        return []
-    try:
-        r = requests.get(
-            f"{BASE_URL}/currentMatches",
-            params={"apikey": CRICAPI_KEY, "offset": 0},
-            timeout=20,
-        )
-        r.raise_for_status()
-        data = r.json()
-    except Exception as e:
-        print(f"CricAPI currentMatches failed: {e}")
+    global _current_matches_cache, _current_matches_cache_at
+
+    if _current_matches_cache_at is not None:
+        elapsed = (datetime.now(timezone.utc) - _current_matches_cache_at).total_seconds()
+        if elapsed < CURRENT_MATCHES_CACHE_TTL_SECONDS:
+            return _current_matches_cache
+
+    keys = list(_cricapi_keys())
+    if not keys:
+        print("No CricAPI keys set — skipping trending fetch")
         return []
 
-    if data.get("status") != "success":
-        print(f"CricAPI returned non-success: {data.get('status')}")
-        return []
+    last_reason = None
+    for key in keys:
+        try:
+            r = requests.get(
+                f"{BASE_URL}/currentMatches",
+                params={"apikey": key, "offset": 0},
+                timeout=20,
+            )
+            r.raise_for_status()
+            data = r.json()
+        except Exception as e:
+            print(f"CricAPI currentMatches failed: {e}")
+            continue
 
-    return data.get("data", [])
+        if data.get("status") != "success":
+            last_reason = data.get("reason") or data.get("status")
+            print(f"CricAPI returned non-success ({key[:8]}...): {last_reason}")
+            continue
+
+        result = data.get("data", [])
+        _current_matches_cache = result
+        _current_matches_cache_at = datetime.now(timezone.utc)
+        return result
+
+    print(f"All CricAPI keys exhausted/failed — last reason: {last_reason}")
+    return []
 
 
 def _search_marquee_series():
@@ -419,11 +449,14 @@ def get_all_topics(limit=8):
     topics = []
 
     import hashlib
+    import re
     for n in news:
         # News items have no natural id (unlike matches) — derive a stable
-        # one from the link so dedup (cricket_db.mark_posted/is_posted)
-        # works the same way for news as it does for matches.
-        news_id = "news_" + hashlib.md5(n.get("link", n.get("title", "")).encode()).hexdigest()[:16]
+        # one from the normalized title so the same story dedupes even
+        # when the link differs across sources/scrapes.
+        _norm_title = re.sub(r"[^\w\s]", "", n.get("title", "").lower())
+        _norm_title = re.sub(r"\s+", " ", _norm_title).strip()
+        news_id = "news_" + hashlib.md5(_norm_title.encode()).hexdigest()[:16]
         topics.append({**n, "id": news_id, "topic_type": "news"})
 
     for group in (marquee_live, live):
