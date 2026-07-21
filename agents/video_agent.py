@@ -407,7 +407,7 @@ def create_video(manim_path=None, use_flow_clips=False):
                 frame = draw_caption(frame, word)
             frame.save(f"output/frames/{frame_idx:06d}.jpg", "JPEG", quality=72)
             frame.close()
-            if frame_idx % 150 == 0:
+            if frame_idx % 100 == 0:
                 import gc
                 gc.collect()
         if current_bg_img is not None:
@@ -430,6 +430,7 @@ def create_video(manim_path=None, use_flow_clips=False):
             "-filter_complex", "[1:a]volume=1.0[voice];[2:a]volume=0.15[music];[voice][music]amix=inputs=2:duration=first[aout]",
             "-map", "0:v", "-map", "[aout]",
             "-c:v", "libx264", "-preset", "ultrafast",
+            "-crf", "28",
             "-threads", "1", "-c:a", "aac",
             "-pix_fmt", "yuv420p", "-shortest", output_path
         ]
@@ -440,6 +441,7 @@ def create_video(manim_path=None, use_flow_clips=False):
             "-i", "output/frames/%06d.jpg",
             "-i", audio_path,
             "-c:v", "libx264", "-preset", "ultrafast",
+            "-crf", "28",
             "-threads", "1", "-c:a", "aac",
             "-pix_fmt", "yuv420p", "-shortest", output_path
         ]
