@@ -67,6 +67,17 @@ def should_generate_now():
     current_hour = datetime.datetime.utcnow().hour
 
     if current_hour in adaptive_hours:
+        # Check 1 hour minimum gap from last upload
+        try:
+            from agents.database import db
+            from datetime import datetime, timezone
+            last = db.get_meta("last_upload_hour_hindi")
+            if last:
+                gap = (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() / 3600
+                if gap < 1.0:
+                    return False, f"Only {gap:.1f}h since last Hindi upload — need 1h gap"
+        except Exception:
+            pass
         return True, f"Current hour {current_hour:02d}:00 UTC is in best hours {adaptive_hours}"
 
     return False, f"Current hour {current_hour:02d}:00 UTC not in best hours {adaptive_hours}"
@@ -166,9 +177,9 @@ def generate_and_upload_hindi(force=False):
         from agents.thumbnail_generator import generate_thumbnail
         thumbnail = generate_thumbnail(seo["title"], topic)
 
-        log("Background images fetch ho rahi hain...")
-        from agents.image_agent import generate_backgrounds
-        image_paths, errors = generate_backgrounds(topic, script, num_images=4)
+        log("Background images fetch ho rahi hain (generative mode)...")
+        from agents.generative_image_agent import generate_backgrounds
+        image_paths, errors = generate_backgrounds(topic, script, num_images=4, mode="generative")
         if not image_paths:
             log(f"Images nahi bani: {errors}")
             return
@@ -196,6 +207,11 @@ def generate_and_upload_hindi(force=False):
         )
 
         mark_posted_today(topic)
+        try:
+            from agents.adaptive_scheduler import mark_upload_done
+            mark_upload_done("hindi")
+        except Exception:
+            pass
         log(f"SUCCESS: Upload ho gaya! {video_url}")
 
         from agents.cleanup_agent import cleanup_after_upload

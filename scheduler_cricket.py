@@ -139,6 +139,11 @@ def _run_cricket_cycle_inner():
         match_id=new_match["id"],
     )
     _increment_daily_cap()
+    try:
+        from agents.adaptive_scheduler import mark_upload_done
+        mark_upload_done("cricket")
+    except Exception:
+        pass
 
     return {"status": "uploaded", "video_url": video_url, "title": seo["title"]}
 
