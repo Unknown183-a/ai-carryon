@@ -178,6 +178,79 @@ def get_schedule_recommendation():
     }
 
 
+
+def should_upload_now_for_channel(channel="english"):
+    """
+    Multi-channel adaptive scheduler.
+    Returns (bool, reason_string).
+    
+    Logic:
+    - Get top 3 peak hours for the channel (priority queue by avg velocity)
+    - Current hour must be in top 3
+    - Minimum 1 hour gap between consecutive uploads (checked via last_upload_hour in DB)
+    - Falls back to default hours if not enough data
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    current_hour = now.hour
+
+    # Default fallback hours per channel
+    defaults = {
+        "english": [6, 12, 18],   # 6am, 12pm, 6pm UTC
+        "hindi":   [3, 9, 15],    # IST 8:30am, 2:30pm, 8:30pm
+        "cricket": [4, 10, 16],   # IST 9:30am, 3:30pm, 9:30pm
+    }
+
+    try:
+        from agents.database import db
+        peak_hours = db.get_peak_hours(channel=channel)
+        total_samples = sum(h["sample_count"] for h in peak_hours.values()) if peak_hours else 0
+
+        if total_samples >= 10:
+            # Build priority queue — top 3 hours by avg velocity
+            windows = sorted(
+                [{"hour": int(h), "avg_velocity": d["avg_velocity"], "samples": d["sample_count"]}
+                 for h, d in peak_hours.items() if d["sample_count"] >= 2],
+                key=lambda x: x["avg_velocity"], reverse=True
+            )[:3]
+            top_hours = [w["hour"] for w in windows]
+
+            if current_hour not in top_hours:
+                return False, f"[{channel}] Hour {current_hour:02d}:00 UTC not in top-3 peak hours {top_hours}"
+
+            # Check minimum 1 hour gap from last upload
+            try:
+                last_upload_iso = db.get_meta(f"last_upload_hour_{channel}")
+                if last_upload_iso:
+                    from datetime import datetime
+                    last_dt = datetime.fromisoformat(last_upload_iso)
+                    gap_hours = (now - last_dt).total_seconds() / 3600
+                    if gap_hours < 1.0:
+                        return False, f"[{channel}] Only {gap_hours:.1f}h since last upload — need 1h gap"
+            except Exception:
+                pass
+
+            return True, f"[{channel}] Hour {current_hour:02d}:00 UTC is peak (top-3: {top_hours})"
+
+    except Exception as e:
+        print(f"[{channel}] DB peak hours error: {e}")
+
+    # Fallback to default hours
+    fallback = defaults.get(channel, [6, 12, 18])
+    if current_hour in fallback:
+        return True, f"[{channel}] Hour {current_hour:02d}:00 UTC matches fallback schedule {fallback}"
+    return False, f"[{channel}] Hour {current_hour:02d}:00 UTC not in fallback schedule {fallback}"
+
+
+def mark_upload_done(channel="english"):
+    """Call this after a successful upload to enforce the 1-hour gap."""
+    try:
+        from datetime import datetime, timezone
+        from agents.database import db
+        db.set_meta(f"last_upload_hour_{channel}", datetime.now(timezone.utc).isoformat())
+    except Exception as e:
+        print(f"mark_upload_done failed: {e}")
+
 if __name__ == "__main__":
     print("Adaptive Scheduler Analysis")
     print("=" * 40)

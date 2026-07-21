@@ -265,6 +265,7 @@ def run_generation_pipeline(topic_override=None):
             log(f"Instagram post failed (YouTube still uploaded): {insta_err}")
 
         mark_posted(topic)
+        mark_upload_done("english")
         log(f"SUCCESS: YouTube: {video_url}")
 
         clear_checkpoint(topic)
@@ -332,7 +333,7 @@ def main():
         run_generation_pipeline()
         return
 
-    should_run, reason = should_upload_now()
+    should_run, reason = should_upload_now_for_channel("english")
     log(f"Schedule check: {reason}")
     if not should_run:
         log("Not a top-velocity hour — skipping generation this run")

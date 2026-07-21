@@ -122,6 +122,7 @@ def _run_cricket_cycle_inner():
 
     generate_voice(script, output_path="output/voice.mp3")
     create_srt(script, audio_path="output/voice.mp3")
+    # # generative_image disconnected  # disconnected - use Pexels instead
     generate_backgrounds(summary, num_images=4, structured=structured)
     video_path = create_video()  # writes to output/final_video.mp4 per your existing agent
 

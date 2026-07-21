@@ -255,7 +255,7 @@ def _create_video_from_clips_UNUSED(clip_paths, audio_path, srt_path, manim_path
     for f in glob.glob("output/frames/*.jpg"):
         os.remove(f)
     audio_duration = get_audio_duration(audio_path)
-    fps = 24
+    fps = 30
     total_frames = int(audio_duration * fps)
     captions = parse_srt(srt_path) if os.path.exists(srt_path) else []
     frames_needed = total_frames
@@ -352,7 +352,7 @@ def create_video(manim_path=None, use_flow_clips=False):
     for f in glob.glob("output/frames/*.jpg"):
         os.remove(f)
 
-    fps = 20
+    fps = 30
     total_frames = int(duration * fps)
 
     frame_word = {}
