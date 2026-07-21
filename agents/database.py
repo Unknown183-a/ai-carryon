@@ -392,7 +392,7 @@ class Database:
     # ── Analytics (unchanged logic — just reads via get_all_snapshots) ─────
 
 
-    def get_peak_hours(self):
+    def get_peak_hours(self, channel=None):
         all_data = self.get_all_snapshots()
         from collections import defaultdict
         hour_velocities = defaultdict(list)
