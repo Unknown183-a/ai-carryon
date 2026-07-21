@@ -54,11 +54,20 @@ def _now_iso():
 
 class Database:
     def __init__(self, project=None, database=None):
+        # Always load .env first to get correct project
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except Exception:
+            pass
         # project defaults to GOOGLE_CLOUD_PROJECT / GCLOUD_PROJECT env var,
         # which Cloud Run sets automatically. `database` lets you point at a
         # named Firestore database other than "(default)" if you want to
         # keep this fully separate from other Firebase data in the project.
         kwargs = {}
+        if not project:
+            import os
+            project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCLOUD_PROJECT")
         if project:
             kwargs["project"] = project
         if database:
