@@ -131,7 +131,7 @@ gcloud run jobs create ai-carryon-worker-cricket \
   --memory 2Gi \
   --task-timeout 3600 \
   --max-retries 0 \
-  --set-secrets "GROQ_API_KEY=GROQ_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest"
+  --set-secrets "GROQ_API_KEY=GROQ_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,SARVAM_API_KEY=SARVAM_API_KEY:latest"
   # ...plus every other secret this channel needs (CRICAPI key, cricket YouTube tokens, etc.)
 ```
 
