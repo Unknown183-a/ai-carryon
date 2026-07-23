@@ -19,6 +19,7 @@ CricAPI's "no photo available" placeholder is icon512.png — detected and
 skipped rather than downloaded as a useless generic icon.
 """
 import os
+import random
 import requests
 from dotenv import load_dotenv
 load_dotenv()
@@ -28,11 +29,22 @@ PEXELS_KEY = os.getenv("PEXELS_API_KEY", "")
 BASE_URL = "https://api.cricapi.com/v1"
 PLACEHOLDER_MARKER = "icon512.png"
 
+# Wider pool + randomized pick (see _pexels_search) so repeated queries
+# (news items always have venue=None/teams=[], and the same team/venue
+# recurs across matches) don't return the identical top-ranked Pexels
+# photo every single time — that was producing the "same background on
+# every video" issue.
 GENERIC_QUERIES = [
     "cricket stadium crowd",
     "cricket bat ball closeup",
     "cricket player celebration",
     "cricket stadium floodlights",
+    "cricket match action",
+    "cricket ground aerial",
+    "cricket fans stadium",
+    "cricket boundary rope",
+    "cricket pitch wicket",
+    "cricket team huddle",
 ]
 
 # topic_types where a match_id exists and match_squad can be queried
@@ -78,22 +90,30 @@ def _download(url, output_path):
         f.write(r.content)
 
 
-def _pexels_search(query, output_path):
+def _pexels_search(query, output_path, exclude_urls=None):
     if not PEXELS_KEY:
         return False
+    exclude_urls = exclude_urls or set()
     try:
         headers = {"Authorization": PEXELS_KEY}
-        params = {"query": query, "orientation": "portrait", "size": "large", "per_page": 1}
+        params = {"query": query, "orientation": "portrait", "size": "large", "per_page": 15}
         r = requests.get("https://api.pexels.com/v1/search", headers=headers, params=params, timeout=30)
         r.raise_for_status()
         data = r.json()
-        if data.get("photos"):
-            img_url = data["photos"][0]["src"]["large2x"]
+        photos = data.get("photos", [])
+        # Prefer a photo not already used in this run (e.g. same team name
+        # appearing twice), otherwise just pick randomly among all results —
+        # picking index 0 every time is what caused identical repeats for
+        # identical queries.
+        candidates = [p for p in photos if p["src"]["large2x"] not in exclude_urls] or photos
+        if candidates:
+            chosen = random.choice(candidates)
+            img_url = chosen["src"]["large2x"]
             _download(img_url, output_path)
-            return True
+            return img_url
     except Exception as e:
         print(f"Pexels search failed for '{query}': {e}")
-    return False
+    return None
 
 
 def generate_backgrounds(match_summary=None, num_images=4, structured=None):
@@ -106,6 +126,7 @@ def generate_backgrounds(match_summary=None, num_images=4, structured=None):
         os.remove(os.path.join(folder, f))
 
     image_paths, errors = [], []
+    used_urls = set()
     slot = 1
 
     structured = structured or {}
@@ -135,7 +156,9 @@ def generate_backgrounds(match_summary=None, num_images=4, structured=None):
     # 2) Venue-specific stock
     if venue and slot <= num_images:
         output_path = os.path.join(folder, f"{slot}.jpg")
-        if _pexels_search(f"{venue} cricket stadium", output_path):
+        url = _pexels_search(f"{venue} cricket stadium", output_path, exclude_urls=used_urls)
+        if url:
+            used_urls.add(url)
             image_paths.append(output_path)
             slot += 1
         else:
@@ -146,17 +169,26 @@ def generate_backgrounds(match_summary=None, num_images=4, structured=None):
         if slot > num_images:
             break
         output_path = os.path.join(folder, f"{slot}.jpg")
-        if _pexels_search(f"{team} cricket team", output_path):
+        url = _pexels_search(f"{team} cricket team", output_path, exclude_urls=used_urls)
+        if url:
+            used_urls.add(url)
             image_paths.append(output_path)
             slot += 1
         else:
             errors.append(f"No Pexels result for team '{team}'")
 
-    # 4) Generic fallback for any remaining slots
+    # 4) Generic fallback for any remaining slots — shuffled each run so
+    # even a run that relies entirely on generic queries (e.g. news items,
+    # which always have venue=None/teams=[]) doesn't always draw from the
+    # same queries in the same order.
+    generic_pool = GENERIC_QUERIES[:]
+    random.shuffle(generic_pool)
     gi = 0
-    while slot <= num_images and gi < len(GENERIC_QUERIES):
+    while slot <= num_images and gi < len(generic_pool):
         output_path = os.path.join(folder, f"{slot}.jpg")
-        if _pexels_search(GENERIC_QUERIES[gi], output_path):
+        url = _pexels_search(generic_pool[gi], output_path, exclude_urls=used_urls)
+        if url:
+            used_urls.add(url)
             image_paths.append(output_path)
             slot += 1
         gi += 1
