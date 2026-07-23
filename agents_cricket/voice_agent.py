@@ -9,6 +9,9 @@ own file so changing its voice never touches the other two channels.
 """
 import os
 import base64
+from dotenv import load_dotenv
+
+load_dotenv()  # load .env here too — don't rely on the caller having done it first
 
 PRIMARY_SPEAKER = "shubh"
 FALLBACK_SPEAKER = "vijay"
