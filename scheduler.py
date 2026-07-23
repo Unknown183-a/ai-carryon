@@ -265,6 +265,7 @@ def run_generation_pipeline(topic_override=None):
             log(f"Instagram post failed (YouTube still uploaded): {insta_err}")
 
         mark_posted(topic)
+        from agents.adaptive_scheduler import mark_upload_done
         mark_upload_done("english")
         log(f"SUCCESS: YouTube: {video_url}")
 
@@ -333,6 +334,7 @@ def main():
         run_generation_pipeline()
         return
 
+    from agents.adaptive_scheduler import should_upload_now_for_channel
     should_run, reason = should_upload_now_for_channel("english")
     log(f"Schedule check: {reason}")
     if not should_run:
