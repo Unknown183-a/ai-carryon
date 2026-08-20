@@ -13,7 +13,7 @@ HOOK_TEMPLATES = [
 def get_llm(temperature=0.7):
     from langchain_groq import ChatGroq
     try:
-        llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=temperature)
+        llm = ChatGroq(model="openai/gpt-oss-120b", temperature=temperature)
         safe_invoke("hi")
         return llm
     except Exception:
@@ -31,7 +31,7 @@ def safe_invoke(prompt):
 
     def try_groq():
         try:
-            llm = ChatGroq(model="llama-3.3-70b-versatile")
+            llm = ChatGroq(model="openai/gpt-oss-120b")
             result[0] = llm.invoke(prompt)
         except Exception as e:
             error[0] = e

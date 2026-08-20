@@ -13,7 +13,7 @@ def safe_invoke(prompt):
 
     def try_groq():
         try:
-            llm = ChatGroq(model="llama-3.3-70b-versatile")
+            llm = ChatGroq(model="openai/gpt-oss-120b")
             result[0] = llm.invoke(prompt)
         except Exception:
             pass

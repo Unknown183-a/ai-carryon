@@ -63,7 +63,7 @@ Return ONLY the JSON array. Make all 10 topics UNIQUE and DIFFERENT from each ot
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.9,  # High temperature = more variety
             max_tokens=2000

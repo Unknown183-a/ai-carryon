@@ -9,7 +9,7 @@ def safe_invoke(prompt):
     result = [None]
     def try_groq():
         try:
-            result[0] = ChatGroq(model="llama-3.3-70b-versatile").invoke(prompt)
+            result[0] = ChatGroq(model="openai/gpt-oss-120b").invoke(prompt)
         except Exception:
             pass
     t = threading.Thread(target=try_groq)

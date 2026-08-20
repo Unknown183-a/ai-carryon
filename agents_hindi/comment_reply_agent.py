@@ -205,7 +205,7 @@ def _get_llm():
     """Same Groq setup pattern used elsewhere in this codebase."""
     from langchain_groq import ChatGroq
     return ChatGroq(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         temperature=0.4,
         groq_api_key=os.getenv("GROQ_API_KEY"),
     )

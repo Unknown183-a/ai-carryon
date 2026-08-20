@@ -11,7 +11,7 @@ load_dotenv()
 def get_llm():
     from langchain_groq import ChatGroq
     try:
-        llm = ChatGroq(model="llama-3.3-70b-versatile")
+        llm = ChatGroq(model="openai/gpt-oss-120b")
         llm.invoke("hi")
         return llm
     except Exception:

@@ -6,7 +6,7 @@ load_dotenv()
 def get_llm():
     from langchain_groq import ChatGroq
     try:
-        llm = ChatGroq(model="llama-3.3-70b-versatile", request_timeout=15)
+        llm = ChatGroq(model="openai/gpt-oss-120b", request_timeout=15)
         safe_invoke("hi")
         return llm
     except Exception:
@@ -24,7 +24,7 @@ def safe_invoke(prompt):
 
     def try_groq():
         try:
-            llm = ChatGroq(model="llama-3.3-70b-versatile")
+            llm = ChatGroq(model="openai/gpt-oss-120b")
             result[0] = llm.invoke(prompt)
         except Exception as e:
             error[0] = e
@@ -52,7 +52,7 @@ def safe_invoke(prompt):
 def research(topic):
     from langchain_groq import ChatGroq
     llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         temperature=0.5
     )
 

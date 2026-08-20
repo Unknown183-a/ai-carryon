@@ -189,7 +189,7 @@ def get_trending_topic(region_code="IN"):
 def _get_llm():
     from langchain_groq import ChatGroq
     return ChatGroq(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         temperature=0.9,
         groq_api_key=os.getenv("GROQ_API_KEY"),
     )
