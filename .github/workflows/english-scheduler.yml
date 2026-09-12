@@ -1,0 +1,56 @@
+name: English Scheduler
+
+on:
+  schedule:
+    # Every 5 hours, on the hour (UTC). GitHub's cron scheduler can lag by
+    # a few minutes under load — that's fine, scheduler.py checks the
+    # current hour itself rather than assuming exact timing.
+    - cron: "0 */5 * * *"
+  workflow_dispatch:
+    inputs:
+      force_generate:
+        description: "Bypass the schedule gate and daily cap (test run)"
+        required: false
+        default: "false"
+
+jobs:
+  run-scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run English scheduler
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
+          YOUTUBE_CLIENT_SECRETS_B64: ${{ secrets.YOUTUBE_CLIENT_SECRETS_B64 }}
+          YOUTUBE_ANALYTICS_TOKEN_B64: ${{ secrets.YOUTUBE_ANALYTICS_TOKEN_B64 }}
+          INSTAGRAM_USERNAME: ${{ secrets.INSTAGRAM_USERNAME }}
+          INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
+          FORCE_GENERATE: ${{ github.event.inputs.force_generate || 'false' }}
+        run: python scheduler.py
+
+      - name: Upload run log (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: english-scheduler-log-${{ github.run_id }}
+          path: output/scheduler_log.txt
+          if-no-files-found: ignore

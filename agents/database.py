@@ -1,8 +1,12 @@
 """
-agents/database.py — Central SQLite database for AI CarryON
+agents/database.py — Central database for AI CarryON
 
-Replaces JSON files with a persistent SQLite database.
-JSON files kept as fallback — zero data loss.
+Supports two backends, chosen automatically:
+  - Postgres (if DATABASE_URL is set) — for production / GitHub Actions,
+    where the filesystem is wiped between runs and a persistent external
+    database is required. Use a free Postgres from Supabase or Neon.
+  - SQLite (default, if DATABASE_URL is not set) — for local development,
+    stored at output/aicarryon.db.
 
 Tables:
   - videos          : YouTube video metadata
@@ -10,6 +14,7 @@ Tables:
   - ab_title_tests  : A/B title test results
   - posted_topics   : Topics already posted (deduplication)
   - spy_cache       : Trending topic cache
+  - locks           : Simple cross-run generation locks (try_acquire_lock/release_lock)
 
 Usage:
     from agents.database import db
@@ -18,10 +23,19 @@ Usage:
 """
 
 import os
-import sqlite3
 import json
 from datetime import datetime, timezone
 from contextlib import contextmanager
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+USE_POSTGRES = bool(DATABASE_URL)
+
+if USE_POSTGRES:
+    import psycopg2
+    import psycopg2.extras
+else:
+    import sqlite3
+
 
 def _parse_ts_safe(ts_str):
     """
@@ -38,23 +52,71 @@ def _parse_ts_safe(ts_str):
     return parsed
 
 
-# Store DB in output/ folder — mount as persistent volume on Render
+def _to_pg(query):
+    """Translate sqlite-style '?' placeholders to psycopg2-style '%s'."""
+    return query.replace("?", "%s")
+
+
+class _CursorWrapper:
+    """Makes a psycopg2 cursor's .execute() behave like sqlite3's
+    connection-level .execute() shortcut, so the rest of this file can use
+    one code path (conn.execute(...).fetchone()/.fetchall()) either way."""
+
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def execute(self, query, params=None):
+        self._cursor.execute(_to_pg(query), params or ())
+        return self
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+
+class _ConnWrapper:
+    def __init__(self, conn, is_pg):
+        self._conn = conn
+        self._is_pg = is_pg
+
+    def execute(self, query, params=None):
+        if self._is_pg:
+            cur = self._conn.cursor()
+            return _CursorWrapper(cur).execute(query, params)
+        else:
+            return self._conn.execute(query, params or ())
+
+    def executescript(self, script):
+        if self._is_pg:
+            cur = self._conn.cursor()
+            cur.execute(script)
+        else:
+            self._conn.executescript(script)
+
+
+# Store DB in output/ folder for local/SQLite mode only
 DB_PATH = os.environ.get("DB_PATH", "output/aicarryon.db")
 
 
 class Database:
     def __init__(self, db_path=None):
         self.db_path = db_path or DB_PATH
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        if not USE_POSTGRES:
+            os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
         self._init_tables()
 
     @contextmanager
     def _conn(self):
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")  # better concurrent access
+        if USE_POSTGRES:
+            conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        else:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")  # better concurrent access
         try:
-            yield conn
+            yield _ConnWrapper(conn, USE_POSTGRES)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -63,19 +125,23 @@ class Database:
             conn.close()
 
     def _init_tables(self):
-        """Create tables if they don't exist."""
+        """Create tables if they don't exist. Postgres and SQLite use
+        different auto-increment syntax, so the schema is picked per backend;
+        everything else (columns, ON CONFLICT clauses) is identical."""
+        id_col = "id SERIAL PRIMARY KEY" if USE_POSTGRES else "id INTEGER PRIMARY KEY AUTOINCREMENT"
+
         with self._conn() as conn:
-            conn.executescript("""
+            conn.executescript(f"""
                 CREATE TABLE IF NOT EXISTS videos (
                     video_id    TEXT PRIMARY KEY,
                     title       TEXT,
                     published   TEXT,
                     channel     TEXT DEFAULT 'english',
-                    created_at  TEXT DEFAULT (datetime('now'))
+                    created_at  TEXT DEFAULT CURRENT_TIMESTAMP
                 );
 
                 CREATE TABLE IF NOT EXISTS snapshots (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    {id_col},
                     video_id    TEXT NOT NULL,
                     views       INTEGER DEFAULT 0,
                     likes       INTEGER DEFAULT 0,
@@ -85,7 +151,7 @@ class Database:
                 );
 
                 CREATE TABLE IF NOT EXISTS ab_title_tests (
-                    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                    {id_col},
                     topic              TEXT,
                     winner_title       TEXT,
                     winner_pattern     TEXT,
@@ -99,17 +165,22 @@ class Database:
                 );
 
                 CREATE TABLE IF NOT EXISTS posted_topics (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    {id_col},
                     topic       TEXT NOT NULL,
                     channel     TEXT DEFAULT 'english',
                     posted_at   TEXT NOT NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS spy_cache (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    {id_col},
                     channel     TEXT NOT NULL,
                     topics      TEXT NOT NULL,
                     cached_at   TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS locks (
+                    name         TEXT PRIMARY KEY,
+                    acquired_at  TEXT NOT NULL
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_snapshots_video_id
@@ -129,7 +200,14 @@ class Database:
         these columns, so this is a no-op for new databases.
         """
         with self._conn() as conn:
-            existing = [row["name"] for row in conn.execute("PRAGMA table_info(ab_title_tests)")]
+            if USE_POSTGRES:
+                rows = conn.execute("""
+                    SELECT column_name AS name FROM information_schema.columns
+                    WHERE table_name = 'ab_title_tests'
+                """).fetchall()
+            else:
+                rows = conn.execute("PRAGMA table_info(ab_title_tests)").fetchall()
+            existing = [row["name"] for row in rows]
             additions = {
                 "actual_views_24h": "INTEGER DEFAULT NULL",
                 "actual_checked_at": "TEXT DEFAULT NULL",
@@ -139,6 +217,39 @@ class Database:
                 if col not in existing:
                     conn.execute(f"ALTER TABLE ab_title_tests ADD COLUMN {col} {decl}")
                     print(f"Migrated ab_title_tests: added column {col}")
+
+    # ── Locks ─────────────────────────────────────────────────────────────
+    # Used by scheduler.py / scheduler_hindi.py to avoid two overlapping
+    # runs (e.g. a slow run still going when the next cron trigger fires)
+    # from generating/uploading the same slot twice. Backed by a plain
+    # table + TTL rather than a real distributed lock — good enough for
+    # "at most one generation job at a time," which is all this needs.
+
+    def try_acquire_lock(self, name, ttl_seconds=1800):
+        """Returns (acquired: bool, age_seconds: float).
+        If no lock row exists, or the existing one is older than
+        ttl_seconds (meaning a previous run likely crashed without
+        releasing it), acquires/steals the lock and returns True."""
+        now = datetime.now(timezone.utc)
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT acquired_at FROM locks WHERE name = ?", (name,)
+            ).fetchone()
+            age = 0.0
+            if row:
+                acquired_at = _parse_ts_safe(row["acquired_at"])
+                age = (now - acquired_at).total_seconds()
+                if age <= ttl_seconds:
+                    return False, age
+            conn.execute("""
+                INSERT INTO locks (name, acquired_at) VALUES (?, ?)
+                ON CONFLICT(name) DO UPDATE SET acquired_at = excluded.acquired_at
+            """, (name, now.isoformat()))
+            return True, age
+
+    def release_lock(self, name):
+        with self._conn() as conn:
+            conn.execute("DELETE FROM locks WHERE name = ?", (name,))
 
     # ── Videos ────────────────────────────────────────────────────────────
 
@@ -303,7 +414,6 @@ class Database:
             """, (channel,)).fetchone()
             if not row:
                 return None
-            import time
             from datetime import datetime as dt
             cached_dt = dt.fromisoformat(row["cached_at"])
             age = (datetime.now(timezone.utc) - cached_dt.replace(
@@ -312,18 +422,17 @@ class Database:
                 return None
             return json.loads(row["topics"])
 
-    # ── Migration from JSON ────────────────────────────────────────────────
+    # ── Migration from JSON (legacy) ─────────────────────────────────────
 
     def migrate_from_json(self, view_history_path="output/view_history.json",
                           ab_log_path="output/title_ab_log.json",
                           posted_path="output/posted_topics.txt"):
         """
-        One-time migration from JSON files to SQLite.
+        One-time migration from JSON files to the database.
         Safe to run multiple times — won't duplicate data.
         """
         migrated = {"videos": 0, "snapshots": 0, "ab_tests": 0, "posted": 0}
 
-        # Migrate view_history.json
         if os.path.exists(view_history_path):
             try:
                 with open(view_history_path) as f:
@@ -344,11 +453,10 @@ class Database:
                             snap.get("timestamp"),
                         )
                         migrated["snapshots"] += 1
-                print(f"✅ Migrated {migrated['videos']} videos, {migrated['snapshots']} snapshots")
+                print(f"Migrated {migrated['videos']} videos, {migrated['snapshots']} snapshots")
             except Exception as e:
-                print(f"⚠️ view_history migration error: {e}")
+                print(f"view_history migration error: {e}")
 
-        # Migrate title_ab_log.json
         if os.path.exists(ab_log_path):
             try:
                 with open(ab_log_path) as f:
@@ -364,11 +472,10 @@ class Database:
                         entry.get("generated_at"),
                     )
                     migrated["ab_tests"] += 1
-                print(f"✅ Migrated {migrated['ab_tests']} A/B tests")
+                print(f"Migrated {migrated['ab_tests']} A/B tests")
             except Exception as e:
-                print(f"⚠️ AB log migration error: {e}")
+                print(f"AB log migration error: {e}")
 
-        # Migrate posted_topics.txt
         if os.path.exists(posted_path):
             try:
                 with open(posted_path) as f:
@@ -378,11 +485,56 @@ class Database:
                             ts, topic = line.split("|", 1)
                             self.mark_posted(topic.strip(), posted_at=ts.strip())
                             migrated["posted"] += 1
-                print(f"✅ Migrated {migrated['posted']} posted topics")
+                print(f"Migrated {migrated['posted']} posted topics")
             except Exception as e:
-                print(f"⚠️ Posted topics migration error: {e}")
+                print(f"Posted topics migration error: {e}")
 
         return migrated
+
+    def migrate_from_sqlite(self, old_db_path):
+        """
+        One-time migration: copies every row from an existing standalone
+        SQLite aicarryon.db (e.g. pulled off Railway before decommissioning
+        it) into whichever backend this Database instance is using —
+        typically Postgres. Run this once, locally, before switching the
+        live workflow over, so view history / AB test data isn't lost.
+
+        Safe to run against an empty target. Do NOT run twice against a
+        target that already has this data — it will duplicate rows, since
+        there's no natural unique key on snapshots/ab_title_tests/posted_topics
+        to dedupe against.
+        """
+        import sqlite3 as _sqlite3
+        src = _sqlite3.connect(old_db_path)
+        src.row_factory = _sqlite3.Row
+
+        tables = [
+            ("videos", ["video_id", "title", "published", "channel"]),
+            ("snapshots", ["video_id", "views", "likes", "comments", "timestamp"]),
+            ("ab_title_tests", ["topic", "winner_title", "winner_pattern", "winner_score",
+                                 "all_variations", "generated_at", "actual_views",
+                                 "actual_views_24h", "actual_checked_at", "video_id"]),
+            ("posted_topics", ["topic", "channel", "posted_at"]),
+            ("spy_cache", ["channel", "topics", "cached_at"]),
+        ]
+        counts = {}
+        for table, cols in tables:
+            try:
+                rows = src.execute(f"SELECT {', '.join(cols)} FROM {table}").fetchall()
+            except _sqlite3.OperationalError:
+                counts[table] = 0
+                continue
+            with self._conn() as conn:
+                for r in rows:
+                    placeholders = ", ".join(["?"] * len(cols))
+                    conn.execute(
+                        f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders})",
+                        tuple(r[c] for c in cols),
+                    )
+            counts[table] = len(rows)
+            print(f"Migrated {len(rows)} rows into {table}")
+        src.close()
+        return counts
 
     # ── Analytics ──────────────────────────────────────────────────────────
 

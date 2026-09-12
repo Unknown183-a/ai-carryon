@@ -1,0 +1,53 @@
+name: Hindi Scheduler
+
+on:
+  schedule:
+    # Hourly — scheduler_hindi.py's own adaptive-hour + 3/day-cap logic
+    # decides whether this particular hour actually generates anything.
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      force_generate:
+        description: "Bypass the schedule gate and daily cap (test run)"
+        required: false
+        default: "false"
+
+jobs:
+  run-scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Hindi scheduler
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          HINDI_TOKEN_JSON: ${{ secrets.HINDI_TOKEN_JSON }}
+          SARVAM_API_KEY: ${{ secrets.SARVAM_API_KEY }}
+          FORCE_GENERATE: ${{ github.event.inputs.force_generate || 'false' }}
+        run: python scheduler_hindi.py
+
+      - name: Upload run log (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hindi-scheduler-log-${{ github.run_id }}
+          path: output/scheduler_log.txt
+          if-no-files-found: ignore
