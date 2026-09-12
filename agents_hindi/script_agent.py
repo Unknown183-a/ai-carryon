@@ -53,8 +53,8 @@ COMPETITOR INTELLIGENCE (Hindi market ke liye):
 
     prompt = f"""
 Ek YouTube Shorts script likho is research ke basis par.
-Target duration: 35-45 seconds bolne mein (STRICT — 50 seconds se zyada nahi).
-Target word count: EXACTLY 110 to 130 words. Yeh STRICT requirement hai — isse zyada mat likhna.
+Target duration: 30-40 seconds bolne mein (STRICT — 45 seconds se zyada nahi).
+Target word count: EXACTLY 70 to 90 words. Yeh STRICT requirement hai — isse zyada ya kam mat likhna.
 {competitor_context}
 
 Rules:
@@ -68,37 +68,37 @@ Rules:
 - End mein CTA: "Follow karo aur aisi videos dekhte raho"
 - Koi labels mat likho jaise "Hook:", "CTA:"
 - Sirf bolne wale words likho, kuch aur nahi
-- IMPORTANT: Script chota mat likhna — kam se kam 150 words zaroor likho
+- Script ekdum tight aur crisp rakho — 70-90 words se zyada mat jaana
 
 Research: {research_data}
 
-Example style (yeh example bhi 150+ words ka hai, isi length ka target rakho):
-Yaar suno, ye sun ke tumhara dimaag ghoom jayega. Tumhare phone mein jo chip hai, usme itne transistors hain jitne Milky Way mein taare hain. Sach mein! Ek chip mein 15 billion transistors hote hain. Aur ye sab tumhari thumbnail se bhi chote hain. Aur suno, har transistor second mein billions baar on-off hota hai. Isliye tumhara phone itna fast hai. Par yahan baat aur hai. Ab hum aur chota nahi kar sakte. Physics ke laws aad aa rahe hain. Electrons seedha wall ke through nikal jaate hain. Ye main jhooth nahi bol raha. Toh companies ab chips ko upar ki taraf stack kar rahi hain. Ek aur interesting baat — yeh stacking technology already smartphones mein use ho rahi hai. Samsung aur TSMC dono is par kaam kar rahe hain. Aane wale 5 saalon mein yeh aur bhi advanced ho jayega. Future upar ki taraf ja raha hai, literally. Follow karo aur aisi videos dekhte raho.
+Example style (yeh example ~85 words ka hai, isi length ka target rakho):
+Yaar suno, ye sun ke tumhara dimaag ghoom jayega. Tumhare phone ke chip mein 15 billion transistors hain — jitne Milky Way mein taare hain. Aur ye sab tumhari thumbnail se bhi chote hain. Har transistor second mein billions baar on-off hota hai, isliye phone itna fast hai. Par ab hum aur chota nahi kar sakte — physics ke laws aad aa rahe hain. Isliye companies ab chips ko upar ki taraf stack kar rahi hain. Samsung aur TSMC dono is par kaam kar rahe hain. Follow karo aur aisi videos dekhte raho.
 """
 
     response = safe_invoke(prompt)
     script = response.content.strip()
 
-    # Enforce 110-130 word range — expand if too short, trim if too long
+    # Enforce 70-90 word range — expand if too short, trim if too long
     for attempt in range(3):
         words = script.split()
-        if len(words) >= 110:
+        if len(words) >= 70:
             break
         print(f"Hindi script too short ({len(words)} words) — expanding, attempt {attempt+1}")
         prompt2 = (
-            f"Yeh script sirf {len(words)} words ka hai. Isse EXACTLY 120 words tak expand karo.\n"
-            f"Same hook, style, aur topic rakho. Aur 1-2 specific facts add karo.\n"
+            f"Yeh script sirf {len(words)} words ka hai. Isse EXACTLY 80 words tak expand karo.\n"
+            f"Same hook, style, aur topic rakho. Aur 1 specific fact add karo.\n"
             f"Sirf expanded script return karo, koi labels ya explanation nahi.\n\n"
             f"Script to expand:\n{script}"
         )
         script = safe_invoke(prompt2).content.strip()
         print(f"Expansion attempt {attempt+1}: {len(script.split())} words")
 
-    # Hard trim if over 140 words (would exceed 60s at speaking pace)
+    # Hard trim if over 95 words (would exceed ~40-45s at speaking pace)
     words = script.split()
-    if len(words) > 140:
-        script = " ".join(words[:140])
-        print(f"Trimmed script to 140 words to stay under 60s limit")
+    if len(words) > 95:
+        script = " ".join(words[:95])
+        print(f"Trimmed script to 95 words to stay under ~45s limit")
 
     final_word_count = len(script.split())
     print(f"Final Hindi script: {final_word_count} words")
