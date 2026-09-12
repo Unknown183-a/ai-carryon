@@ -49,5 +49,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hindi-scheduler-log-${{ github.run_id }}
-          path: output/scheduler_log.txt
+          path: output/scheduler_hindi_log.txt
           if-no-files-found: ignore
