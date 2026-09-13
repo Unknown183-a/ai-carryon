@@ -18,6 +18,42 @@ def get_llm():
         return ChatGroq(model="llama-3.1-8b-instant")
 
 
+def safe_invoke(prompt):
+    """Try Groq first (with a 20s race), fall back to Gemini Flash on
+    timeout OR immediate failure (e.g. a 429 rate limit), matching the
+    pattern already used in research_agent.py / script_agent.py / etc."""
+    import threading
+    from langchain_groq import ChatGroq
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    import os as _os
+
+    result = [None]
+
+    def try_groq():
+        try:
+            llm = ChatGroq(model="openai/gpt-oss-120b")
+            result[0] = llm.invoke(prompt)
+        except Exception:
+            pass
+
+    t = threading.Thread(target=try_groq)
+    t.start()
+    t.join(timeout=20)
+
+    if result[0] is not None:
+        return result[0]
+
+    print("Groq timeout/fail — falling back to Gemini Flash")
+    try:
+        gemini = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            google_api_key=_os.getenv("GEMINI_API_KEY")
+        )
+        return gemini.invoke(prompt)
+    except Exception:
+        return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
+
+
 llm = get_llm()
 
 
@@ -45,7 +81,7 @@ def generate_image_prompts(topic, script, num_images=4):
         "4. <prompt>"
     )
 
-    response = llm.invoke(prompt).content
+    response = safe_invoke(prompt).content
 
     lines = []
     for line in response.split("\n"):
