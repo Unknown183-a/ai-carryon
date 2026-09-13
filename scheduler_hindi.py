@@ -177,9 +177,16 @@ def generate_and_upload_hindi(force=False):
         from agents.thumbnail_generator import generate_thumbnail
         thumbnail = generate_thumbnail(seo["title"], topic)
 
-        log("Background images fetch ho rahi hain (generative mode)...")
-        from agents.generative_image_agent import generate_backgrounds
-        image_paths, errors = generate_backgrounds(topic, script, num_images=4, mode="generative")
+        log("Pexels video clips fetch ho rahe hain...")
+        from agents.video_clip_agent import generate_background_clips
+        from agents.image_agent import generate_backgrounds
+        image_paths, errors = generate_background_clips(topic, script, num_clips=4)
+        if len(image_paths) < 2:
+            log(f"Bahut kam Pexels clips mile ({errors}) — static images par fallback ho raha hai...")
+            image_paths, errors = generate_backgrounds(topic, script, num_images=4)
+            use_pexels = False
+        else:
+            use_pexels = True
         if not image_paths:
             log(f"Images nahi bani: {errors}")
             return
@@ -194,7 +201,7 @@ def generate_and_upload_hindi(force=False):
 
         log("Video ban raha hai...")
         from agents.video_agent import create_video
-        video = create_video()
+        video = create_video(use_pexels_clips=use_pexels)
 
         log("YouTube Hindi channel par upload ho raha hai...")
         from agents_hindi.upload_agent import upload_video
