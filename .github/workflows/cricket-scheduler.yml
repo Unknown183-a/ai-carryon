@@ -1,0 +1,45 @@
+name: Cricket Scheduler
+
+on:
+  schedule:
+    # Every 20 min — matches the cadence your external cron/uptime ping
+    # already used against Render's /trigger endpoint. scheduler_cricket.py's
+    # own daily cap + adaptive-hour gate decide whether anything actually runs.
+    - cron: "*/20 * * * *"
+    # Separate, much less frequent ping for comment replies — costs YouTube
+    # API quota per call, so this doesn't run on every generation cycle.
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which endpoint to hit"
+        required: false
+        default: "generate"
+        type: choice
+        options:
+          - generate
+          - comments
+
+jobs:
+  trigger-render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Determine which endpoint to hit
+        id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "path=${{ github.event.inputs.target == 'comments' && 'trigger-comments' || 'trigger' }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 */6 * * *" ]; then
+            echo "path=trigger-comments" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=trigger" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ping Render cricket service
+        env:
+          RENDER_CRICKET_URL: ${{ secrets.RENDER_CRICKET_URL }}
+          TRIGGER_SECRET: ${{ secrets.TRIGGER_SECRET }}
+        run: |
+          curl -sS -f "${RENDER_CRICKET_URL}/${{ steps.pick.outputs.path }}?secret=${TRIGGER_SECRET}" \
+            || echo "Ping failed or Render service was asleep — will retry next cycle"
