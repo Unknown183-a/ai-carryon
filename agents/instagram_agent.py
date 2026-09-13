@@ -18,7 +18,14 @@ def post_reel(video_path, caption):
     
     options = webdriver.ChromeOptions()
     options.add_argument("--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)")
-    # Remove headless so you can see what's happening
+    # Headless is required on CI runners (GitHub Actions has no display).
+    # Set INSTAGRAM_HEADFUL=1 locally if you want to watch it run.
+    if not os.getenv("INSTAGRAM_HEADFUL"):
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1280,1696")
     
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     
