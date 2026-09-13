@@ -104,6 +104,7 @@ def fetch_new_comments(max_results=50):
     """
     Fetch recent top-level comment threads across the authenticated channel,
     skipping any comment_id already present in comment_history.json.
+    Returns empty list on 403 insufficientPermissions (missing scope).
 
     Returns a list of dicts:
         {comment_id, video_id, username, text}
@@ -113,7 +114,14 @@ def fetch_new_comments(max_results=50):
     youtube = authenticate_youtube()
     already_seen = _already_processed_ids()
 
-    channel_response = youtube.channels().list(part="id", mine=True).execute()
+    try:
+        channel_response = youtube.channels().list(part="id", mine=True).execute()
+    except Exception as e:
+        err_str = str(e)
+        if "insufficientPermissions" in err_str or "403" in err_str:
+            print(f"[comment_reply_agent] Skipping — insufficient OAuth scope for comments: {err_str[:120]}")
+            return []
+        raise
     items = channel_response.get("items", [])
     if not items:
         print("[comment_reply_agent] Could not resolve channel id — skipping fetch")
