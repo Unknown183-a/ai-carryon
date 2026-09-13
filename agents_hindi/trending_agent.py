@@ -186,25 +186,14 @@ def get_trending_topic(region_code="IN"):
     return chosen
 
 
-def _get_llm():
-    from langchain_groq import ChatGroq
-    return ChatGroq(
-        model="openai/gpt-oss-120b",
-        temperature=0.9,
-        groq_api_key=os.getenv("GROQ_API_KEY"),
-    )
-
-
 def _generate_dynamic_topic(recent_used, attempts=3):
     """
     Ask the LLM to invent a fresh Hinglish tech video topic when the
     static fallback list has been exhausted.
+    Routed through model_invoke_agent_hindi — shares the run's Groq
+    budget/circuit breaker and falls back to Gemini automatically.
     """
-    try:
-        llm = _get_llm()
-    except Exception as e:
-        print(f"Trending agent (hindi): LLM unavailable for dynamic fallback: {e}")
-        return None
+    from agents_hindi.model_invoke_agent_hindi import safe_invoke
 
     used_titles = [e["title"] for e in recent_used][-25:]
     used_list = "\n".join(f"- {t}" for t in used_titles) if used_titles else "(none yet)"
@@ -223,7 +212,7 @@ Rules:
 
     for _ in range(attempts):
         try:
-            response = llm.invoke(prompt)
+            response = safe_invoke(prompt, temperature=0.9)
             title = response.content.strip().strip('"')
             if title and not _is_repeat(title, recent_used):
                 return title

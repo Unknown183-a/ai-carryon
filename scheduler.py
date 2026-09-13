@@ -324,6 +324,9 @@ def comment_reply_job():
 def main():
     log("Scheduler run started (Cloud Run Job — single pass)")
 
+    from agents.model_invoke_agent_english import reset_groq_budget
+    reset_groq_budget()
+
     try:
         from agents.cleanup_agent import sweep_old_videos
         sweep_old_videos(max_age_hours=24, log_fn=log)

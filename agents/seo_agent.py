@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+from agents.model_invoke_agent_english import safe_invoke
+
 PATTERN_PROMPTS = {
     "curiosity": "Start with 'Did You Know', 'Here's Why', or 'The Reason' — spark curiosity",
     "urgency": "Use urgency: 'This Changes Everything', 'Stop Doing This', 'Act Now Before'",
@@ -11,52 +13,7 @@ PATTERN_PROMPTS = {
 }
 
 
-def get_llm():
-    from langchain_groq import ChatGroq
-    try:
-        llm = ChatGroq(model="openai/gpt-oss-120b", request_timeout=15)
-        safe_invoke("hi")
-        return llm
-    except Exception:
-        return ChatGroq(model="openai/gpt-oss-20b")
-
-
-def safe_invoke(prompt):
-    import threading
-    from langchain_groq import ChatGroq
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    import os as _os
-
-    result = [None]
-    error = [None]
-
-    def try_groq():
-        try:
-            llm = ChatGroq(model="openai/gpt-oss-120b")
-            result[0] = llm.invoke(prompt)
-        except Exception as e:
-            error[0] = e
-
-    t = threading.Thread(target=try_groq)
-    t.start()
-    t.join(timeout=20)
-
-    if result[0] is not None:
-        return result[0]
-
-    print("Groq timeout/fail — falling back to Gemini Flash")
-    try:
-        gemini = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
-            google_api_key=_os.getenv("GEMINI_API_KEY")
-        )
-        return gemini.invoke(prompt)
-    except Exception:
-        return ChatGroq(model="openai/gpt-oss-20b").invoke(prompt)
-
-
 def generate_seo(topic, script, comparison_insights=None, use_ab_titles=True):
-    llm = get_llm()
 
     pattern = None
     if "||PATTERN:" in topic:

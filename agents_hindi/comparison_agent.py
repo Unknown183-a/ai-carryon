@@ -12,7 +12,6 @@ import re
 import json
 import random
 from datetime import datetime, timezone, timedelta
-from groq import Groq
 
 GROQ_API_KEY     = os.environ.get("GROQ_API_KEY", "")
 YOUR_CHANNEL_ID  = os.environ.get("YOUTUBE_HINDI_CHANNEL_ID", "")
@@ -207,12 +206,16 @@ def _generate_hindi_insights(your_video: dict, competitors: list, topic: str) ->
 
 
 def _groq_recommendations(topic: str, your_video: dict, competitors: list) -> list:
-    """Ask Groq for 2-3 Hindi-market specific tips."""
+    """Ask an LLM for 2-3 Hindi-market specific tips.
+    Routed through model_invoke_agent_hindi — shares the per-run Groq
+    budget with the rest of the pipeline and falls back to Gemini once
+    that budget is used up, instead of firing an independent raw Groq
+    call that can 429 on its own."""
     if not GROQ_API_KEY:
         return []
 
     try:
-        client = Groq(api_key=GROQ_API_KEY)
+        from agents_hindi.model_invoke_agent_hindi import safe_invoke
 
         top_titles = [c["title"] for c in competitors[:5]]
         prompt = f"""
@@ -229,13 +232,8 @@ and content angle. Be specific, not generic.
 Return as JSON array of strings only. Example:
 ["Title mein price daalo jaise '₹999 mein AI?'", "Thumbnail pe shocked face use karo"]
 """
-        resp = client.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=300,
-        )
-        content = resp.choices[0].message.content or "[]"
+        response = safe_invoke(prompt, temperature=0.7)
+        content = response.content or "[]"
         content = re.sub(r"```json|```", "", content).strip()
         return json.loads(content)
     except Exception:

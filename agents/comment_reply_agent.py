@@ -201,23 +201,15 @@ def publish_reply(comment_id, reply_text):
 # LLM classification + reply generation
 # ─────────────────────────────────────────────
 
-def _get_llm():
-    """Same Groq setup pattern used elsewhere in this codebase."""
-    from langchain_groq import ChatGroq
-    return ChatGroq(
-        model="openai/gpt-oss-120b",
-        temperature=0.4,
-        groq_api_key=os.getenv("GROQ_API_KEY"),
-    )
-
-
 def classify_comment(comment_text):
     """
     Classify a comment into one of VALID_CATEGORIES using the LLM.
     Falls back to 'Other' on any parsing/LLM failure — never crashes the
     caller, never invents a category outside the fixed list.
+    Routed through model_invoke_agent_english — shares the run's Groq
+    budget/circuit breaker and falls back to Gemini automatically.
     """
-    llm = _get_llm()
+    from agents.model_invoke_agent_english import safe_invoke
 
     prompt = f"""Classify this YouTube comment into EXACTLY ONE of these categories:
 Question, Appreciation, Suggestion, Criticism, AI Related, Spam, Offensive, Other
@@ -234,7 +226,7 @@ Comment: "{comment_text}"
 Category:"""
 
     try:
-        response = llm.invoke(prompt)
+        response = safe_invoke(prompt, temperature=0.4)
         raw = response.content.strip()
         for category in VALID_CATEGORIES:
             if category.lower() in raw.lower():
@@ -255,7 +247,7 @@ def generate_reply(comment_text, category):
     if category in NO_REPLY_CATEGORIES:
         return "NO_REPLY"
 
-    llm = _get_llm()
+    from agents.model_invoke_agent_english import safe_invoke
 
     extra_note = ""
     if category == "AI Related":
@@ -301,7 +293,7 @@ Comment: "{comment_text}"
 Reply:"""
 
     try:
-        response = llm.invoke(prompt)
+        response = safe_invoke(prompt, temperature=0.4)
         reply = response.content.strip().strip('"')
 
         # Hard enforce the word limit even if the model overshoots
@@ -321,7 +313,7 @@ def _extract_topic_suggestion(comment_text):
     clean topic phrase suitable for feeding into the trending/topic pipeline.
     Falls back to the raw comment text if extraction fails.
     """
-    llm = _get_llm()
+    from agents.model_invoke_agent_english import safe_invoke
     prompt = f"""Extract a short video topic (5-10 words) suggested in this comment.
 Reply with ONLY the topic phrase, nothing else.
 
@@ -329,7 +321,7 @@ Comment: "{comment_text}"
 
 Topic:"""
     try:
-        response = llm.invoke(prompt)
+        response = safe_invoke(prompt, temperature=0.4)
         topic = response.content.strip().strip('"')
         return topic if topic else comment_text[:80]
     except Exception:

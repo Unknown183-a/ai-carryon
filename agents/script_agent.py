@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+from agents.model_invoke_agent_english import safe_invoke
+
 HOOK_TEMPLATES = [
     "Nobody talks about the fact that {topic_angle}...",
     "Most developers get {topic_angle} completely wrong.",
@@ -10,51 +12,7 @@ HOOK_TEMPLATES = [
 ]
 
 
-def get_llm(temperature=0.7):
-    from langchain_groq import ChatGroq
-    try:
-        llm = ChatGroq(model="openai/gpt-oss-120b", temperature=temperature)
-        safe_invoke("hi")
-        return llm
-    except Exception:
-        return ChatGroq(model="openai/gpt-oss-20b", temperature=temperature)
-
-
-def safe_invoke(prompt):
-    import threading
-    from langchain_groq import ChatGroq
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    import os as _os
-
-    result = [None]
-    error = [None]
-
-    def try_groq():
-        try:
-            llm = ChatGroq(model="openai/gpt-oss-120b")
-            result[0] = llm.invoke(prompt)
-        except Exception as e:
-            error[0] = e
-
-    t = threading.Thread(target=try_groq)
-    t.start()
-    t.join(timeout=20)
-
-    if result[0] is not None:
-        return result[0]
-
-    print("Groq timeout/fail — falling back to Gemini Flash")
-    try:
-        gemini = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
-            google_api_key=_os.getenv("GEMINI_API_KEY")
-        )
-        return gemini.invoke(prompt)
-    except Exception:
-        return ChatGroq(model="openai/gpt-oss-20b").invoke(prompt)
-
-
-def score_hook(hook, llm):
+def score_hook(hook):
     prompt = (
         f"Score this YouTube Shorts opening line for viewer retention (1-10).\n"
         f"A 10 makes people stop scrolling immediately. A 1 is boring.\n"
@@ -69,7 +27,7 @@ def score_hook(hook, llm):
         return 5
 
 
-def improve_hook(hook, topic, llm):
+def improve_hook(hook, topic):
     import random
     template = random.choice(HOOK_TEMPLATES)
     prompt = (
@@ -88,8 +46,6 @@ def improve_hook(hook, topic, llm):
 
 
 def create_script(research_data, topic=None, comparison_insights=None):
-    llm = get_llm(temperature=0.8)
-
     # Build competitor context if available
     competitor_context = ""
     if comparison_insights and not comparison_insights.get("error"):
@@ -126,7 +82,7 @@ STRICT RULES:
 
 Return ONLY the script text, nothing else."""
 
-    response = safe_invoke(prompt)
+    response = safe_invoke(prompt, temperature=0.8)
     script = response.content.strip()
 
     for attempt in range(3):
@@ -147,16 +103,16 @@ Return ONLY the script text, nothing else."""
         script = " ".join(words[:100])
 
     first_sentence = script.split('.')[0].strip()
-    hook_score = score_hook(first_sentence, llm)
+    hook_score = score_hook(first_sentence)
     print(f"Hook score: {hook_score}/10 — '{first_sentence[:60]}...'")
 
     if hook_score < 7:
         print("Hook too weak — rewriting...")
         topic_hint = topic or research_data[:50]
-        new_hook = improve_hook(first_sentence, topic_hint, llm)
+        new_hook = improve_hook(first_sentence, topic_hint)
         rest_of_script = script[len(first_sentence):].lstrip('. ')
         script = new_hook + ". " + rest_of_script
-        new_score = score_hook(new_hook, llm)
+        new_score = score_hook(new_hook)
         print(f"Improved hook score: {new_score}/10 — '{new_hook}'")
 
     return script

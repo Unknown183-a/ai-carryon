@@ -19,8 +19,7 @@ def get_hindi_trending_topics():
         if time.time() - cache["timestamp"] < 1800:
             return cache["topics"]
 
-    from groq import Groq
-    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    from agents_hindi.model_invoke_agent_hindi import safe_invoke
 
     # Random seed to force different results every time
     random_seed = random.randint(1000, 9999)
@@ -62,14 +61,9 @@ Return ONLY the JSON array. Make all 10 topics UNIQUE and DIFFERENT from each ot
 """
 
     try:
-        response = client.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.9,  # High temperature = more variety
-            max_tokens=2000
-        )
+        response = safe_invoke(prompt, temperature=0.9)  # High temperature = more variety
 
-        content = response.choices[0].message.content or ""
+        content = response.content or ""
         content = content.strip()
         content = re.sub(r'^```json\n?', '', content)
         content = re.sub(r'^```\n?', '', content)

@@ -2,27 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import re
 
-def safe_invoke(prompt):
-    import threading
-    from langchain_groq import ChatGroq
-    import os as _os
-    result = [None]
-    def try_groq():
-        try:
-            result[0] = ChatGroq(model="openai/gpt-oss-120b").invoke(prompt)
-        except Exception:
-            pass
-    t = threading.Thread(target=try_groq)
-    t.start()
-    t.join(timeout=20)
-    if result[0] is not None:
-        return result[0]
-    try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        gemini = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=_os.getenv("GEMINI_API_KEY"))
-        return gemini.invoke(prompt)
-    except Exception:
-        return ChatGroq(model="openai/gpt-oss-20b").invoke(prompt)
+from agents_hindi.model_invoke_agent_hindi import safe_invoke
 
 
 def extract_hindi_facts(script, topic):

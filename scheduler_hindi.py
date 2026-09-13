@@ -263,6 +263,9 @@ def comment_reply_job_hindi():
 def main():
     log("Hindi Scheduler run started (Cloud Run Job — single pass, Fully Adaptive Mode)")
 
+    from agents_hindi.model_invoke_agent_hindi import reset_groq_budget
+    reset_groq_budget()
+
     try:
         from agents.cleanup_agent import sweep_old_videos
         sweep_old_videos(max_age_hours=24, log_fn=log)

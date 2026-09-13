@@ -18,6 +18,8 @@ import json
 import re
 from datetime import datetime, timezone
 
+from agents.model_invoke_agent_english import safe_invoke
+
 LOG_FILE = "output/title_ab_log.json"
 
 PATTERNS = {
@@ -41,35 +43,6 @@ Score this YouTube Shorts title from 1-10 based on:
 
 Return ONLY a number 1-10.
 """
-
-
-def safe_invoke(prompt):
-    import threading
-    from langchain_groq import ChatGroq
-    import os as _os
-
-    result = [None]
-    def try_groq():
-        try:
-            result[0] = ChatGroq(model="openai/gpt-oss-120b").invoke(prompt)
-        except Exception:
-            pass
-
-    t = threading.Thread(target=try_groq)
-    t.start()
-    t.join(timeout=20)
-    if result[0] is not None:
-        return result[0]
-
-    try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        gemini = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
-            google_api_key=_os.getenv("GEMINI_API_KEY")
-        )
-        return gemini.invoke(prompt)
-    except Exception:
-        return ChatGroq(model="openai/gpt-oss-20b").invoke(prompt)
 
 
 PATTERN_EXAMPLES = {

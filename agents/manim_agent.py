@@ -2,23 +2,11 @@
 import os
 import subprocess
 import re
-from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 
+from agents.model_invoke_agent_english import safe_invoke
+
 load_dotenv()
-
-
-def get_llm():
-    from langchain_groq import ChatGroq
-    try:
-        llm = ChatGroq(model="openai/gpt-oss-120b")
-        llm.invoke("hi")
-        return llm
-    except Exception:
-        return ChatGroq(model="openai/gpt-oss-20b")
-
-
-llm = get_llm()
 
 
 def generate_manim_code(topic, script):
@@ -51,7 +39,7 @@ No markdown, no backticks, no explanation.
 Start directly with: from manim import *
 """
 
-    response = llm.invoke(prompt).content
+    response = safe_invoke(prompt).content
     code = response.strip()
 
     # Remove markdown
