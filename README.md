@@ -2,7 +2,7 @@
 
 An autonomous AI system that researches trending topics, generates video scripts, creates YouTube Shorts, and uploads them automatically — while learning from channel performance data to improve over time. Runs **three fully independent channels** (English, Hindi, and Cricket) with separate learning, separate audiences, and separate scheduling.
 
-**Live Dashboard**: https://ai-carryon-dashboard-344405691065.us-central1.run.app
+**Live Dashboard**: https://ai-carryon-tqndlmjbcfvtznagmef2ap.streamlit.app
 **Repo**: https://github.com/Unknown183-a/ai-carryon
 **Channels**: AI CarryON (English, Tech/AI niche, US audience) + Hindi AI CarryON (Hindi, Tech/AI niche, India audience) + Cricket AI CarryON (English, Indian cricket — IPL, Men's/Women's national team, domestic)
 
