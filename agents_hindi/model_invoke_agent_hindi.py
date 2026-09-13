@@ -111,7 +111,7 @@ def _get_groq(model="openai/gpt-oss-120b", temperature=None):
     return ChatGroq(**kwargs)
 
 
-def _get_gemini(model="gemini-1.5-flash"):
+def _get_gemini(model="gemini-3.5-flash"):
     from langchain_google_genai import ChatGoogleGenerativeAI
     return ChatGoogleGenerativeAI(model=model, google_api_key=os.getenv("GEMINI_API_KEY"))
 
