@@ -418,9 +418,9 @@ with english_tab:
                         image_paths, image_errors = generate_background_clips(topic, script, num_clips=4)
                         if len(image_paths) < 2:
                             image_paths, image_errors = generate_backgrounds(topic, script, num_images=4)
-                            use_pexels = False
+                            st.session_state["use_pexels"] = False
                         else:
-                            use_pexels = True
+                            st.session_state["use_pexels"] = True
                 if image_errors:
                     st.warning("Some images failed to generate:")
                     for err in image_errors:
@@ -449,7 +449,7 @@ with english_tab:
 
                 if st.button("🎬 Generate Final Video", key="eng_make_video_btn", type="primary"):
                     with st.spinner("🎬 Creating Final Video..."):
-                        video_file = create_video(manim_path=None, use_flow_clips=_flow_clips_exist, use_pexels_clips=use_pexels)
+                        video_file = create_video(manim_path=None, use_flow_clips=_flow_clips_exist, use_pexels_clips=st.session_state.get("use_pexels", False))
                     st.session_state["eng_video_file"] = video_file
 
                 from moviepy import AudioFileClip as AFC
@@ -625,9 +625,9 @@ with hindi_tab:
                         imgs, errs = generate_background_clips(hindi_topic, st.session_state["hindi_script"], num_clips=4)
                         if len(imgs) < 2:
                             imgs, errs = generate_backgrounds(hindi_topic, st.session_state["hindi_script"], num_images=4)
-                            hindi_use_pexels = False
+                            st.session_state["hindi_use_pexels"] = False
                         else:
-                            hindi_use_pexels = True
+                            st.session_state["hindi_use_pexels"] = True
                         st.session_state["hindi_images"] = imgs
                         st.session_state["hindi_img_errors"] = errs
                     with st.spinner("🎙️ Hindi awaaz generate ho rahi hai..."):
@@ -750,7 +750,7 @@ with hindi_tab:
                     if st.button("🎬 Video Banao (Final)", key="hindi_make_video_btn", type="primary"):
                         with st.spinner("🎬 Video ban raha hai..."):
                             from agents.video_agent import create_video
-                            st.session_state["hindi_video_file"] = create_video(use_flow_clips=_hindi_clips_exist, use_pexels_clips=hindi_use_pexels)
+                            st.session_state["hindi_video_file"] = create_video(use_flow_clips=_hindi_clips_exist, use_pexels_clips=st.session_state.get("hindi_use_pexels", False))
                             for _f in glob.glob("assets/flow_clips/*.mp4"):
                                 os.remove(_f)
 
