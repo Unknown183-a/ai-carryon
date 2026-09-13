@@ -1,0 +1,31 @@
+# Scaffold config for the unlearning phase (Phase 3+ of the roadmap).
+# Values here are placeholders for future experiments; nothing is
+# implemented against this config yet beyond argument plumbing.
+experiment_name: unlearning_ga_kd
+seed: 42
+
+base_checkpoint: artifacts/experiments/initial_fl/checkpoints/round_050.pt
+forget_client_id: 0
+
+full_retraining:
+  num_rounds: 50
+  local_epochs: 10
+  local_lr: 0.01
+
+gradient_ascent:
+  lr: 0.001
+  epochs: 5
+  batch_size: 32
+
+knowledge_distillation:
+  temperature: 2.0
+  lambda_forget: 1.0
+  lambda_kd: 1.0
+  epochs: 5
+  lr: 0.001
+
+evaluation:
+  mia_enabled: true
+
+output:
+  artifacts_dir: artifacts/experiments/unlearning_ga_kd
