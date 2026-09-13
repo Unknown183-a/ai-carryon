@@ -258,6 +258,7 @@ with english_tab:
         from agents.thumbnail_agent import generate_thumbnail_text
         from agents.thumbnail_generator import generate_thumbnail
         from agents.image_agent import generate_backgrounds
+        from agents.video_clip_agent import generate_background_clips
         from agents.voice_agent import generate_voice
         from agents.caption_agent import create_srt
         from agents.video_agent import create_video
@@ -414,7 +415,12 @@ with english_tab:
                     st.success("🎥 Flow clips detected — using cinematic clips")
                 else:
                     with st.spinner("🎨 Generating Background Images..."):
-                        image_paths, image_errors = generate_backgrounds(topic, script, num_images=4)
+                        image_paths, image_errors = generate_background_clips(topic, script, num_clips=4)
+                        if len(image_paths) < 2:
+                            image_paths, image_errors = generate_backgrounds(topic, script, num_images=4)
+                            use_pexels = False
+                        else:
+                            use_pexels = True
                 if image_errors:
                     st.warning("Some images failed to generate:")
                     for err in image_errors:
@@ -612,7 +618,13 @@ with hindi_tab:
                         st.session_state["hindi_thumb"] = generate_thumbnail(st.session_state["hindi_seo"]["title"], hindi_topic)
                     with st.spinner("🌆 Background images fetch ho rahi hain..."):
                         from agents.image_agent import generate_backgrounds
-                        imgs, errs = generate_backgrounds(hindi_topic, st.session_state["hindi_script"], num_images=4)
+                        from agents.video_clip_agent import generate_background_clips
+                        imgs, errs = generate_background_clips(hindi_topic, st.session_state["hindi_script"], num_clips=4)
+                        if len(imgs) < 2:
+                            imgs, errs = generate_backgrounds(hindi_topic, st.session_state["hindi_script"], num_images=4)
+                            hindi_use_pexels = False
+                        else:
+                            hindi_use_pexels = True
                         st.session_state["hindi_images"] = imgs
                         st.session_state["hindi_img_errors"] = errs
                     with st.spinner("🎙️ Hindi awaaz generate ho rahi hai..."):
