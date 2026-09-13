@@ -24,7 +24,7 @@ LINKEDIN_URL = "https://linkedin.com/in/amit-kumar-731563317"
 ENGLISH_CHANNEL_URL = "https://youtube.com/@AIcarryONAI"
 HINDI_CHANNEL_URL = "https://youtube.com/@AIcarryONHindi"
 CRICKET_CHANNEL_URL = "https://youtube.com/@AIcarryONSports"  # update to your real handle once set
-LIVE_APP_URL = "https://ai-carryon-production.up.railway.app"
+LIVE_APP_URL = "https://ai-carryon-tqndlmjbcfvtznagmef2ap.streamlit.app"
 
 from agents.dashboard_sync import sync_all_channel_data
 _sync_status = sync_all_channel_data()
