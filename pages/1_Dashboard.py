@@ -429,7 +429,10 @@ with english_tab:
                     st.subheader("🖼️ Generated Backgrounds")
                     cols = st.columns(len(image_paths))
                     for col, img_path in zip(cols, image_paths):
-                        col.image(img_path)
+                        if str(img_path).lower().endswith(".mp4"):
+                            col.video(img_path)
+                        else:
+                            col.image(img_path)
                 elif not (_use_flow or _flow_clips_exist):
                     st.error("No background images were generated. Cannot continue.")
                     st.stop()
@@ -671,7 +674,10 @@ with hindi_tab:
                     st.subheader("🖼️ Background Images")
                     cols = st.columns(len(image_paths))
                     for col, img_path in zip(cols, image_paths):
-                        col.image(img_path)
+                        if str(img_path).lower().endswith(".mp4"):
+                            col.video(img_path)
+                        else:
+                            col.image(img_path)
 
                 voice = st.session_state.get("hindi_voice")
                 st.subheader("🔊 Hindi Awaaz")
@@ -1022,7 +1028,10 @@ with cricket_tab:
             st.subheader("🖼️ Background Images")
             cols = st.columns(len(cimages))
             for col, img_path in zip(cols, cimages):
-                col.image(img_path)
+                if str(img_path).lower().endswith(".mp4"):
+                    col.video(img_path)
+                else:
+                    col.image(img_path)
 
         st.subheader("🔊 Voiceover")
         if cvoice:
