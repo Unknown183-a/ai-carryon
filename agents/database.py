@@ -153,6 +153,7 @@ class Database:
                 CREATE TABLE IF NOT EXISTS ab_title_tests (
                     {id_col},
                     topic              TEXT,
+                    channel            TEXT DEFAULT 'english',
                     winner_title       TEXT,
                     winner_pattern     TEXT,
                     winner_score       INTEGER,
@@ -181,6 +182,11 @@ class Database:
                 CREATE TABLE IF NOT EXISTS locks (
                     name         TEXT PRIMARY KEY,
                     acquired_at  TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS meta (
+                    key    TEXT PRIMARY KEY,
+                    value  TEXT
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_snapshots_video_id
@@ -212,6 +218,7 @@ class Database:
                 "actual_views_24h": "INTEGER DEFAULT NULL",
                 "actual_checked_at": "TEXT DEFAULT NULL",
                 "video_id": "TEXT DEFAULT NULL",
+                "channel": "TEXT DEFAULT 'english'",
             }
             for col, decl in additions.items():
                 if col not in existing:
@@ -323,16 +330,16 @@ class Database:
     # ── A/B Title Tests ────────────────────────────────────────────────────
 
     def log_ab_test(self, topic, winner_title, winner_pattern, winner_score,
-                    all_variations, generated_at=None):
+                    all_variations, generated_at=None, channel="english"):
         if generated_at is None:
             generated_at = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute("""
                 INSERT INTO ab_title_tests
-                (topic, winner_title, winner_pattern, winner_score, all_variations, generated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (topic, winner_title, winner_pattern, winner_score, all_variations, generated_at, channel)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (topic, winner_title, winner_pattern, winner_score,
-                  json.dumps(all_variations), generated_at))
+                  json.dumps(all_variations), generated_at, channel))
 
     def link_ab_test_to_video(self, winner_title, video_id):
         """
@@ -585,21 +592,28 @@ class Database:
         return best[0]
 
 
-# Singleton instance
-    def get_pending_ab_tests(self, channel="english", hours=25):
-        """Get AB tests that don't have actual_views_24h yet — for closing the loop."""
+    def get_pending_ab_tests(self, channel=None, hours=None):
+        """
+        Get AB tests that don't have actual_views_24h yet — for closing
+        the loop. Matches how close_ab_loop.py actually calls this: with
+        no arguments, returning every unclosed row across all channels
+        (close_ab_loop.py does its own per-row channel filtering when
+        matching against a video).
+        """
         try:
-            from datetime import datetime, timezone, timedelta
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-            col = self.client.collection("ab_title_tests")
-            docs = col.where(filter=FieldFilter("channel", "==", channel))                      .where(filter=FieldFilter("created_at", ">=", cutoff))                      .stream()
-            results = []
-            for doc in docs:
-                d = doc.to_dict()
-                if not d.get("actual_views_24h"):
-                    d["id"] = doc.id
-                    results.append(d)
-            return results
+            query = "SELECT * FROM ab_title_tests WHERE actual_views_24h IS NULL"
+            params = []
+            if channel:
+                query += " AND channel = ?"
+                params.append(channel)
+            if hours:
+                from datetime import timedelta
+                cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+                query += " AND generated_at >= ?"
+                params.append(cutoff)
+            with self._conn() as conn:
+                rows = conn.execute(query, tuple(params)).fetchall()
+                return [dict(r) for r in rows]
         except Exception as e:
             print(f"get_pending_ab_tests error: {e}")
             return []
@@ -607,53 +621,63 @@ class Database:
     def get_meta(self, key):
         """Get a metadata value by key."""
         try:
-            doc = self.client.collection("meta").document(key).get()
-            if doc.exists:
-                return doc.to_dict().get("value")
+            with self._conn() as conn:
+                row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+                return row["value"] if row else None
         except Exception as e:
             print(f"get_meta error: {e}")
-        return None
+            return None
 
     def set_meta(self, key, value):
         """Set a metadata value by key."""
         try:
-            self.client.collection("meta").document(key).set({"value": value})
+            with self._conn() as conn:
+                conn.execute("""
+                    INSERT INTO meta (key, value) VALUES (?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value
+                """, (key, value))
         except Exception as e:
             print(f"set_meta error: {e}")
 
     def get_video_by_title(self, title, channel=None):
         """Find a video by its title, optionally filtered by channel."""
         try:
-            col = self.client.collection("videos")
-            query = col.where(filter=FieldFilter("title", "==", title))
+            query = "SELECT * FROM videos WHERE title = ?"
+            params = [title]
             if channel:
-                query = query.where(filter=FieldFilter("channel", "==", channel))
-            docs = list(query.limit(1).stream())
-            if docs:
-                d = docs[0].to_dict()
-                d["video_id"] = docs[0].id
-                return d
+                query += " AND channel = ?"
+                params.append(channel)
+            query += " ORDER BY created_at DESC LIMIT 1"
+            with self._conn() as conn:
+                row = conn.execute(query, tuple(params)).fetchone()
+                return dict(row) if row else None
         except Exception as e:
             print(f"get_video_by_title error: {e}")
-        return None
+            return None
 
     def set_ab_test_video_id(self, test_id, video_id):
         """Backfill video_id onto an AB test row."""
         try:
-            self.client.collection("ab_title_tests").document(test_id).update(
-                {"video_id": video_id}
-            )
+            with self._conn() as conn:
+                conn.execute(
+                    "UPDATE ab_title_tests SET video_id = ? WHERE id = ?",
+                    (video_id, test_id)
+                )
         except Exception as e:
             print(f"set_ab_test_video_id error: {e}")
 
     def close_ab_test(self, test_id, actual_views, closed_at):
-        """Fill in actual_views_24h and closed_at on an AB test row."""
+        """Fill in actual_views_24h and actual_checked_at on an AB test row."""
         try:
-            self.client.collection("ab_title_tests").document(test_id).update({
-                "actual_views_24h": actual_views,
-                "closed_at": closed_at,
-            })
+            with self._conn() as conn:
+                conn.execute("""
+                    UPDATE ab_title_tests
+                    SET actual_views_24h = ?, actual_checked_at = ?
+                    WHERE id = ?
+                """, (actual_views, closed_at, test_id))
         except Exception as e:
             print(f"close_ab_test error: {e}")
 
+
+# Singleton instance
 db = Database()
