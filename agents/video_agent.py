@@ -331,17 +331,22 @@ def extract_frames_from_clip(clip_path, target_fps=24):
     return duration
 
 
-def create_video(manim_path=None, use_flow_clips=False):
+def create_video(manim_path=None, use_flow_clips=False, use_pexels_clips=False):
     audio_path = "output/voice.mp3"
     srt_path = "output/captions.srt"
+    music_path = "assets/music/background.wav"
 
-    # Flow clips only used when explicitly passed (manual Streamlit generation)
-    # Scheduler always uses image backgrounds
+    # Flow/Veo clips (manual Streamlit generation) — these bring their own audio.
     flow_clips = get_background_clips() if use_flow_clips else []
     if flow_clips:
         print(f"Using {len(flow_clips)} Flow clips as background")
         return _create_video_from_clips(flow_clips, audio_path, srt_path, manim_path)
-    music_path = "assets/music/background.wav"
+
+    # Dynamic Pexels stock video clips — scheduler's new default background source.
+    pexels_clips = get_pexels_clips() if use_pexels_clips else []
+    if pexels_clips:
+        print(f"Using {len(pexels_clips)} Pexels clips as background")
+        return _create_video_from_pexels_clips(pexels_clips, audio_path, srt_path, music_path)
 
     duration = get_audio_duration(audio_path)
     print(f"Duration: {round(duration, 1)}s")
