@@ -64,7 +64,8 @@ def should_generate_now():
         return False, "Daily quota reached"
 
     adaptive_hours = get_adaptive_hours()
-    current_hour = datetime.datetime.utcnow().hour
+    import datetime as _dt
+    current_hour = _dt.datetime.utcnow().hour
 
     if current_hour in adaptive_hours:
         # Check 1 hour minimum gap from last upload
