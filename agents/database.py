@@ -586,4 +586,74 @@ class Database:
 
 
 # Singleton instance
+    def get_pending_ab_tests(self, channel="english", hours=25):
+        """Get AB tests that don't have actual_views_24h yet — for closing the loop."""
+        try:
+            from datetime import datetime, timezone, timedelta
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+            col = self.client.collection("ab_title_tests")
+            docs = col.where(filter=FieldFilter("channel", "==", channel))                      .where(filter=FieldFilter("created_at", ">=", cutoff))                      .stream()
+            results = []
+            for doc in docs:
+                d = doc.to_dict()
+                if not d.get("actual_views_24h"):
+                    d["id"] = doc.id
+                    results.append(d)
+            return results
+        except Exception as e:
+            print(f"get_pending_ab_tests error: {e}")
+            return []
+
+    def get_meta(self, key):
+        """Get a metadata value by key."""
+        try:
+            doc = self.client.collection("meta").document(key).get()
+            if doc.exists:
+                return doc.to_dict().get("value")
+        except Exception as e:
+            print(f"get_meta error: {e}")
+        return None
+
+    def set_meta(self, key, value):
+        """Set a metadata value by key."""
+        try:
+            self.client.collection("meta").document(key).set({"value": value})
+        except Exception as e:
+            print(f"set_meta error: {e}")
+
+    def get_video_by_title(self, title, channel=None):
+        """Find a video by its title, optionally filtered by channel."""
+        try:
+            col = self.client.collection("videos")
+            query = col.where(filter=FieldFilter("title", "==", title))
+            if channel:
+                query = query.where(filter=FieldFilter("channel", "==", channel))
+            docs = list(query.limit(1).stream())
+            if docs:
+                d = docs[0].to_dict()
+                d["video_id"] = docs[0].id
+                return d
+        except Exception as e:
+            print(f"get_video_by_title error: {e}")
+        return None
+
+    def set_ab_test_video_id(self, test_id, video_id):
+        """Backfill video_id onto an AB test row."""
+        try:
+            self.client.collection("ab_title_tests").document(test_id).update(
+                {"video_id": video_id}
+            )
+        except Exception as e:
+            print(f"set_ab_test_video_id error: {e}")
+
+    def close_ab_test(self, test_id, actual_views, closed_at):
+        """Fill in actual_views_24h and closed_at on an AB test row."""
+        try:
+            self.client.collection("ab_title_tests").document(test_id).update({
+                "actual_views_24h": actual_views,
+                "closed_at": closed_at,
+            })
+        except Exception as e:
+            print(f"close_ab_test error: {e}")
+
 db = Database()
