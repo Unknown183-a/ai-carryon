@@ -178,9 +178,7 @@ def _try_groq(prompt, groq_model, temperature):
     _record_outcome("groq", resp is not None)
     if resp is None:
         print(f"[llm_router:english] Groq failed: {err}")
-    return resp
-
-
+    return _normalize_response(resp)
 def _try_gemini(prompt):
     """Attempt Gemini once. Returns response or None."""
     print("[llm_router:english] Trying Gemini")
@@ -188,8 +186,38 @@ def _try_gemini(prompt):
     _record_outcome("gemini", resp is not None)
     if resp is None:
         print(f"[llm_router:english] Gemini failed: {err}")
-    return resp
+    return _normalize_response(resp)
 
+def _normalize_response(resp):
+    """
+    Ensure resp.content is always a plain string, regardless of which
+    provider answered. Groq's responses are always a string. Some Gemini
+    models (e.g. gemini-3.5-flash, which can include reasoning/thinking
+    parts) can return .content as a list of parts instead — each part is
+    either a plain string or a dict with a "text" key. Mutating in place
+    (rather than wrapping) means every existing caller's
+    `response.content.strip()` keeps working unchanged.
+    """
+    if resp is None:
+        return resp
+    content = getattr(resp, "content", None)
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                parts.append(part.get("text") or part.get("content") or "")
+        try:
+            resp.content = "".join(parts)
+        except Exception:
+            # Some response objects may be immutable — fall back to
+            # attaching the flattened text under a new attribute name
+            # is pointless if callers only ever read .content, so at
+            # least avoid crashing here; the caller-side .strip() will
+            # still fail, but this is a very unlikely edge case.
+            pass
+    return resp
 
 def safe_invoke(prompt, groq_model="openai/gpt-oss-120b", temperature=None):
     """
@@ -216,7 +244,7 @@ def safe_invoke(prompt, groq_model="openai/gpt-oss-120b", temperature=None):
             GROQ_TIMEOUT_SECONDS,
         )
         if resp is not None:
-            return resp
+            return _normalize_response(resp)
         raise RuntimeError(
             f"[llm_router:english] Both providers unavailable this run, last-ditch attempt also failed: {err}"
         )
@@ -224,22 +252,21 @@ def safe_invoke(prompt, groq_model="openai/gpt-oss-120b", temperature=None):
     if not groq_dead:
         resp = _try_groq(prompt, groq_model, temperature)
         if resp is not None:
-            return resp
+            return _normalize_response(resp)
         if not gemini_dead:
             resp = _try_gemini(prompt)
             if resp is not None:
-                return resp
+                return _normalize_response(resp)
     else:
         print("[llm_router:english] Groq marked dead this run — routing directly to Gemini")
         resp = _try_gemini(prompt)
         if resp is not None:
-            return resp
-
+            return _normalize_response(resp)
     print(f"[llm_router:english] Primary paths failed for this call — last resort: Groq {LAST_RESORT_GROQ_MODEL}")
     resp, err = _run_with_timeout(
         lambda: _get_groq(LAST_RESORT_GROQ_MODEL, temperature).invoke(prompt),
         GROQ_TIMEOUT_SECONDS,
     )
     if resp is not None:
-        return resp
+        return _normalize_response(resp)
     raise RuntimeError(f"[llm_router:english] All LLM providers failed for this call: {err}")
