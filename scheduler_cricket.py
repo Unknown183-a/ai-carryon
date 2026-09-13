@@ -193,5 +193,9 @@ def run_comment_replies():
 
 
 if __name__ == "__main__":
-    result = run_cricket_cycle()
+    import sys
+    if "--comments" in sys.argv:
+        result = run_comment_replies()
+    else:
+        result = run_cricket_cycle()
     print(result)

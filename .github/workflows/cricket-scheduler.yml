@@ -2,17 +2,18 @@ name: Cricket Scheduler
 
 on:
   schedule:
-    # Every 20 min — matches the cadence your external cron/uptime ping
-    # already used against Render's /trigger endpoint. scheduler_cricket.py's
-    # own daily cap + adaptive-hour gate decide whether anything actually runs.
-    - cron: "*/20 * * * *"
-    # Separate, much less frequent ping for comment replies — costs YouTube
-    # API quota per call, so this doesn't run on every generation cycle.
+    # Hourly — scheduler_cricket.py's own daily cap (5/day) and adaptive-hour
+    # gate decide whether this particular hour actually generates anything.
+    # Matches are event-driven, so this is intentionally more frequent than
+    # a fixed peak-hour approach.
+    - cron: "0 * * * *"
+    # Separate, much less frequent run for comment replies — costs YouTube
+    # API quota per call, so this doesn't run every hour.
     - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
-      target:
-        description: "Which endpoint to hit"
+      mode:
+        description: "generate a video, or process comment replies"
         required: false
         default: "generate"
         type: choice
@@ -21,25 +22,61 @@ on:
           - comments
 
 jobs:
-  trigger-render:
+  run-scheduler:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 55
     steps:
-      - name: Determine which endpoint to hit
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: pip install -r requirements_cricket.txt
+
+      - name: Write Firestore service-account key
+        run: |
+          echo "${{ secrets.CRICKET_FIRESTORE_KEY_B64 }}" | base64 -d > /tmp/cricket-firestore-key.json
+
+      - name: Determine mode
         id: pick
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "path=${{ github.event.inputs.target == 'comments' && 'trigger-comments' || 'trigger' }}" >> "$GITHUB_OUTPUT"
+            echo "flag=${{ github.event.inputs.mode == 'comments' && '--comments' || '' }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "0 */6 * * *" ]; then
-            echo "path=trigger-comments" >> "$GITHUB_OUTPUT"
+            echo "flag=--comments" >> "$GITHUB_OUTPUT"
           else
-            echo "path=trigger" >> "$GITHUB_OUTPUT"
+            echo "flag=" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Ping Render cricket service
+      - name: Run Cricket scheduler
         env:
-          RENDER_CRICKET_URL: ${{ secrets.RENDER_CRICKET_URL }}
-          TRIGGER_SECRET: ${{ secrets.TRIGGER_SECRET }}
-        run: |
-          curl -sS -f "${RENDER_CRICKET_URL}/${{ steps.pick.outputs.path }}?secret=${TRIGGER_SECRET}" \
-            || echo "Ping failed or Render service was asleep — will retry next cycle"
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/cricket-firestore-key.json
+          CRICAPI_KEY: ${{ secrets.CRICAPI_KEY }}
+          CRICAPI_KEY_2: ${{ secrets.CRICAPI_KEY_2 }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          CRICKET_YOUTUBE_TOKEN_B64: ${{ secrets.CRICKET_YOUTUBE_TOKEN_B64 }}
+          CRICKET_YOUTUBE_CHANNEL_ID: ${{ secrets.CRICKET_YOUTUBE_CHANNEL_ID }}
+          SARVAM_API_KEY: ${{ secrets.SARVAM_API_KEY }}
+        run: python scheduler_cricket.py ${{ steps.pick.outputs.flag }}
+
+      - name: Clean up credentials file
+        if: always()
+        run: rm -f /tmp/cricket-firestore-key.json
+
+      - name: Upload run log (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cricket-scheduler-log-${{ github.run_id }}
+          path: output/*.txt
+          if-no-files-found: ignore
