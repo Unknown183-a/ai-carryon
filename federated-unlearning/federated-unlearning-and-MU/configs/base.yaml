@@ -1,0 +1,34 @@
+# Shared defaults. Experiment-specific configs (initial_fl.yaml, retraining.yaml,
+# gradient_ascent.yaml, ga_kd.yaml) are merged on top of this file — see
+# src/utils/config.py:load_config(). Nothing here should be treated as final;
+# override per-experiment as needed (blueprint §21, §29 — no hard-coding).
+
+project:
+  name: federated-unlearning
+  seed: 42
+
+dataset:
+  name: MNIST
+  data_dir: data/raw
+  distribution: iid        # iid | non_iid
+  non_iid_shards_per_client: 2
+
+clients:
+  num_clients: 5
+
+federated:
+  rounds: 50
+  local_epochs: 10
+  aggregation: fedavg
+  local_lr: 0.01
+  local_momentum: 0.9
+  batch_size: 32
+
+device: cpu                # cpu | cuda
+
+evaluation:
+  accuracy: true
+  forgetting: true
+  mia: true
+  computation_cost: true
+  communication_cost: true

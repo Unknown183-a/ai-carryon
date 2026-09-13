@@ -1,0 +1,15 @@
+# Initial FL pipeline validation experiment (blueprint §6).
+# This is the ONLY experiment that has actually been run so far.
+# NOT the final experimental configuration — see README "Current Status".
+
+project:
+  name: initial_fl_pipeline_validation
+
+clients:
+  num_clients: 5
+
+federated:
+  rounds: 50
+  local_epochs: 10
+
+output_dir: experiments/initial_fl
