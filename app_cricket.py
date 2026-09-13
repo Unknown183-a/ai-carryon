@@ -37,6 +37,33 @@ def trigger():
     return jsonify({"status": "started"})
 
 
+@app.route("/trigger-comments")
+def trigger_comments():
+    """Separate, less-frequent trigger for comment replies — point a second
+    cron/uptime ping at this (e.g. every few hours) rather than every 20 min,
+    since each call costs YouTube API quota."""
+    secret = request.args.get("secret", "")
+    if not TRIGGER_SECRET or secret != TRIGGER_SECRET:
+        return jsonify({"error": "unauthorized"}), 401
+
+    if _running["busy"]:
+        return jsonify({"status": "already_running"}), 202
+
+    def _run():
+        _running["busy"] = True
+        try:
+            from scheduler_cricket import run_comment_replies
+            result = run_comment_replies()
+            print(f"Comment reply result: {result}")
+        except Exception as e:
+            print(f"Comment reply run failed: {e}")
+        finally:
+            _running["busy"] = False
+
+    threading.Thread(target=_run).start()
+    return jsonify({"status": "started"})
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)

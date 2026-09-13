@@ -12,9 +12,21 @@ PATTERNS = [
 ]
 
 
-def generate_cricket_seo(match_summary, script):
+def generate_cricket_seo(match_summary, script, title_override=None):
+    """title_override: pass the winning title from ab_title_agent.get_best_title_cricket()
+    to skip this function's own single-shot title generation and use the
+    A/B-tested winner instead — same override pattern agents_hindi/seo_agent.py
+    supports for its AB-tested titles."""
     import random
     pattern = random.choice(PATTERNS)
+
+    title_instruction = (
+        f'- Use this EXACT title (already generated and A/B-tested): "{title_override}"'
+        if title_override else
+        f"- Title pattern style to use: {pattern}\n"
+        "- Title under 60 characters, must reference the actual teams/players — not generic\n"
+        "- Never start with: Crazy, Insane, Amazing, Unbelievable, Shocking"
+    )
 
     prompt = f"""You are a YouTube SEO expert for a cricket recap Shorts channel.
 
@@ -25,9 +37,7 @@ Script:
 {script}
 
 STRICT RULES:
-- Title pattern style to use: {pattern}
-- Title under 60 characters, must reference the actual teams/players — not generic
-- Never start with: Crazy, Insane, Amazing, Unbelievable, Shocking
+{title_instruction}
 - Description: 3-4 sentences, original, ends with "Like & Subscribe for daily cricket recaps! 🏏"
 - 15 hashtags: mix of broad (#Cricket #Shorts) + team/player specific + trending
 
@@ -48,6 +58,9 @@ HASHTAGS: <15 hashtags space-separated>
             description = line.split(":", 1)[1].strip()
         elif line.upper().startswith("HASHTAGS:"):
             hashtags = line.split(":", 1)[1].strip()
+
+    if title_override:
+        title = title_override  # belt-and-suspenders in case the LLM paraphrased it anyway
 
     hashtag_list = [h for h in hashtags.split() if h.startswith("#")]
     return {"title": title, "description": description, "hashtags": hashtag_list}

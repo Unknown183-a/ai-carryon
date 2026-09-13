@@ -80,6 +80,9 @@ def _run_cricket_cycle_inner():
     from agents_cricket.research_agent import get_summary_for_topic
     from agents_cricket.script_agent import create_cricket_script
     from agents_cricket.seo_agent import generate_cricket_seo
+    from agents_cricket.ab_title_agent import get_best_title_cricket
+    from agents_cricket.saturation_agent import rank_topics_by_opportunity
+    from agents_cricket.adaptive_scheduler import should_upload_now_cricket, mark_upload_done_cricket
     from agents_cricket.image_agent import generate_backgrounds
     from agents_cricket.upload_agent import upload_video
     from agents_cricket.voice_agent import generate_voice
@@ -92,14 +95,31 @@ def _run_cricket_cycle_inner():
 
     _maybe_track_views()
 
+    # Phase 4 — adaptive scheduling. Event-driven by design (see
+    # agents_cricket/adaptive_scheduler.py docstring), so this only ever
+    # blocks to enforce the minimum gap between uploads once real data exists.
+    upload_ok, upload_reason = should_upload_now_cricket()
+    print(f"Adaptive scheduler: {upload_reason}")
+    if not upload_ok:
+        return {"status": "skipped_scheduler", "reason": upload_reason}
+
     posted = cricket_db.get_all_posted_match_ids()
     topics = get_all_topics(limit=8)
     print(f"Found {len(topics)} topics (news/live/upcoming/finished)")
 
-    new_match = next((t for t in topics if t["id"] not in posted), None)
-    if not new_match:
+    candidates = [t for t in topics if t["id"] not in posted]
+    if not candidates:
         print("No new topics to post.")
         return {"status": "no_new_match"}
+
+    # Phase 1.5 — saturation ranking. Prefers less-covered matches when
+    # several finished matches are available; news/live/upcoming always
+    # sort first since they're time-sensitive and have nothing to check yet.
+    try:
+        candidates = rank_topics_by_opportunity(candidates)
+    except Exception as e:
+        print(f"Saturation ranking skipped: {e}")
+    new_match = candidates[0]
 
     uploads_today = _check_daily_cap()
     if uploads_today >= DAILY_UPLOAD_CAP:
@@ -117,7 +137,19 @@ def _run_cricket_cycle_inner():
     script = create_cricket_script(summary, standout_player=structured.get("standout_player"))
     print(f"Script ({len(script.split())} words): {script[:80]}...")
 
-    seo = generate_cricket_seo(summary, script)
+    # Phase 3 — A/B title testing. Falls back to seo_agent's own single-shot
+    # title (via title_override=None) if this errors, so a title-test bug
+    # never blocks the whole pipeline.
+    winning_title = None
+    try:
+        ab_result = get_best_title_cricket(summary, script, teams=structured.get("teams"))
+        winning_title = ab_result["winner"]["title"]
+        print(f"AB-tested title winner ({ab_result['winner']['pattern']}, "
+              f"score={ab_result['winner']['score']}): {winning_title}")
+    except Exception as e:
+        print(f"AB title test skipped: {e}")
+
+    seo = generate_cricket_seo(summary, script, title_override=winning_title)
     print(f"Title: {seo['title']}")
 
     generate_voice(script, output_path="output/voice.mp3")
@@ -139,13 +171,25 @@ def _run_cricket_cycle_inner():
         match_id=new_match["id"],
     )
     _increment_daily_cap()
+    mark_upload_done_cricket()
     try:
+        # Also mark on the shared English/Hindi scheduler in case any other
+        # code path still checks it there — harmless no-op for cricket.
         from agents.adaptive_scheduler import mark_upload_done
         mark_upload_done("cricket")
     except Exception:
         pass
 
     return {"status": "uploaded", "video_url": video_url, "title": seo["title"]}
+
+
+def run_comment_replies():
+    """Optional: process + reply to cricket-channel comments. Not wired into
+    the main cycle automatically (comment fetching costs YouTube API quota
+    on every call) — call this from a separate, less-frequent trigger, e.g.
+    a cron hitting a dedicated /trigger-comments endpoint a few times a day."""
+    from agents_cricket.comment_reply_agent import process_comments_cricket
+    return process_comments_cricket()
 
 
 if __name__ == "__main__":

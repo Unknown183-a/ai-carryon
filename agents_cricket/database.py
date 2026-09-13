@@ -136,6 +136,32 @@ class CricketDatabase:
         docs = self.client.collection("cricket_posted_matches").stream()
         return {d.id for d in docs}
 
+    # ── A/B Title Tests ─────────────────────────────────────────────────
+    # Firestore collection "cricket_ab_tests" — used by agents_cricket.ab_title_agent
+    # and mirrored by pages/ab_titles.py's Cricket tab, same shape as the
+    # SQLite ab_title_tests table English/Hindi log to.
+
+    def log_ab_test(self, topic, winner_title, winner_pattern, winner_score,
+                     all_variations, generated_at=None):
+        self.client.collection("cricket_ab_tests").add({
+            "topic": topic,
+            "winner_title": winner_title,
+            "winner_pattern": winner_pattern,
+            "winner_score": winner_score,
+            "all_variations": all_variations,
+            "generated_at": generated_at or _now_iso(),
+            "logged_at": firestore.SERVER_TIMESTAMP,
+        })
+
+    def get_ab_test_stats(self, limit=200):
+        """Returns raw logged tests, most recent first — same shape callers
+        of agents/database.py's get_ab_test_stats() already expect."""
+        docs = (self.client.collection("cricket_ab_tests")
+                .order_by("logged_at", direction=firestore.Query.DESCENDING)
+                .limit(limit)
+                .stream())
+        return [d.to_dict() for d in docs]
+
     # ── Migration from Supabase Postgres (run once, from your MacBook) ─────
 
     def migrate_from_supabase(self, database_url):
