@@ -11,6 +11,7 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 SCOPES_READ = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
 
 def get_youtube_client():
