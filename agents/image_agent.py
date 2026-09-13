@@ -15,7 +15,7 @@ def get_llm():
         llm.invoke("hi")
         return llm
     except Exception:
-        return ChatGroq(model="llama-3.1-8b-instant")
+        return ChatGroq(model="openai/gpt-oss-20b")
 
 
 def safe_invoke(prompt):
@@ -51,7 +51,7 @@ def safe_invoke(prompt):
         )
         return gemini.invoke(prompt)
     except Exception:
-        return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
+        return ChatGroq(model="openai/gpt-oss-20b").invoke(prompt)
 
 
 llm = get_llm()

@@ -15,7 +15,7 @@ def get_llm():
         llm.invoke("hi")
         return llm
     except Exception:
-        return ChatGroq(model="llama-3.1-8b-instant")
+        return ChatGroq(model="openai/gpt-oss-20b")
 
 
 llm = get_llm()

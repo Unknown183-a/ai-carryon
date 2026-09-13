@@ -34,7 +34,7 @@ def safe_invoke(prompt):
         return gemini.invoke(prompt)
     except Exception:
         from langchain_groq import ChatGroq
-        return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
+        return ChatGroq(model="openai/gpt-oss-20b").invoke(prompt)
 
 
 def generate_seo(topic, script, comparison_insights=None, competitor_data=None):

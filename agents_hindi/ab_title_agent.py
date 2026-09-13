@@ -59,7 +59,7 @@ def safe_invoke(prompt):
         )
         return gemini.invoke(prompt)
     except Exception:
-        return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
+        return ChatGroq(model="openai/gpt-oss-20b").invoke(prompt)
 
 
 def generate_title_variation_hindi(topic, script, pattern_name, pattern_instruction):

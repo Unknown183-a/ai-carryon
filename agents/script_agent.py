@@ -17,7 +17,7 @@ def get_llm(temperature=0.7):
         safe_invoke("hi")
         return llm
     except Exception:
-        return ChatGroq(model="llama-3.1-8b-instant", temperature=temperature)
+        return ChatGroq(model="openai/gpt-oss-20b", temperature=temperature)
 
 
 def safe_invoke(prompt):
@@ -51,7 +51,7 @@ def safe_invoke(prompt):
         )
         return gemini.invoke(prompt)
     except Exception:
-        return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
+        return ChatGroq(model="openai/gpt-oss-20b").invoke(prompt)
 
 
 def score_hook(hook, llm):

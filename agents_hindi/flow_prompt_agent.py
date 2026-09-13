@@ -22,7 +22,7 @@ def safe_invoke(prompt):
         gemini = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=_os.getenv("GEMINI_API_KEY"))
         return gemini.invoke(prompt)
     except Exception:
-        return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
+        return ChatGroq(model="openai/gpt-oss-20b").invoke(prompt)
 
 
 def extract_hindi_facts(script, topic):

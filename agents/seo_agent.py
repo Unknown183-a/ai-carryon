@@ -18,7 +18,7 @@ def get_llm():
         safe_invoke("hi")
         return llm
     except Exception:
-        return ChatGroq(model="llama-3.1-8b-instant")
+        return ChatGroq(model="openai/gpt-oss-20b")
 
 
 def safe_invoke(prompt):
@@ -52,7 +52,7 @@ def safe_invoke(prompt):
         )
         return gemini.invoke(prompt)
     except Exception:
-        return ChatGroq(model="llama-3.1-8b-instant").invoke(prompt)
+        return ChatGroq(model="openai/gpt-oss-20b").invoke(prompt)
 
 
 def generate_seo(topic, script, comparison_insights=None, use_ab_titles=True):
