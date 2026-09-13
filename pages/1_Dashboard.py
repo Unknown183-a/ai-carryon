@@ -446,7 +446,7 @@ with english_tab:
 
                 if st.button("🎬 Generate Final Video", key="eng_make_video_btn", type="primary"):
                     with st.spinner("🎬 Creating Final Video..."):
-                        video_file = create_video(manim_path=None, use_flow_clips=_flow_clips_exist)
+                        video_file = create_video(manim_path=None, use_flow_clips=_flow_clips_exist, use_pexels_clips=use_pexels)
                     st.session_state["eng_video_file"] = video_file
 
                 from moviepy import AudioFileClip as AFC
@@ -744,7 +744,7 @@ with hindi_tab:
                     if st.button("🎬 Video Banao (Final)", key="hindi_make_video_btn", type="primary"):
                         with st.spinner("🎬 Video ban raha hai..."):
                             from agents.video_agent import create_video
-                            st.session_state["hindi_video_file"] = create_video(use_flow_clips=_hindi_clips_exist)
+                            st.session_state["hindi_video_file"] = create_video(use_flow_clips=_hindi_clips_exist, use_pexels_clips=hindi_use_pexels)
                             for _f in glob.glob("assets/flow_clips/*.mp4"):
                                 os.remove(_f)
 
