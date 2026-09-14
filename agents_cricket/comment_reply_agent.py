@@ -4,9 +4,10 @@ Comment Reply Agent — Cricket channel.
 
 Mirrors agents_hindi/comment_reply_agent.py, but:
   - reuses agents_cricket.upload_agent's authenticated client
-  - stores processed-comment history in Firestore (cricket_comment_history)
-    instead of a local JSON file, matching how the rest of agents_cricket/
-    already moved off local/JSON storage onto Firestore
+  - stores processed-comment history in Postgres (cricket_comment_history
+    table, via agents_cricket.database) instead of a local JSON file — so
+    dedup actually survives across GitHub Actions runs, unlike English/
+    Hindi's current local-JSON approach which resets every run
   - replies in casual Hindi/Hinglish, matching the cricket script's language
     and a cricket-fan's actual comment style (not a tech-channel voice)
 
@@ -38,19 +39,19 @@ NO_REPLY_CATEGORIES = {"Spam", "Offensive"}
 
 
 # ─────────────────────────────────────────────
-# Firestore storage helpers
+# Storage helpers — backed by agents_cricket.database's Postgres tables
+# (cricket_comment_history, cricket_match_requests)
 # ─────────────────────────────────────────────
 
-def _already_processed_ids():
+def _already_processed(comment_id):
     from agents_cricket.database import db
     if db is None:
-        return set()
+        return False
     try:
-        docs = db.client.collection("cricket_comment_history").stream()
-        return {d.id for d in docs}
+        return db.is_comment_processed(comment_id)
     except Exception as e:
-        print(f"[comment_reply_agent_cricket] History read failed: {e}")
-        return set()
+        print(f"[comment_reply_agent_cricket] History check failed: {e}")
+        return False
 
 
 def save_comment_history(comment_id, video_id, username, original_comment,
@@ -59,15 +60,11 @@ def save_comment_history(comment_id, video_id, username, original_comment,
     if db is None:
         return
     try:
-        db.client.collection("cricket_comment_history").document(comment_id).set({
-            "comment_id": comment_id,
-            "video_id": video_id,
-            "username": username,
-            "original_comment": original_comment,
-            "category": category,
-            "generated_reply": generated_reply,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        })
+        db.save_comment_history(
+            comment_id=comment_id, video_id=video_id, username=username,
+            original_comment=original_comment, category=category,
+            generated_reply=generated_reply,
+        )
     except Exception as e:
         print(f"[comment_reply_agent_cricket] History save failed: {e}")
 
@@ -79,12 +76,7 @@ def save_match_request(request_text, comment, video_id):
     if db is None:
         return
     try:
-        db.client.collection("cricket_match_requests").add({
-            "request": request_text,
-            "comment": comment,
-            "video_id": video_id,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        })
+        db.save_match_request(request_text=request_text, comment=comment, video_id=video_id)
     except Exception as e:
         print(f"[comment_reply_agent_cricket] Match request save failed: {e}")
 
@@ -98,7 +90,6 @@ def fetch_new_comments(max_results=50):
     from agents_cricket.upload_agent import get_youtube_client_readonly
 
     youtube = get_youtube_client_readonly()
-    already_seen = _already_processed_ids()
 
     channel_response = youtube.channels().list(part="id", mine=True).execute()
     items = channel_response.get("items", [])
@@ -125,7 +116,7 @@ def fetch_new_comments(max_results=50):
                 top_comment = item["snippet"]["topLevelComment"]
                 comment_id = top_comment["id"]
 
-                if comment_id in already_seen:
+                if _already_processed(comment_id):
                     continue
                 if item["snippet"].get("totalReplyCount", 0) > 0:
                     continue
@@ -281,7 +272,7 @@ Request:"""
 
 def process_comments_cricket(max_results=50, log_fn=print):
     """Safe to call repeatedly (e.g. from scheduler_cricket.py's cycle) —
-    already-processed comments are skipped via Firestore's cricket_comment_history."""
+    already-processed comments are skipped via Postgres's cricket_comment_history."""
     log_fn("[comment_reply_agent_cricket] Naye comments check ho rahe hain...")
 
     comments = fetch_new_comments(max_results=max_results)

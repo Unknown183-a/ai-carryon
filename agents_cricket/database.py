@@ -1,24 +1,24 @@
 """
 agents_cricket/database.py — Database for the Cricket channel.
 
-Migrated back from Firestore to Postgres, so Cricket now shares the exact
-same DATABASE_URL secret and connection pattern as English/Hindi instead of
-a separate GCP project/Firestore database. Method signatures are UNCHANGED
-from the Firestore version, so nothing in agents_cricket/, app_cricket.py,
-scheduler_cricket.py, or pages/ needs to be touched beyond this file.
+Runs on Postgres, sharing the exact same DATABASE_URL secret and connection
+pattern as English/Hindi. No GCP project, no Firestore, no separate cloud
+credentials — a connection string is the only requirement.
 
 Supports two backends, chosen automatically — same rule as agents/database.py:
   - Postgres (if DATABASE_URL is set) — production / GitHub Actions.
   - SQLite (default, if DATABASE_URL is not set) — local development,
     stored at output/cricket.db.
 
-Kept isolated via a cricket_ prefix on every table name (same isolation
-goal the old "cricket_" Firestore collection prefix served):
+Kept isolated via a cricket_ prefix on every table name, so nothing here
+collides with English/Hindi's rows in the same database:
   - cricket_videos
   - cricket_snapshots
   - cricket_meta
   - cricket_posted_matches
   - cricket_ab_tests
+  - cricket_comment_history
+  - cricket_match_requests
 
 Usage (unchanged):
     from agents_cricket.database import db
@@ -164,6 +164,24 @@ class CricketDatabase:
                     winner_score    INTEGER,
                     all_variations  TEXT,
                     generated_at    TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS cricket_comment_history (
+                    comment_id        TEXT PRIMARY KEY,
+                    video_id          TEXT,
+                    username          TEXT,
+                    original_comment  TEXT,
+                    category          TEXT,
+                    generated_reply   TEXT,
+                    timestamp         TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS cricket_match_requests (
+                    {id_col},
+                    request     TEXT,
+                    comment     TEXT,
+                    video_id    TEXT,
+                    timestamp   TEXT
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_cricket_snapshots_video_id
@@ -322,54 +340,40 @@ class CricketDatabase:
                 result.append(d)
             return result
 
-    # ── Migration from Firestore (run once, from your MacBook) ─────────────
+    # ── Comment Replies ──────────────────────────────────────────────────
 
-    def migrate_from_firestore(self, project=None):
-        """
-        One-time backfill: connects to the Firestore project cricket was
-        using and writes every doc into Postgres. Run this locally BEFORE
-        relying on the new DATABASE_URL-backed data — otherwise
-        get_all_posted_match_ids() comes back empty and already-covered
-        matches can get reposted.
+    def is_comment_processed(self, comment_id):
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM cricket_comment_history WHERE comment_id = ?", (comment_id,)
+            ).fetchone()
+            return row is not None
 
-        Requires google-cloud-firestore installed locally for this one call
-        only — it's no longer a runtime dependency, so:
-            pip install google-cloud-firestore
-        """
-        from google.cloud import firestore
-        kwargs = {"project": project} if project else {}
-        client = firestore.Client(**kwargs)
-        migrated = {"videos": 0, "snapshots": 0, "posted": 0, "meta": 0, "ab_tests": 0}
+    def save_comment_history(self, comment_id, video_id, username, original_comment,
+                              category, generated_reply):
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO cricket_comment_history
+                (comment_id, video_id, username, original_comment, category, generated_reply, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(comment_id) DO NOTHING
+            """, (comment_id, video_id, username, original_comment,
+                  category, generated_reply, _now_iso()))
 
-        for video_doc in client.collection("cricket_videos").stream():
-            v = video_doc.to_dict()
-            self.upsert_video(v["video_id"], v.get("title", ""), v.get("published", ""),
-                               v.get("match_id"))
-            migrated["videos"] += 1
-            for snap_doc in video_doc.reference.collection("snapshots").stream():
-                s = snap_doc.to_dict()
-                self.add_snapshot(v["video_id"], s.get("views", 0), s.get("likes", 0),
-                                   s.get("comments", 0), s.get("timestamp"))
-                migrated["snapshots"] += 1
+    def save_match_request(self, request_text, comment, video_id):
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO cricket_match_requests (request, comment, video_id, timestamp)
+                VALUES (?, ?, ?, ?)
+            """, (request_text, comment, video_id, _now_iso()))
 
-        for doc in client.collection("cricket_posted_matches").stream():
-            m = doc.to_dict()
-            self.mark_posted(m["match_id"], m.get("match_name", ""), m.get("posted_at"))
-            migrated["posted"] += 1
-
-        for doc in client.collection("cricket_meta").stream():
-            m = doc.to_dict()
-            self.set_meta(doc.id, m.get("value"))
-            migrated["meta"] += 1
-
-        for doc in client.collection("cricket_ab_tests").stream():
-            a = doc.to_dict()
-            self.log_ab_test(a.get("topic"), a.get("winner_title"), a.get("winner_pattern"),
-                              a.get("winner_score"), a.get("all_variations"), a.get("generated_at"))
-            migrated["ab_tests"] += 1
-
-        print(f"✅ Migrated from Firestore to Postgres: {migrated}")
-        return migrated
+    # ── Migration helpers ────────────────────────────────────────────────
+    # The one-time Firestore→Postgres backfill (migrate_from_firestore) has
+    # been removed now that the migration is complete and Firestore is no
+    # longer used anywhere in the cricket pipeline. If old Firestore data
+    # still needs backfilling, pull it from git history (this method existed
+    # as of commit 55ec4b0) rather than reintroducing firestore as even an
+    # optional dependency here.
 
 
 # Singleton instance — same pattern as agents/database.py's `db`.
