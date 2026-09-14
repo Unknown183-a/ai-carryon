@@ -33,7 +33,7 @@ def _generate_sarvam(script, output_path, speaker):
 
     audio = client.text_to_speech.convert(
         text=text,
-        target_language_code="hi-IN",
+        language_code="hi-IN",
         speaker=speaker,
         model="bulbul:v3",
         pace=1.15,
