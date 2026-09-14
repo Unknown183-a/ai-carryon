@@ -486,6 +486,43 @@ def create_video(manim_path=None, use_flow_clips=False, use_pexels_clips=False):
 # Additions for Pexels dynamic video clips (append to video_agent.py)
 # ============================================================
 
+def burn_captions(input_video_path, output_path=None):
+    """Burns output/captions.ass (aesthetic word-highlight style) — or
+    output/captions.srt as a plain fallback — onto a video that already has
+    its audio muxed in. For renderers that don't burn their own captions
+    (e.g. cricket's static-image path), rather than duplicating the ffmpeg
+    subtitle-filter logic that _create_video_from_pexels_clips already has.
+    If neither caption file exists, or the burn fails, returns the input
+    video untouched so a caption bug never blocks the whole pipeline."""
+    ass_path = "output/captions.ass"
+    srt_path = "output/captions.srt"
+    output_path = output_path or input_video_path
+
+    if os.path.exists(ass_path):
+        vf = f"ass={ass_path}"
+    elif os.path.exists(srt_path):
+        vf = f"subtitles={srt_path}:force_style='{_caption_force_style()}'"
+    else:
+        return input_video_path
+
+    ffmpeg = get_ffmpeg()
+    tmp_out = input_video_path + ".captioned.mp4"
+    cmd = [
+        ffmpeg, "-y", "-i", input_video_path,
+        "-vf", vf,
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+        "-c:a", "copy", "-pix_fmt", "yuv420p",
+        tmp_out
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Caption burn failed, keeping video without captions: {result.stderr[-400:]}")
+        return input_video_path
+
+    shutil.move(tmp_out, output_path)
+    return output_path
+
+
 def get_pexels_clips():
     """Get downloaded Pexels stock video clips from assets/pexels_clips/"""
     folder = "assets/pexels_clips"
@@ -570,9 +607,16 @@ def _create_video_from_pexels_clips(clip_paths, audio_path, srt_path, music_path
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = f"output/video_{timestamp}.mp4"
     has_music = music_path and os.path.exists(music_path)
-    has_captions = srt_path and os.path.exists(srt_path)
+    ass_path = "output/captions.ass"
+    has_ass = os.path.exists(ass_path)
+    has_captions = has_ass or (srt_path and os.path.exists(srt_path))
 
-    vf = f"subtitles={srt_path}:force_style='{_caption_force_style()}'" if has_captions else None
+    if has_ass:
+        vf = f"ass={ass_path}"
+    elif has_captions:
+        vf = f"subtitles={srt_path}:force_style='{_caption_force_style()}'"
+    else:
+        vf = None
 
     if has_music:
         filter_complex = "[1:a]volume=1.0[voice];[2:a]volume=0.15[music];[voice][music]amix=inputs=2:duration=first[aout]"
@@ -601,7 +645,7 @@ def _create_video_from_pexels_clips(clip_paths, audio_path, srt_path, music_path
         # by every ffmpeg build — retry once without captions rather than
         # failing the whole video.
         print(f"Caption burn failed, retrying without captions: {result.stderr[-400:]}")
-        cmd = [c for c in cmd if not (isinstance(c, str) and c.startswith("subtitles="))]
+        cmd = [c for c in cmd if not (isinstance(c, str) and (c.startswith("subtitles=") or c.startswith("ass=")))]
         if "-vf" in cmd:
             vf_idx = cmd.index("-vf")
             del cmd[vf_idx:vf_idx + 2]

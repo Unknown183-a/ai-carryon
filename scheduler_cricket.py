@@ -84,6 +84,7 @@ def _run_cricket_cycle_inner():
     from agents_cricket.saturation_agent import rank_topics_by_opportunity
     from agents_cricket.adaptive_scheduler import should_upload_now_cricket, mark_upload_done_cricket
     from agents_cricket.image_agent import generate_backgrounds
+    from agents_cricket.video_clip_agent import generate_background_clips_cricket
     from agents_cricket.upload_agent import upload_video
     from agents_cricket.voice_agent import generate_voice
     from agents.caption_agent import create_srt
@@ -154,9 +155,17 @@ def _run_cricket_cycle_inner():
 
     generate_voice(script, output_path="output/voice.mp3")
     create_srt(script, audio_path="output/voice.mp3")
-    # # generative_image disconnected  # disconnected - use Pexels instead
-    generate_backgrounds(summary, num_images=4, structured=structured)
-    video_path = create_video()  # writes to output/final_video.mp4 per your existing agent
+
+    print("Pexels video clips fetch ho rahe hain...")
+    clip_paths, clip_errors = generate_background_clips_cricket(structured, num_clips=4)
+    if len(clip_paths) < 2:
+        print(f"Too few Pexels clips ({clip_errors}) — falling back to static images...")
+        generate_backgrounds(summary, num_images=4, structured=structured)
+        use_pexels = False
+    else:
+        use_pexels = True
+
+    video_path = create_video(use_pexels_clips=use_pexels)  # writes to output/final_video.mp4
 
     video_id, video_url = upload_video(
         video_path, seo["title"], seo["description"], seo["hashtags"]

@@ -1,8 +1,13 @@
 # agents_cricket/video_agent.py
-"""Lightweight, low-memory video renderer for Render's free tier.
-No Ken Burns zoom for now — static crop-to-fit clips, correctness first."""
+"""Cricket video renderer. Prefers dynamic Pexels stock *video* clips (same
+approach English/Hindi already use) with burned-in aesthetic word-highlight
+captions; falls back to the original static-image renderer — now also
+caption-burned via burn_captions() — if too few clips were fetched this run.
+"""
 import os
 from moviepy import ImageClip, AudioFileClip, concatenate_videoclips
+
+from agents.video_agent import _create_video_from_pexels_clips, burn_captions, get_pexels_clips
 
 WIDTH, HEIGHT = 540, 960
 FPS = 20
@@ -18,10 +23,9 @@ def _make_clip(image_path, duration):
     return clip.with_duration(duration)
 
 
-def create_video(audio_path="output/voice.mp3", images_folder="assets/backgrounds",
-                  output_path="output/final_video.mp4"):
-    os.makedirs("output", exist_ok=True)
-
+def _create_static_video(audio_path, images_folder, output_path):
+    """Original low-memory static-image renderer, kept as the fallback path
+    for when too few Pexels video clips came back this run."""
     audio = AudioFileClip(audio_path)
     total_duration = audio.duration
 
@@ -47,7 +51,19 @@ def create_video(audio_path="output/voice.mp3", images_folder="assets/background
         threads=1,
         logger=None,
     )
-
     audio.close()
     video.close()
     return output_path
+
+
+def create_video(audio_path="output/voice.mp3", images_folder="assets/backgrounds",
+                  output_path="output/final_video.mp4", use_pexels_clips=False):
+    os.makedirs("output", exist_ok=True)
+
+    pexels_clips = get_pexels_clips() if use_pexels_clips else []
+    if pexels_clips:
+        print(f"Using {len(pexels_clips)} Pexels clips as cricket background")
+        return _create_video_from_pexels_clips(pexels_clips, audio_path, "output/captions.srt")
+
+    raw_path = _create_static_video(audio_path, images_folder, output_path)
+    return burn_captions(raw_path, output_path)
