@@ -43,11 +43,57 @@ def get_public_stats():
 stats = get_public_stats()
 
 # ─────────────────────────────────────────────
-# Styling
+# Styling — dark / bold "architects of the future" theme
+# (dark, bold agency-style theme: near-black background, big uppercase
+#  headline, orange accent, "story in numbers" stat strip, card sections)
 # ─────────────────────────────────────────────
 
 st.markdown("""
 <style>
+:root {
+    --accent: #ff5a36;
+    --bg: #0b0b0f;
+    --card: rgba(255,255,255,0.03);
+    --border: rgba(255,255,255,0.08);
+}
+
+/* page background */
+.stApp {
+    background: var(--bg);
+}
+
+/* hero */
+.hero {
+    padding: 56px 8px 40px 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 36px;
+}
+.eyebrow {
+    display: inline-block;
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 3px;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+}
+.hero h1 {
+    font-size: 3.2rem;
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: -1px;
+    text-transform: uppercase;
+    margin: 0 0 18px 0;
+}
+.hero h1 span {
+    color: var(--accent);
+}
+.hero p {
+    font-size: 1.15rem;
+    color: rgba(255,255,255,0.72);
+    max-width: 780px;
+    line-height: 1.55;
+}
 .hero-badge {
     display: inline-block;
     background: rgba(34,197,94,0.15);
@@ -57,45 +103,103 @@ st.markdown("""
     border-radius: 20px;
     font-size: 0.85rem;
     font-weight: 600;
-    margin-bottom: 12px;
+    margin-bottom: 18px;
 }
+
+/* section labels — small caps eyebrow above each heading */
+.section-label {
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 3px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.section-title {
+    font-size: 1.9rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: -0.5px;
+    margin: 0 0 18px 0;
+}
+
+/* story-in-numbers stat strip */
+.stat-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+    padding: 28px 8px;
+    margin: 8px 0 36px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+.stat-num {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+}
+.stat-label {
+    color: rgba(255,255,255,0.6);
+    font-size: 0.9rem;
+    margin-top: 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
 .tech-badge {
     display: inline-block;
-    background: rgba(99,102,241,0.15);
-    color: #a5b4fc;
-    border: 1px solid rgba(99,102,241,0.3);
+    background: rgba(255,90,54,0.12);
+    color: #ffb199;
+    border: 1px solid rgba(255,90,54,0.35);
     padding: 4px 12px;
     border-radius: 6px;
     font-size: 0.82rem;
     margin: 3px;
 }
 .challenge-card {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
     border-radius: 10px;
     padding: 18px 20px;
     margin-bottom: 14px;
+    transition: border-color 0.15s ease;
+}
+.challenge-card:hover {
+    border-color: var(--accent);
 }
 .phase-done {
     color: #22c55e;
     font-weight: 600;
 }
+
+/* footer band */
+.footer-band {
+    background: rgba(255,255,255,0.02);
+    border-top: 1px solid var(--border);
+    padding: 36px 8px 8px 8px;
+    margin-top: 24px;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# Hero
+# Hero — full-width dark banner, big uppercase headline + CTA row
 # ─────────────────────────────────────────────
 
+st.markdown('<div class="hero">', unsafe_allow_html=True)
+st.markdown('<div class="eyebrow">Autonomous YouTube Intelligence</div>', unsafe_allow_html=True)
 st.markdown('<span class="hero-badge">● Live and running in production</span>', unsafe_allow_html=True)
-st.title("🤖 AI CarryON")
-st.subheader("An autonomous system that researches, writes, voices, edits, and uploads YouTube videos — then learns from how they perform.")
-
+st.markdown('<h1>Architects of <span>Automated</span> Content</h1>', unsafe_allow_html=True)
 st.markdown(
-    "Three fully independent channels (English + Hindi + Cricket), each running its own "
-    "scheduler, script generation, A/B title testing, and adaptive upload-time logic — "
-    "with zero manual intervention after deploy."
+    '<p>AI CarryON researches, writes, voices, edits, and uploads YouTube videos on its own '
+    '— then learns from how they perform. Three fully independent channels (English + Hindi + '
+    'Cricket), each running its own scheduler, script generation, A/B title testing, and '
+    'adaptive upload-time logic, with zero manual intervention after deploy.</p>',
+    unsafe_allow_html=True,
 )
+st.markdown('</div>', unsafe_allow_html=True)
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
@@ -112,23 +216,51 @@ st.caption(f"Also live: [{LIVE_APP_URL}]({LIVE_APP_URL}) · [LinkedIn]({LINKEDIN
 st.divider()
 
 # ─────────────────────────────────────────────
-# Live stats (only shown if DB has real data)
+# Live stats — "story in numbers" style strip
 # ─────────────────────────────────────────────
 
 if stats["db_available"] and stats["total_videos"]:
-    st.markdown("### 📊 Live system stats")
-    s1, s2, s3 = st.columns(3)
-    s1.metric("Videos tracked", stats["total_videos"])
-    s2.metric("Snapshots collected", f"{stats['total_snapshots']:,}")
-    s3.metric("Channels running", "3 (English + Hindi + Cricket)")
+    videos_val = f'{stats["total_videos"]}+'
+    snapshots_val = f'{stats["total_snapshots"]:,}+'
+else:
+    videos_val = "—"
+    snapshots_val = "—"
+
+st.markdown('<div class="section-label">Story in numbers</div>', unsafe_allow_html=True)
+st.markdown(f"""
+<div class="stat-strip">
+    <div>
+        <div class="stat-num">{videos_val}</div>
+        <div class="stat-label">Videos tracked</div>
+    </div>
+    <div>
+        <div class="stat-num">{snapshots_val}</div>
+        <div class="stat-label">Snapshots collected</div>
+    </div>
+    <div>
+        <div class="stat-num">3</div>
+        <div class="stat-label">Channels running</div>
+    </div>
+    <div>
+        <div class="stat-num">6</div>
+        <div class="stat-label">Pipeline phases shipped</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+if stats["db_available"] and stats["total_videos"]:
     st.caption("Pulled live from the production database — this is real operational data, not a mockup.")
-    st.divider()
+else:
+    st.caption("Live figures load once the production database is reachable.")
+
+st.divider()
 
 # ─────────────────────────────────────────────
 # What this does
 # ─────────────────────────────────────────────
 
-st.markdown("## What this system actually does")
+st.markdown('<div class="section-label">How It Works</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">What This System Actually Does</div>', unsafe_allow_html=True)
 st.markdown("""
 Each channel runs an hourly-checking scheduler that, without human input:
 
@@ -152,7 +284,8 @@ st.divider()
 # Architecture
 # ─────────────────────────────────────────────
 
-st.markdown("## Architecture")
+st.markdown('<div class="section-label">Under The Hood</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">Architecture</div>', unsafe_allow_html=True)
 
 st.code("""
 Adaptive Hour Check (Phase 4)
@@ -192,7 +325,8 @@ st.divider()
 # Phase history
 # ─────────────────────────────────────────────
 
-st.markdown("## Build timeline")
+st.markdown('<div class="section-label">Progress</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">Build Timeline</div>', unsafe_allow_html=True)
 phases = [
     ("Phase 0", "Core pipeline — research, script, voice, render, upload"),
     ("Phase 1", "Velocity tracking + Peak Hours dashboard"),
@@ -210,7 +344,8 @@ st.divider()
 # Engineering challenges — the actual resume material
 # ─────────────────────────────────────────────
 
-st.markdown("## Engineering challenges solved")
+st.markdown('<div class="section-label">The Hard Parts</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">Engineering Challenges Solved</div>', unsafe_allow_html=True)
 st.caption("This is the part that actually shows debugging depth, not just \"built with AI.\"")
 
 challenges = [
@@ -262,7 +397,9 @@ st.divider()
 # Footer
 # ─────────────────────────────────────────────
 
-st.markdown("## Get in touch")
+st.markdown('<div class="footer-band">', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Reach Out</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">Get In Touch</div>', unsafe_allow_html=True)
 f1, f2, f3 = st.columns(3)
 with f1:
     st.link_button("🔗 LinkedIn", LINKEDIN_URL, use_container_width=True)
@@ -285,3 +422,4 @@ st.info(
     "operational access private, while this Portfolio page stays fully open so you can see the "
     "architecture, the build history, and the engineering work without needing any access."
 )
+st.markdown('</div>', unsafe_allow_html=True)
