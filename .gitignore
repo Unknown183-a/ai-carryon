@@ -31,3 +31,4 @@ token_b64_new.txt
 .env
 token_hindi.json
 federated-unlearning/
+*.patch
