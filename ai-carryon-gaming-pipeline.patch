@@ -1,0 +1,1079 @@
+diff --git a/.github/workflows/gaming-scheduler.yml b/.github/workflows/gaming-scheduler.yml
+new file mode 100644
+index 0000000..582a24c
+--- /dev/null
++++ b/.github/workflows/gaming-scheduler.yml
+@@ -0,0 +1,47 @@
++name: Gaming Scheduler
++
++on:
++  schedule:
++    # Every 4 hours (UTC). Adjust to taste once you see real clip volume.
++    - cron: "0 */4 * * *"
++  workflow_dispatch: {}
++
++jobs:
++  run-scheduler:
++    runs-on: ubuntu-latest
++    timeout-minutes: 55
++    steps:
++      - name: Checkout repo
++        uses: actions/checkout@v4
++
++      - name: Set up Python
++        uses: actions/setup-python@v5
++        with:
++          python-version: "3.11"
++
++      - name: Install ffmpeg
++        run: sudo apt-get update && sudo apt-get install -y ffmpeg
++
++      - name: Install Python dependencies
++        run: pip install -r requirements.txt
++
++      - name: Run gaming scheduler
++        env:
++          DATABASE_URL: ${{ secrets.DATABASE_URL }}
++          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
++          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
++          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
++          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
++          TWITCH_FOLLOWED_STREAMERS: ${{ secrets.TWITCH_FOLLOWED_STREAMERS }}
++          TWITCH_TRACKED_GAMES: ${{ secrets.TWITCH_TRACKED_GAMES }}
++          YOUTUBE_GAMING_CLIENT_SECRETS_B64: ${{ secrets.YOUTUBE_GAMING_CLIENT_SECRETS_B64 }}
++          YOUTUBE_GAMING_TOKEN_B64: ${{ secrets.YOUTUBE_GAMING_TOKEN_B64 }}
++        run: python scheduler_gaming.py
++
++      - name: Upload run log (for debugging)
++        if: always()
++        uses: actions/upload-artifact@v4
++        with:
++          name: gaming-scheduler-log-${{ github.run_id }}
++          path: output/scheduler_log.txt
++          if-no-files-found: ignore
+diff --git a/agents_gaming/__init__.py b/agents_gaming/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/agents_gaming/clip_finder.py b/agents_gaming/clip_finder.py
+new file mode 100644
+index 0000000..166e217
+--- /dev/null
++++ b/agents_gaming/clip_finder.py
+@@ -0,0 +1,37 @@
++# agents_gaming/clip_finder.py
++"""
++Twitch already does the 'find the best moment' work for us — Clips are
++viewer-cut highlights, and Helix returns view_count directly. So unlike
++agents_cricket/moment_finder.py (which had to score raw scorecards), this
++just ranks and dedups what trending_agent.get_all_topics() already fetched.
++"""
++
++
++def rank_clips(clips):
++    """Sort candidates by view_count desc. Streamer clips get a small boost
++    over top-game clips so a followed streamer's good moment beats a
++    mediocre viral clip from an untracked game, all else equal."""
++    def score(c):
++        boost = 1.15 if c.get("_topic_type") == "streamer" else 1.0
++        return c.get("view_count", 0) * boost
++
++    return sorted(clips, key=score, reverse=True)
++
++
++def find_best_unposted_clip(clips, already_posted_ids):
++    """clips: raw list from trending_agent.get_all_topics().
++    already_posted_ids: set of clip IDs already uploaded (from gaming_db).
++    Returns the single best clip dict, or None if everything's been posted."""
++    ranked = rank_clips(clips)
++    for clip in ranked:
++        if clip.get("id") not in already_posted_ids:
++            return clip
++    return None
++
++
++def find_top_clips(clips, already_posted_ids, limit=5):
++    """Top N unposted clips, for a dashboard picker — mirrors
++    agents_cricket/moment_finder.find_top_matches()."""
++    ranked = rank_clips(clips)
++    out = [c for c in ranked if c.get("id") not in already_posted_ids]
++    return out[:limit]
+diff --git a/agents_gaming/database.py b/agents_gaming/database.py
+new file mode 100644
+index 0000000..9062b4c
+--- /dev/null
++++ b/agents_gaming/database.py
+@@ -0,0 +1,180 @@
++"""
++agents_gaming/database.py — Database for the Gaming channel.
++
++Same dual-backend pattern as agents_cricket/database.py: Postgres if
++DATABASE_URL is set (shares the one Supabase DB used by English/Hindi/
++Cricket, isolated via a gaming_ table prefix), else local SQLite at
++output/gaming.db.
++
++Tables:
++  - gaming_videos         uploaded video metadata
++  - gaming_meta           key/value store (daily upload cap, view-track timer)
++  - gaming_posted_clips   dedup — Twitch clip IDs already turned into a video
++"""
++import os
++from datetime import datetime, timezone
++from contextlib import contextmanager
++
++DATABASE_URL = os.environ.get("DATABASE_URL")
++USE_POSTGRES = bool(DATABASE_URL)
++
++if USE_POSTGRES:
++    import psycopg2
++    import psycopg2.extras
++else:
++    import sqlite3
++
++
++def _now_iso():
++    return datetime.now(timezone.utc).isoformat()
++
++
++def _to_pg(query):
++    return query.replace("?", "%s")
++
++
++class _CursorWrapper:
++    def __init__(self, cursor):
++        self._cursor = cursor
++
++    def execute(self, query, params=None):
++        self._cursor.execute(_to_pg(query), params or ())
++        return self
++
++    def fetchone(self):
++        return self._cursor.fetchone()
++
++    def fetchall(self):
++        return self._cursor.fetchall()
++
++
++class _ConnWrapper:
++    def __init__(self, conn, is_pg):
++        self._conn = conn
++        self._is_pg = is_pg
++
++    def execute(self, query, params=None):
++        if self._is_pg:
++            cur = self._conn.cursor()
++            return _CursorWrapper(cur).execute(query, params)
++        return self._conn.execute(query, params or ())
++
++    def executescript(self, script):
++        if self._is_pg:
++            cur = self._conn.cursor()
++            cur.execute(script)
++        else:
++            self._conn.executescript(script)
++
++
++DB_PATH = os.environ.get("GAMING_DB_PATH", "output/gaming.db")
++
++
++class GamingDatabase:
++    def __init__(self, db_path=None):
++        self.db_path = db_path or DB_PATH
++        if not USE_POSTGRES:
++            os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
++        self._init_tables()
++
++    @contextmanager
++    def _conn(self):
++        if USE_POSTGRES:
++            conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
++        else:
++            conn = sqlite3.connect(self.db_path)
++            conn.row_factory = sqlite3.Row
++            conn.execute("PRAGMA journal_mode=WAL")
++        try:
++            yield _ConnWrapper(conn, USE_POSTGRES)
++            conn.commit()
++        except Exception:
++            conn.rollback()
++            raise
++        finally:
++            conn.close()
++
++    def _init_tables(self):
++        with self._conn() as conn:
++            conn.executescript("""
++                CREATE TABLE IF NOT EXISTS gaming_videos (
++                    video_id    TEXT PRIMARY KEY,
++                    title       TEXT,
++                    published   TEXT,
++                    clip_id     TEXT,
++                    created_at  TEXT DEFAULT CURRENT_TIMESTAMP
++                );
++
++                CREATE TABLE IF NOT EXISTS gaming_meta (
++                    key    TEXT PRIMARY KEY,
++                    value  TEXT
++                );
++
++                CREATE TABLE IF NOT EXISTS gaming_posted_clips (
++                    clip_id     TEXT PRIMARY KEY,
++                    clip_title  TEXT,
++                    broadcaster TEXT,
++                    posted_at   TEXT NOT NULL
++                );
++            """)
++
++    # ── Videos ───────────────────────────────────────────────────────────
++
++    def upsert_video(self, video_id, title, published, clip_id=None):
++        with self._conn() as conn:
++            if clip_id is not None:
++                conn.execute("""
++                    INSERT INTO gaming_videos (video_id, title, published, clip_id)
++                    VALUES (?, ?, ?, ?)
++                    ON CONFLICT(video_id) DO UPDATE SET
++                        title=excluded.title, published=excluded.published, clip_id=excluded.clip_id
++                """, (video_id, title, published, clip_id))
++            else:
++                conn.execute("""
++                    INSERT INTO gaming_videos (video_id, title, published)
++                    VALUES (?, ?, ?)
++                    ON CONFLICT(video_id) DO UPDATE SET
++                        title=excluded.title, published=excluded.published
++                """, (video_id, title, published))
++
++    def get_all_videos(self):
++        with self._conn() as conn:
++            rows = conn.execute("SELECT * FROM gaming_videos ORDER BY created_at DESC").fetchall()
++            return [dict(r) for r in rows]
++
++    # ── Dedup ────────────────────────────────────────────────────────────
++
++    def mark_posted(self, clip_id, clip_title="", broadcaster=""):
++        with self._conn() as conn:
++            conn.execute("""
++                INSERT INTO gaming_posted_clips (clip_id, clip_title, broadcaster, posted_at)
++                VALUES (?, ?, ?, ?)
++                ON CONFLICT(clip_id) DO NOTHING
++            """, (clip_id, clip_title, broadcaster, _now_iso()))
++
++    def get_all_posted_clip_ids(self):
++        with self._conn() as conn:
++            rows = conn.execute("SELECT clip_id FROM gaming_posted_clips").fetchall()
++            return {r["clip_id"] for r in rows}
++
++    # ── Meta (daily cap, timers) ─────────────────────────────────────────
++
++    def get_meta(self, key):
++        with self._conn() as conn:
++            row = conn.execute("SELECT value FROM gaming_meta WHERE key = ?", (key,)).fetchone()
++            return row["value"] if row else None
++
++    def set_meta(self, key, value):
++        with self._conn() as conn:
++            conn.execute("""
++                INSERT INTO gaming_meta (key, value) VALUES (?, ?)
++                ON CONFLICT(key) DO UPDATE SET value = excluded.value
++            """, (key, value))
++
++
++try:
++    db = GamingDatabase()
++    db_init_error = None
++except Exception as e:
++    db = None
++    db_init_error = str(e)
+diff --git a/agents_gaming/research_agent.py b/agents_gaming/research_agent.py
+new file mode 100644
+index 0000000..d6db808
+--- /dev/null
++++ b/agents_gaming/research_agent.py
+@@ -0,0 +1,45 @@
++# agents_gaming/research_agent.py
++"""Single entry point for script_agent.py — turns a raw Helix clip dict
++(from clip_finder.find_best_unposted_clip) into (summary_text, structured),
++same shape as agents_cricket/research_agent.get_summary_for_topic()."""
++
++
++def get_summary_for_clip(clip):
++    title = clip.get("title", "").strip()
++    broadcaster = clip.get("broadcaster_name", "")
++    game_name = clip.get("_source_game", "")  # only set for top_game clips
++    views = clip.get("view_count", 0)
++    created_at = clip.get("created_at", "")
++    topic_type = clip.get("_topic_type", "clip")
++
++    lines = [
++        f"Clip title: {title}",
++        f"Streamer: {broadcaster}",
++    ]
++    if game_name:
++        lines.append(f"Game: {game_name}")
++    lines.append(f"Views: {views:,}")
++    if created_at:
++        lines.append(f"Clipped: {created_at}")
++    if topic_type == "streamer":
++        lines.append(f"Source: followed streamer ({clip.get('_source_streamer', broadcaster)})")
++    else:
++        lines.append("Source: trending in this game category")
++
++    structured = {
++        "topic_type": topic_type,
++        "clip_id": clip.get("id"),
++        "clip_url": clip.get("url"),
++        "embed_url": clip.get("embed_url"),
++        "broadcaster": broadcaster,
++        "game": game_name,
++        "views": views,
++        "title": title,
++    }
++    return "\n".join(lines), structured
++
++
++def get_summary_for_topic(topic):
++    """Alias kept for naming symmetry with the cricket/main agents — gaming
++    only has one topic 'shape' (a clip dict), so this just delegates."""
++    return get_summary_for_clip(topic)
+diff --git a/agents_gaming/script_agent.py b/agents_gaming/script_agent.py
+new file mode 100644
+index 0000000..49afb9d
+--- /dev/null
++++ b/agents_gaming/script_agent.py
+@@ -0,0 +1,65 @@
++# agents_gaming/script_agent.py
++from dotenv import load_dotenv
++load_dotenv()
++
++# Reuses the same Groq-first/Gemini-fallback invoke helper as the English
++# channel — gaming scripts are English, same as agents/script_agent.py.
++from agents.model_invoke_agent_english import safe_invoke
++
++
++def create_gaming_script(clip_summary, structured=None):
++    """One-clip hype/commentary script, ~20-35s of speech (roughly 55-90
++    words at the pace used in agents/voice_agent.py). Written to sit OVER
++    the real Twitch clip footage, not narrate a static image."""
++    structured = structured or {}
++    game = structured.get("game", "")
++    broadcaster = structured.get("broadcaster", "")
++
++    context_line = ""
++    if broadcaster:
++        context_line = f"This clip is from streamer {broadcaster}"
++        if game:
++            context_line += f" playing {game}."
++        else:
++            context_line += "."
++
++    prompt = f"""You are a hype gaming commentator writing a YouTube Shorts voiceover
++script that plays OVER a real gameplay clip (the viewer is watching the clip
++while you talk, not looking at you).
++
++Clip data:
++{clip_summary}
++{context_line}
++
++STRICT RULES:
++- 20-35 seconds of speech — total word count: 55-90 words
++- First line is a HOOK about what's about to happen in the clip ("Watch what
++  happens when...", "Nobody expected this...", "This is the play that...")
++- Do NOT describe the clip play-by-play like a boring recap — react to it
++  like a hype gaming commentator would, short punchy sentences
++- Mention the streamer's name and the game naturally, once each
++- Last line: a short call to follow for more gaming clips
++- Plain text only — no stage directions, no labels like "Hook:", no emojis,
++  no hashtags
++
++Return ONLY the script text, nothing else."""
++
++    response = safe_invoke(prompt)
++    script = response.content.strip()
++
++    words = script.split()
++    for _ in range(2):
++        if len(words) >= 55:
++            break
++        prompt2 = (
++            f"This script is only {len(words)} words. Expand it to ~75 words.\n"
++            f"Keep the same hook and single-clip focus — do not add a second clip "
++            f"or a full recap.\n\nScript:\n{script}"
++        )
++        script = safe_invoke(prompt2).content.strip()
++        words = script.split()
++
++    if len(words) > 90:
++        script = " ".join(words[:90])
++
++    return script
+diff --git a/agents_gaming/seo_agent.py b/agents_gaming/seo_agent.py
+new file mode 100644
+index 0000000..09ac4fc
+--- /dev/null
++++ b/agents_gaming/seo_agent.py
+@@ -0,0 +1,58 @@
++# agents_gaming/seo_agent.py
++from dotenv import load_dotenv
++load_dotenv()
++
++from agents.model_invoke_agent_english import safe_invoke
++
++PATTERN_PROMPTS = {
++    "reaction": "Frame it around reaction/disbelief: 'You Won't Believe', 'No Way He Did This'",
++    "clutch": "Frame it as a clutch/skill moment: 'Insane Clutch', 'Clean Play'",
++    "funny": "Frame it as a funny/fail moment: 'This Went Wrong Fast', 'Instant Regret'",
++    "record": "Frame it as a milestone/record moment: 'New Record', 'First Time Ever'",
++    "question": "Ask a question: 'How Is This Legal?', 'Did You See This?'",
++}
++
++
++def generate_seo(structured, script, use_pattern=None):
++    game = structured.get("game", "")
++    broadcaster = structured.get("broadcaster", "")
++    pattern_instruction = PATTERN_PROMPTS.get(
++        use_pattern,
++        "Use a punchy gaming-clip title style — avoid generic words like 'Amazing' or 'Crazy' alone"
++    )
++
++    prompt = f"""Write YouTube Shorts metadata for a gaming highlight clip video.
++
++Streamer: {broadcaster}
++Game: {game}
++Script (voiceover over the clip):
++{script}
++
++{pattern_instruction}
++
++Return exactly three lines, nothing else:
++TITLE: <under 60 characters, no emojis, must include the game or streamer name>
++DESCRIPTION: <1-2 sentences, plain text>
++HASHTAGS: <5-8 space-separated hashtags, gaming + game-specific + streamer if relevant>"""
++
++    response = safe_invoke(prompt)
++    text = response.content.strip()
++
++    title, description, hashtags = "", "", []
++    for line in text.splitlines():
++        line = line.strip()
++        if line.upper().startswith("TITLE:"):
++            title = line.split(":", 1)[1].strip()
++        elif line.upper().startswith("DESCRIPTION:"):
++            description = line.split(":", 1)[1].strip()
++        elif line.upper().startswith("HASHTAGS:"):
++            hashtags = line.split(":", 1)[1].strip().split()
++
++    if not title:
++        title = f"{broadcaster} — {game} Highlight".strip(" —")[:60]
++    if not hashtags:
++        hashtags = ["#Gaming", "#Shorts", "#Clips"]
++        if game:
++            hashtags.append("#" + game.replace(" ", ""))
++
++    return title, description, hashtags
+diff --git a/agents_gaming/trending_agent.py b/agents_gaming/trending_agent.py
+new file mode 100644
+index 0000000..c98e40c
+--- /dev/null
++++ b/agents_gaming/trending_agent.py
+@@ -0,0 +1,107 @@
++# agents_gaming/trending_agent.py
++"""
++Builds the list of candidate clips for this run, mixing two sources per the
++decision to combine both:
++  1. Specific streamers you follow (TWITCH_FOLLOWED_STREAMERS)
++  2. Top clips across trending game categories (TWITCH_TRACKED_GAMES, or the
++     live top-games list from Helix if that's empty)
++
++Each candidate is tagged topic_type so downstream agents (research_agent,
++clip_finder) don't need to know which source it came from — same pattern as
++agents_cricket/trending_agent.py's topic_type tagging.
++"""
++import os
++from datetime import datetime, timedelta, timezone
++
++from agents_gaming.twitch_client import (
++    get_users, get_top_games, get_clips,
++)
++
++# Comma-separated Twitch usernames, e.g. "shroud,ninja,pokimane"
++FOLLOWED_STREAMERS = [
++    s.strip() for s in os.getenv("TWITCH_FOLLOWED_STREAMERS", "").split(",") if s.strip()
++]
++
++# Comma-separated game names to bias top-games toward, if set. Otherwise we
++# just use whatever Helix currently reports as top games.
++TRACKED_GAMES = [
++    s.strip() for s in os.getenv("TWITCH_TRACKED_GAMES", "").split(",") if s.strip()
++]
++
++CLIP_WINDOW_HOURS = int(os.getenv("TWITCH_CLIP_WINDOW_HOURS", "24"))
++
++
++def _window():
++    now = datetime.now(timezone.utc)
++    started = now - timedelta(hours=CLIP_WINDOW_HOURS)
++    return started.strftime("%Y-%m-%dT%H:%M:%SZ"), now.strftime("%Y-%m-%dT%H:%M:%SZ")
++
++
++def get_streamer_clips(limit_per_streamer=5):
++    """Top clips from the last CLIP_WINDOW_HOURS for each followed streamer."""
++    if not FOLLOWED_STREAMERS:
++        return []
++    started_at, ended_at = _window()
++    users = get_users(FOLLOWED_STREAMERS)
++    results = []
++    for u in users:
++        try:
++            clips = get_clips(
++                broadcaster_id=u["id"],
++                started_at=started_at,
++                ended_at=ended_at,
++                limit=limit_per_streamer,
++            )
++        except Exception as e:
++            print(f"Clip fetch failed for streamer {u.get('login')}: {e}")
++            continue
++        for c in clips:
++            c["_topic_type"] = "streamer"
++            c["_source_streamer"] = u.get("display_name") or u.get("login")
++            results.append(c)
++    return results
++
++
++def get_top_game_clips(limit_games=5, limit_per_game=5):
++    """Top clips from the last CLIP_WINDOW_HOURS across trending game categories."""
++    started_at, ended_at = _window()
++    games = []
++    if TRACKED_GAMES:
++        # Helix has no "get game by name -> clips" shortcut for a batch, so
++        # we resolve each tracked game name via the games endpoint indirectly
++        # by just using top_games and filtering — simpler and avoids an extra
++        # per-game users-style lookup. If nothing matches, fall back to top N.
++        top = get_top_games(limit=50)
++        wanted = {g.lower() for g in TRACKED_GAMES}
++        games = [g for g in top if g.get("name", "").lower() in wanted]
++    if not games:
++        games = get_top_games(limit=limit_games)
++
++    results = []
++    for g in games[:limit_games]:
++        try:
++            clips = get_clips(
++                game_id=g["id"],
++                started_at=started_at,
++                ended_at=ended_at,
++                limit=limit_per_game,
++            )
++        except Exception as e:
++            print(f"Clip fetch failed for game {g.get('name')}: {e}")
++            continue
++        for c in clips:
++            c["_topic_type"] = "top_game"
++            c["_source_game"] = g.get("name")
++            results.append(c)
++    return results
++
++
++def get_all_topics():
++    """Single entry point for scheduler_gaming.py. Returns a flat list of
++    raw Helix clip dicts (tagged with _topic_type/_source_*), unranked —
++    clip_finder.py does the ranking/selection."""
++    topics = get_streamer_clips() + get_top_game_clips()
++    print(f"Gaming trending: {len(topics)} candidate clips "
++          f"({len(FOLLOWED_STREAMERS)} followed streamers, "
++          f"{'tracked' if TRACKED_GAMES else 'top'} games)")
++    return topics
+diff --git a/agents_gaming/twitch_client.py b/agents_gaming/twitch_client.py
+new file mode 100644
+index 0000000..92912d2
+--- /dev/null
++++ b/agents_gaming/twitch_client.py
+@@ -0,0 +1,104 @@
++# agents_gaming/twitch_client.py
++"""
++Thin wrapper around the Twitch Helix API.
++
++Auth: app access token via the OAuth client-credentials flow (no user login
++needed — this is enough for reading public clips/streams/games). Needs a
++Twitch Developer app: https://dev.twitch.tv/console/apps
++  TWITCH_CLIENT_ID
++  TWITCH_CLIENT_SECRET
++
++Token is cached in-memory for the life of the process and refreshed on 401.
++"""
++import os
++import time
++import requests
++
++TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID", "")
++TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET", "")
++TOKEN_URL = "https://id.twitch.tv/oauth2/token"
++BASE_URL = "https://api.twitch.tv/helix"
++
++_token_cache = {"access_token": None, "expires_at": 0}
++
++
++def get_app_token():
++    """Client-credentials app token, cached until ~60s before expiry."""
++    if _token_cache["access_token"] and time.time() < _token_cache["expires_at"] - 60:
++        return _token_cache["access_token"]
++
++    if not TWITCH_CLIENT_ID or not TWITCH_CLIENT_SECRET:
++        raise RuntimeError("TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET not set")
++
++    r = requests.post(TOKEN_URL, params={
++        "client_id": TWITCH_CLIENT_ID,
++        "client_secret": TWITCH_CLIENT_SECRET,
++        "grant_type": "client_credentials",
++    }, timeout=20)
++    r.raise_for_status()
++    data = r.json()
++    _token_cache["access_token"] = data["access_token"]
++    _token_cache["expires_at"] = time.time() + data.get("expires_in", 3600)
++    return _token_cache["access_token"]
++
++
++def _headers():
++    return {
++        "Client-ID": TWITCH_CLIENT_ID,
++        "Authorization": f"Bearer {get_app_token()}",
++    }
++
++
++def _get(path, params=None, retry=True):
++    r = requests.get(f"{BASE_URL}/{path}", headers=_headers(), params=params or {}, timeout=20)
++    if r.status_code == 401 and retry:
++        # token expired/invalid mid-life — force refresh once
++        _token_cache["access_token"] = None
++        return _get(path, params, retry=False)
++    r.raise_for_status()
++    return r.json()
++
++
++def get_users(logins):
++    """logins: list[str] of Twitch usernames -> list of user dicts (id, login, display_name)."""
++    if not logins:
++        return []
++    out = []
++    for i in range(0, len(logins), 100):  # Helix caps at 100 per call
++        chunk = logins[i:i + 100]
++        data = _get("users", params=[("login", l) for l in chunk])
++        out.extend(data.get("data", []))
++    return out
++
++
++def get_top_games(limit=10):
++    data = _get("games/top", params={"first": min(limit, 100)})
++    return data.get("data", [])
++
++
++def get_streams_by_user(user_logins):
++    """Currently-live streams for a list of usernames (empty list if none live)."""
++    if not user_logins:
++        return []
++    params = [("user_login", l) for l in user_logins[:100]]
++    data = _get("streams", params=params)
++    return data.get("data", [])
++
++
++def get_clips(broadcaster_id=None, game_id=None, started_at=None, ended_at=None, limit=20):
++    """One of broadcaster_id / game_id is required by Helix.
++    started_at/ended_at: RFC3339 strings to scope the clip window (e.g. last 24h)
++    for a genuinely 'trending in the last day' feel rather than all-time top clips."""
++    if not broadcaster_id and not game_id:
++        raise ValueError("get_clips needs broadcaster_id or game_id")
++    params = {"first": min(limit, 100)}
++    if broadcaster_id:
++        params["broadcaster_id"] = broadcaster_id
++    if game_id:
++        params["game_id"] = game_id
++    if started_at:
++        params["started_at"] = started_at
++    if ended_at:
++        params["ended_at"] = ended_at
++    data = _get("clips", params=params)
++    return data.get("data", [])
+diff --git a/agents_gaming/upload_agent.py b/agents_gaming/upload_agent.py
+new file mode 100644
+index 0000000..58cf635
+--- /dev/null
++++ b/agents_gaming/upload_agent.py
+@@ -0,0 +1,119 @@
++# agents_gaming/upload_agent.py
++"""
++Same OAuth pattern as agents/upload_agent.py, but with its OWN token/secrets
++env vars — this is a separate YouTube channel from English/Hindi/Cricket, so
++it needs its own GitHub Secrets:
++  YOUTUBE_GAMING_CLIENT_SECRETS_B64
++  YOUTUBE_GAMING_TOKEN_B64
++Generate the token the same way generate_english_token.py / generate_hindi_token.py
++do (a generate_gaming_token.py following that same pattern is the natural
++next file to add once you've created the Gaming channel's OAuth client).
++"""
++import os
++import pickle
++import base64
++from googleapiclient.discovery import build
++from googleapiclient.http import MediaFileUpload
++from google_auth_oauthlib.flow import InstalledAppFlow
++from google.auth.transport.requests import Request
++
++SCOPES = [
++    "https://www.googleapis.com/auth/youtube.upload",
++    "https://www.googleapis.com/auth/youtube.force-ssl",
++]
++
++
++def get_client_secrets_path():
++    secrets_b64 = os.getenv("YOUTUBE_GAMING_CLIENT_SECRETS_B64")
++    if secrets_b64:
++        secrets_bytes = base64.b64decode(secrets_b64)
++        temp_path = "/tmp/gaming_client_secrets.json"
++        with open(temp_path, "wb") as f:
++            f.write(secrets_bytes)
++        return temp_path
++    return "client_secrets_gaming.json"
++
++
++def authenticate_youtube():
++    creds = None
++
++    token_b64 = os.getenv("YOUTUBE_GAMING_TOKEN_B64")
++    if token_b64:
++        creds = pickle.loads(base64.b64decode(token_b64))
++    elif os.path.exists("token_gaming.pickle"):
++        with open("token_gaming.pickle", "rb") as token:
++            creds = pickle.load(token)
++
++    if not creds or not creds.valid:
++        if creds and creds.expired and creds.refresh_token:
++            creds.refresh(Request())
++        else:
++            flow = InstalledAppFlow.from_client_secrets_file(get_client_secrets_path(), SCOPES)
++            creds = flow.run_local_server(port=0)
++            with open("token_gaming.pickle", "wb") as token:
++                pickle.dump(creds, token)
++
++    return build("youtube", "v3", credentials=creds)
++
++
++def upload_thumbnail(youtube, video_id, thumbnail_path):
++    try:
++        youtube.thumbnails().set(
++            videoId=video_id,
++            media_body=MediaFileUpload(thumbnail_path, mimetype="image/jpeg")
++        ).execute()
++    except Exception as e:
++        print(f"Thumbnail upload failed: {e}")
++
++
++def upload_video(video_path, title, description, hashtags, thumbnail_path=None, category_id="20"):
++    """category_id 20 = Gaming (English/Hindi use 28 = Science & Tech)."""
++    youtube = authenticate_youtube()
++
++    if isinstance(hashtags, list):
++        hashtag_str = " ".join(hashtags)
++        tags = [h.strip().replace("#", "") for h in hashtags]
++    else:
++        hashtag_str = hashtags
++        tags = [h.strip().replace("#", "") for h in hashtags.split()]
++
++    full_description = f'''{description}
++
++━━━━━━━━━━━━━━━━━━━━━━━━
++🎮 Subscribe for daily gaming highlights!
++👍 Like if that clip was insane!
++💬 Drop your reaction below!
++━━━━━━━━━━━━━━━━━━━━━━━━
++
++{hashtag_str} #Shorts #YouTubeShorts #Gaming'''
++    tags = tags + ["Shorts", "YouTubeShorts", "Gaming", "Twitch", "GamingClips"]
++
++    body = {
++        "snippet": {
++            "title": title,
++            "description": full_description,
++            "tags": tags,
++            "categoryId": category_id,
++        },
++        "status": {
++            "privacyStatus": "public",
++            "selfDeclaredMadeForKids": False,
++        },
++    }
++
++    media = MediaFileUpload(video_path, mimetype="video/mp4", resumable=True, chunksize=1024 * 1024 * 5)
++    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
++
++    response = None
++    while response is None:
++        status, response = request.next_chunk()
++        if status:
++            print(f"Upload progress: {int(status.progress() * 100)}%")
++
++    video_id = response["id"]
++    video_url = f"https://www.youtube.com/watch?v={video_id}"
++
++    if thumbnail_path and os.path.exists(thumbnail_path):
++        upload_thumbnail(youtube, video_id, thumbnail_path)
++
++    return video_id, video_url
+diff --git a/agents_gaming/video_clip_agent.py b/agents_gaming/video_clip_agent.py
+new file mode 100644
+index 0000000..14888cd
+--- /dev/null
++++ b/agents_gaming/video_clip_agent.py
+@@ -0,0 +1,58 @@
++# agents_gaming/video_clip_agent.py
++"""
++Downloads the actual Twitch clip as background footage for the Short.
++
++This is the one piece that's genuinely different from every other channel
++in this repo: English/Hindi/Cricket all render over STOCK footage (Pexels)
++or static images because there's no single "the video" for an abstract
++topic or a cricket match. Gaming is the opposite — the clip itself already
++IS the perfect vertical(ish) footage, so we download it directly instead of
++searching for something topic-relevant.
++
++Helix doesn't hand back a raw downloadable file URL for clips (deliberately,
++per their ToS ambiguity around clip re-hosting), so this shells out to
++yt-dlp — the same tool the ecosystem generally relies on for this — pointed
++at the clip's public `url` field from Twitch.
++
++Once downloaded, the clip is handed to agents.video_agent's EXISTING
++_create_video_from_pexels_clips() renderer unchanged — that function only
++cares that it received a list of local mp4 paths, not where they came from.
++"""
++import os
++import subprocess
++
++
++def download_twitch_clip(clip, output_path):
++    """clip: a raw Helix clip dict (has 'url', 'id'). Returns output_path."""
++    clip_url = clip.get("url")
++    if not clip_url:
++        raise RuntimeError("Clip has no 'url' field to download")
++
++    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
++
++    cmd = [
++        "yt-dlp",
++        "--no-warnings",
++        "--format", "best",  # Twitch clips are short, single-file mp4 already
++        "--output", output_path,
++        clip_url,
++    ]
++    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
++    if result.returncode != 0 or not os.path.exists(output_path):
++        raise RuntimeError(f"yt-dlp failed for {clip_url}: {result.stderr[-500:]}")
++
++    return output_path
++
++
++def get_gaming_background_clip(clip):
++    """Returns a list with one local mp4 path (matches the list-of-paths
++    shape _create_video_from_pexels_clips expects). A single real clip
++    beats several unrelated stock clips — that IS the highlight."""
++    folder = "assets/gaming_clips"
++    os.makedirs(folder, exist_ok=True)
++    for f in os.listdir(folder):
++        os.remove(os.path.join(folder, f))
++
++    output_path = os.path.join(folder, f"{clip.get('id', 'clip')}.mp4")
++    download_twitch_clip(clip, output_path)
++    return [output_path]
+diff --git a/generate_gaming_token.py b/generate_gaming_token.py
+new file mode 100644
+index 0000000..6478d7b
+--- /dev/null
++++ b/generate_gaming_token.py
+@@ -0,0 +1,42 @@
++"""
++Run this locally (not in GitHub Actions) to generate the YouTube OAuth
++token for the Gaming channel.
++
++Requirements:
++  - client_secrets_gaming.json in this folder (OAuth client credentials
++    downloaded from Google Cloud Console for the Gaming channel's YouTube
++    Data API app — create a new OAuth client, don't reuse English's).
++  - Log into the Gaming channel's Google account in your browser (or use an
++    incognito window) before running this, so consent authenticates the
++    right channel.
++
++Usage:
++  python generate_gaming_token.py
++
++Prints a base64 string — paste it as the YOUTUBE_GAMING_TOKEN_B64 GitHub
++Secret.
++"""
++import pickle
++import base64
++from google_auth_oauthlib.flow import InstalledAppFlow
++
++SCOPES = [
++    "https://www.googleapis.com/auth/youtube.upload",
++    "https://www.googleapis.com/auth/youtube.force-ssl",
++]
++
++flow = InstalledAppFlow.from_client_secrets_file("client_secrets_gaming.json", SCOPES)
++creds = flow.run_local_server(port=0)
++
++with open("token_gaming.pickle", "wb") as f:
++    pickle.dump(creds, f)
++
++with open("token_gaming.pickle", "rb") as f:
++    token_b64 = base64.b64encode(f.read()).decode("utf-8")
++
++print("\n\n=== COPY EVERYTHING BELOW THIS LINE ===\n")
++print(token_b64)
++print("\n=== COPY EVERYTHING ABOVE THIS LINE ===\n")
++print("Paste that as the new value of the YOUTUBE_GAMING_TOKEN_B64 secret on GitHub.")
++print("Also base64-encode client_secrets_gaming.json itself (same way English's "
++      "YOUTUBE_CLIENT_SECRETS_B64 secret was made) for YOUTUBE_GAMING_CLIENT_SECRETS_B64.")
+diff --git a/requirements.txt b/requirements.txt
+index 798ba2c..c9c374a 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -20,5 +20,6 @@ google-genai
+ sarvamai
+ pydub
+ psycopg2-binary
++yt-dlp
+ selenium
+ webdriver-manager
+diff --git a/scheduler_gaming.py b/scheduler_gaming.py
+new file mode 100644
+index 0000000..cecc1af
+--- /dev/null
++++ b/scheduler_gaming.py
+@@ -0,0 +1,131 @@
++# scheduler_gaming.py
++"""
++Gaming pipeline: Twitch clip -> script -> SEO -> voice -> real clip footage
++-> captions -> upload. Deduplicates against gaming_posted_clips in the DB.
++
++Run locally: python scheduler_gaming.py
++Deployed:    .github/workflows/gaming-scheduler.yml (cron, no server needed
++             — unlike cricket's Render /trigger pattern, this runs the
++             script directly as a scheduled GitHub Actions job).
++"""
++import os
++from dotenv import load_dotenv
++load_dotenv()
++
++from agents_gaming.database import db as gaming_db, db_init_error as gaming_db_init_error
++
++DAILY_UPLOAD_CAP = int(os.getenv("GAMING_DAILY_UPLOAD_CAP", "5"))
++
++
++def run_gaming_cycle():
++    import traceback
++    try:
++        return _run_gaming_cycle_inner()
++    except Exception as e:
++        print(f"GAMING PIPELINE CRASHED: {e}")
++        traceback.print_exc()
++        return {"status": "error", "error": str(e)}
++
++
++def _check_daily_cap():
++    from datetime import datetime, timezone
++    try:
++        today = datetime.now(timezone.utc).date().isoformat()
++        stored_date = gaming_db.get_meta("gaming_upload_date")
++        count = int(gaming_db.get_meta("gaming_upload_count") or 0)
++        if stored_date != today:
++            gaming_db.set_meta("gaming_upload_date", today)
++            gaming_db.set_meta("gaming_upload_count", "0")
++            count = 0
++        return count
++    except Exception as e:
++        print(f"Daily cap check failed, assuming 0: {e}")
++        return 0
++
++
++def _increment_daily_cap():
++    from datetime import datetime, timezone
++    try:
++        today = datetime.now(timezone.utc).date().isoformat()
++        count = int(gaming_db.get_meta("gaming_upload_count") or 0) + 1
++        gaming_db.set_meta("gaming_upload_date", today)
++        gaming_db.set_meta("gaming_upload_count", str(count))
++    except Exception as e:
++        print(f"Daily cap increment failed: {e}")
++
++
++def _run_gaming_cycle_inner():
++    from datetime import datetime, timezone
++
++    from agents_gaming.trending_agent import get_all_topics
++    from agents_gaming.clip_finder import find_best_unposted_clip
++    from agents_gaming.research_agent import get_summary_for_clip
++    from agents_gaming.script_agent import create_gaming_script
++    from agents_gaming.seo_agent import generate_seo
++    from agents_gaming.video_clip_agent import get_gaming_background_clip
++    from agents_gaming.upload_agent import upload_video
++
++    from agents.voice_agent import generate_voice
++    from agents.caption_agent import create_srt
++    from agents.video_agent import _create_video_from_pexels_clips
++
++    if gaming_db is None:
++        return {"status": "error", "error": f"Gaming DB unavailable: {gaming_db_init_error}"}
++
++    uploads_today = _check_daily_cap()
++    if uploads_today >= DAILY_UPLOAD_CAP:
++        print(f"Daily gaming upload cap reached ({uploads_today}/{DAILY_UPLOAD_CAP}) — skipping.")
++        return {"status": "daily_cap_reached", "uploads_today": uploads_today}
++
++    posted = gaming_db.get_all_posted_clip_ids()
++    candidates = get_all_topics()
++    if not candidates:
++        print("No candidate clips found this cycle (check TWITCH_FOLLOWED_STREAMERS / "
++              "TWITCH_TRACKED_GAMES and Twitch app credentials).")
++        return {"status": "no_candidates"}
++
++    clip = find_best_unposted_clip(candidates, posted)
++    if not clip:
++        print("All candidate clips already posted this cycle.")
++        return {"status": "no_new_clip"}
++
++    print(f"Selected clip: '{clip.get('title')}' by {clip.get('broadcaster_name')} "
++          f"({clip.get('view_count', 0):,} views)")
++
++    summary, structured = get_summary_for_clip(clip)
++
++    script = create_gaming_script(summary, structured)
++    print(f"Script ({len(script.split())} words): {script[:80]}...")
++
++    title, description, hashtags = generate_seo(structured, script)
++    print(f"Title: {title}")
++
++    generate_voice(script, output_path="output/voice.mp3")
++    create_srt(script, audio_path="output/voice.mp3")
++
++    print("Downloading Twitch clip footage...")
++    clip_paths = get_gaming_background_clip(clip)
++
++    video_path = _create_video_from_pexels_clips(
++        clip_paths, "output/voice.mp3", "output/captions.srt",
++        music_path=None,  # the clip has its own game audio under the voiceover
++    )
++
++    video_id, video_url = upload_video(video_path, title, description, hashtags)
++    print(f"Uploaded: {video_url}")
++
++    gaming_db.mark_posted(clip["id"], clip.get("title", ""), clip.get("broadcaster_name", ""))
++    gaming_db.upsert_video(
++        video_id=video_id,
++        title=title,
++        published=datetime.now(timezone.utc).isoformat(),
++        clip_id=clip["id"],
++    )
++    _increment_daily_cap()
++
++    return {"status": "uploaded", "video_url": video_url, "title": title}
++
++
++if __name__ == "__main__":
++    result = run_gaming_cycle()
++    print(result)

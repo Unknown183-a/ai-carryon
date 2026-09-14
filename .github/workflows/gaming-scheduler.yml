@@ -1,0 +1,47 @@
+name: Gaming Scheduler
+
+on:
+  schedule:
+    # Every 4 hours (UTC). Adjust to taste once you see real clip volume.
+    - cron: "0 */4 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run-scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run gaming scheduler
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+          TWITCH_FOLLOWED_STREAMERS: ${{ secrets.TWITCH_FOLLOWED_STREAMERS }}
+          TWITCH_TRACKED_GAMES: ${{ secrets.TWITCH_TRACKED_GAMES }}
+          YOUTUBE_GAMING_CLIENT_SECRETS_B64: ${{ secrets.YOUTUBE_GAMING_CLIENT_SECRETS_B64 }}
+          YOUTUBE_GAMING_TOKEN_B64: ${{ secrets.YOUTUBE_GAMING_TOKEN_B64 }}
+        run: python scheduler_gaming.py
+
+      - name: Upload run log (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gaming-scheduler-log-${{ github.run_id }}
+          path: output/scheduler_log.txt
+          if-no-files-found: ignore

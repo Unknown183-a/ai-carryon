@@ -20,5 +20,6 @@ google-genai
 sarvamai
 pydub
 psycopg2-binary
+yt-dlp
 selenium
 webdriver-manager
