@@ -10,7 +10,7 @@ import datetime
 LOG_FILE = "output/scheduler_hindi_log.txt"
 
 # How many videos per day to aim for (fully adaptive)
-VIDEOS_PER_DAY = 3
+VIDEOS_PER_DAY = 10
 
 
 def log(message):
