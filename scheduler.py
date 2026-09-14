@@ -31,6 +31,8 @@ import datetime
 
 LOG_FILE = "output/scheduler_log.txt"
 
+VIDEOS_PER_DAY = 10  # daily upload quota — raise for manual testing headroom
+
 
 def log(message):
     os.makedirs("output", exist_ok=True)
@@ -353,7 +355,7 @@ def main():
         return
 
     posted_today = get_recent_topics(hours=24)
-    if len(posted_today) >= 3:
+    if len(posted_today) >= VIDEOS_PER_DAY:
         log(f"Daily cap reached ({len(posted_today)} posted in last 24h) — skipping generation this run")
         return
 
