@@ -51,7 +51,7 @@ stats = get_public_stats()
 st.markdown("""
 <style>
 :root {
-    --accent: #ff5a36;
+    --accent: #3b82f6;
     --bg: #0b0b0f;
     --card: rgba(255,255,255,0.03);
     --border: rgba(255,255,255,0.08);
@@ -149,9 +149,9 @@ st.markdown("""
 
 .tech-badge {
     display: inline-block;
-    background: rgba(255,90,54,0.12);
-    color: #ffb199;
-    border: 1px solid rgba(255,90,54,0.35);
+    background: rgba(59,130,246,0.12);
+    color: #a5c9ff;
+    border: 1px solid rgba(59,130,246,0.35);
     padding: 4px 12px;
     border-radius: 6px;
     font-size: 0.82rem;
@@ -268,7 +268,7 @@ st.markdown("""
     margin: 12px 0 36px 0;
     border: 1px solid var(--border);
     border-radius: 14px;
-    background: linear-gradient(180deg, rgba(255,90,54,0.06), transparent);
+    background: linear-gradient(180deg, rgba(59,130,246,0.06), transparent);
 }
 .cta-band h2 {
     font-size: 2rem;
