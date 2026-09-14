@@ -23,10 +23,32 @@ FOLLOWED_STREAMERS = [
 ]
 
 # Comma-separated game names to bias top-games toward, if set. Otherwise we
-# just use whatever Helix currently reports as top games.
+# just use whatever Helix currently reports as top games (auto-filtered
+# below to exclude non-gameplay categories).
 TRACKED_GAMES = [
     s.strip() for s in os.getenv("TWITCH_TRACKED_GAMES", "").split(",") if s.strip()
 ]
+
+# Twitch's "top games" list is ranked by concurrent viewers, not by whether
+# something is actually gameplay — "Just Chatting" regularly sits at #1-2
+# and would otherwise get picked up here. These get excluded automatically
+# so dynamic trending (no TRACKED_GAMES set) stays gaming-only without
+# needing a hand-maintained game list. Matched case-insensitively.
+NON_GAME_CATEGORIES = {
+    "just chatting",
+    "special events",
+    "music",
+    "asmr",
+    "talk shows & podcasts",
+    "art",
+    "sports",
+    "food & drink",
+    "travel & outdoors",
+    "makers & crafting",
+    "pools, hot tubs, and beaches",
+    "software and game development",
+    "retro",
+}
 
 CLIP_WINDOW_HOURS = int(os.getenv("TWITCH_CLIP_WINDOW_HOURS", "24"))
 
@@ -75,7 +97,11 @@ def get_top_game_clips(limit_games=5, limit_per_game=5):
         wanted = {g.lower() for g in TRACKED_GAMES}
         games = [g for g in top if g.get("name", "").lower() in wanted]
     if not games:
-        games = get_top_games(limit=limit_games)
+        # Dynamic path: pull a larger pool than we need, then drop non-game
+        # categories (Just Chatting etc.) before taking the top N — so the
+        # channel stays gaming-only without a hand-maintained game list.
+        pool = get_top_games(limit=50)
+        games = [g for g in pool if g.get("name", "").lower() not in NON_GAME_CATEGORIES]
 
     results = []
     for g in games[:limit_games]:
