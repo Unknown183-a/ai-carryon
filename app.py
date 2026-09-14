@@ -174,6 +174,113 @@ st.markdown("""
     font-weight: 600;
 }
 
+/* sticky top nav */
+.topnav {
+    position: sticky;
+    top: 0;
+    z-index: 999;
+    background: rgba(11,11,15,0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border);
+    margin: -1rem -1rem 0 -1rem;
+    padding: 14px 24px;
+}
+.topnav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.topnav-brand {
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-size: 0.95rem;
+}
+.topnav-links a {
+    color: rgba(255,255,255,0.75);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.82rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-left: 22px;
+}
+.topnav-links a:hover {
+    color: var(--accent);
+}
+
+/* quote / founder-note block */
+.quote-block {
+    padding: 32px 28px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    margin-bottom: 36px;
+}
+.quote-block p {
+    font-size: 1.25rem;
+    line-height: 1.5;
+    font-style: italic;
+    margin-bottom: 12px;
+}
+.quote-block span {
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 1px;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+}
+
+/* 3-card "why" grid */
+.why-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    margin-bottom: 8px;
+}
+.why-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px 22px;
+}
+.why-card h4 {
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 1.02rem;
+    margin: 0 0 10px 0;
+    color: var(--accent);
+}
+.why-card p {
+    color: rgba(255,255,255,0.72);
+    font-size: 0.92rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* closing CTA band */
+.cta-band {
+    text-align: center;
+    padding: 48px 20px;
+    margin: 12px 0 36px 0;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255,90,54,0.06), transparent);
+}
+.cta-band h2 {
+    font-size: 2rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin: 0 0 10px 0;
+}
+.cta-band p {
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 4px;
+}
+
 /* footer band */
 .footer-band {
     background: rgba(255,255,255,0.02);
@@ -182,6 +289,29 @@ st.markdown("""
     margin-top: 24px;
 }
 </style>
+""", unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+# Top nav — sticky, anchor links to each section below
+# (Streamlit has no true mega-menu; this jumps to in-page sections)
+# ─────────────────────────────────────────────
+
+st.markdown("""
+<div class="topnav">
+  <div class="topnav-inner">
+    <span class="topnav-brand">🤖 AI CarryON</span>
+    <div class="topnav-links">
+      <a href="#overview">Overview</a>
+      <a href="#why-it-works">Why It Works</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#timeline">Timeline</a>
+      <a href="#challenges">Challenges</a>
+      <a href="#contact">Contact</a>
+    </div>
+  </div>
+</div>
+<div id="overview"></div>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
@@ -256,9 +386,55 @@ else:
 st.divider()
 
 # ─────────────────────────────────────────────
+# Founder note — quote block
+# ─────────────────────────────────────────────
+
+st.markdown("""
+<div class="quote-block">
+<p>"I wanted to prove an AI pipeline could run a real YouTube operation end to end — not a demo,
+a production system that researches, decides, and ships without me in the loop, then gets
+measurably better every week from its own data."</p>
+<span>Amit Kumar — Builder</span>
+</div>
+""", unsafe_allow_html=True)
+
+st.divider()
+
+# ─────────────────────────────────────────────
+# Why it works — 3-card grid
+# ─────────────────────────────────────────────
+
+st.markdown('<div id="why-it-works"></div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">What Makes It Work</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">Why This System</div>', unsafe_allow_html=True)
+
+st.markdown("""
+<div class="why-grid">
+    <div class="why-card">
+        <h4>Adaptive, not scheduled</h4>
+        <p>Upload timing is learned from real view-velocity data per channel, not a fixed cron
+        job — it waits for the hour the data says will perform best.</p>
+    </div>
+    <div class="why-card">
+        <h4>Data-driven, not guessed</h4>
+        <p>Every title, topic, and upload decision is benchmarked against top competing videos
+        and scored before it's used, not picked by gut feel.</p>
+    </div>
+    <div class="why-card">
+        <h4>Self-correcting, not static</h4>
+        <p>Hourly view snapshots feed back into the same database every channel reads from, so
+        the system's own history keeps sharpening its next decision.</p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+st.divider()
+
+# ─────────────────────────────────────────────
 # What this does
 # ─────────────────────────────────────────────
 
+st.markdown('<div id="how-it-works"></div>', unsafe_allow_html=True)
 st.markdown('<div class="section-label">How It Works</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">What This System Actually Does</div>', unsafe_allow_html=True)
 st.markdown("""
@@ -284,6 +460,7 @@ st.divider()
 # Architecture
 # ─────────────────────────────────────────────
 
+st.markdown('<div id="architecture"></div>', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Under The Hood</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Architecture</div>', unsafe_allow_html=True)
 
@@ -325,6 +502,7 @@ st.divider()
 # Phase history
 # ─────────────────────────────────────────────
 
+st.markdown('<div id="timeline"></div>', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Progress</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Build Timeline</div>', unsafe_allow_html=True)
 phases = [
@@ -344,6 +522,7 @@ st.divider()
 # Engineering challenges — the actual resume material
 # ─────────────────────────────────────────────
 
+st.markdown('<div id="challenges"></div>', unsafe_allow_html=True)
 st.markdown('<div class="section-label">The Hard Parts</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Engineering Challenges Solved</div>', unsafe_allow_html=True)
 st.caption("This is the part that actually shows debugging depth, not just \"built with AI.\"")
@@ -393,10 +572,32 @@ for title, desc in challenges:
 
 st.divider()
 
+st.divider()
+
+# ─────────────────────────────────────────────
+# Closing CTA band
+# ─────────────────────────────────────────────
+
+st.markdown("""
+<div class="cta-band">
+    <h2>Want To See It Run Live?</h2>
+    <p>Full source, architecture, and build history are public — no gatekeeping.</p>
+</div>
+""", unsafe_allow_html=True)
+
+cta1, cta2 = st.columns(2)
+with cta1:
+    st.link_button("💻 Browse the Code", GITHUB_URL, use_container_width=True)
+with cta2:
+    st.link_button("🔗 Let's Connect on LinkedIn", LINKEDIN_URL, use_container_width=True)
+
+st.divider()
+
 # ─────────────────────────────────────────────
 # Footer
 # ─────────────────────────────────────────────
 
+st.markdown('<div id="contact"></div>', unsafe_allow_html=True)
 st.markdown('<div class="footer-band">', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Reach Out</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Get In Touch</div>', unsafe_allow_html=True)
