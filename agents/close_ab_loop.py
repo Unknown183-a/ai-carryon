@@ -25,13 +25,19 @@ logger = logging.getLogger(__name__)
 
 
 def close_loop(channel: str = None):
-    pending = db.get_pending_ab_tests()
+    # BUGFIX: `channel` was accepted as a parameter but never forwarded to
+    # get_pending_ab_tests(), so every run (English *and* Hindi) pulled
+    # EVERY channel's pending rows. A Hindi-titled row processed during the
+    # English run can never match an English video, producing a constant
+    # stream of false "No matching video for title" warnings for titles
+    # that were never even supposed to be checked in this run.
+    pending = db.get_pending_ab_tests(channel=channel)
 
     if not pending:
-        logger.info("No pending AB tests to close.")
+        logger.info(f"No pending AB tests to close{f' for channel={channel}' if channel else ''}.")
         return
 
-    logger.info(f"Found {len(pending)} pending AB test(s) to check.")
+    logger.info(f"Found {len(pending)} pending AB test(s) to check{f' for channel={channel}' if channel else ''}.")
 
     updated = 0
     linked_by_id = 0
