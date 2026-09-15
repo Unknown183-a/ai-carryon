@@ -95,7 +95,7 @@ class GamingDatabase:
             conn.close()
 
     def _init_tables(self):
-        id_col = "id SERIAL PRIMARY KEY" if USE_POSTGRES else "id INTEGER PRIMARY KEY AUTOINCREMENT"
+        id_col = "SERIAL PRIMARY KEY" if USE_POSTGRES else "INTEGER PRIMARY KEY AUTOINCREMENT"
         with self._conn() as conn:
             conn.executescript(f"""
                 CREATE TABLE IF NOT EXISTS gaming_videos (
@@ -124,27 +124,14 @@ class GamingDatabase:
                     views       INTEGER DEFAULT 0,
                     likes       INTEGER DEFAULT 0,
                     comments    INTEGER DEFAULT 0,
-                    timestamp   TEXT NOT NULL,
-                    FOREIGN KEY (video_id) REFERENCES gaming_videos(video_id)
+                    timestamp   TEXT NOT NULL
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_gaming_snapshots_video_id
                     ON gaming_snapshots(video_id);
                 CREATE INDEX IF NOT EXISTS idx_gaming_snapshots_timestamp
                     ON gaming_snapshots(timestamp);
-
-                CREATE TABLE IF NOT EXISTS gaming_snapshots (
-                    id          {id_col},
-                    video_id    TEXT NOT NULL,
-                    views       INTEGER DEFAULT 0,
-                    likes       INTEGER DEFAULT 0,
-                    comments    INTEGER DEFAULT 0,
-                    timestamp   TEXT NOT NULL
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_gaming_snapshots_video_id
-                    ON gaming_snapshots(video_id);
-            """.replace("{id_col}", "SERIAL PRIMARY KEY" if USE_POSTGRES else "INTEGER PRIMARY KEY AUTOINCREMENT"))
+            """)
 
     # ── Videos ───────────────────────────────────────────────────────────
 
