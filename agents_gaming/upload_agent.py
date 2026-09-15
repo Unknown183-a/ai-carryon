@@ -20,6 +20,7 @@ from google.auth.transport.requests import Request
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.force-ssl",
+    "https://www.googleapis.com/auth/youtube.readonly",
 ]
 
 
@@ -54,6 +55,22 @@ def authenticate_youtube():
                 pickle.dump(creds, token)
 
     return build("youtube", "v3", credentials=creds)
+
+
+def get_youtube_client_readonly():
+    """Read-capable client for analytics/view tracking (channels, playlists,
+    videos.list). Reuses the same pickled credentials as upload — requires
+    the token to have been generated with the youtube.readonly scope above
+    (re-run generate_gaming_token.py if your existing token predates it)."""
+    return authenticate_youtube()
+
+
+def get_youtube_client_readonly():
+    """Read-capable client for view tracking and analytics (channels, playlists,
+    videos.list). Reuses the same pickled Gaming credentials as upload — the
+    youtube.force-ssl scope already grants read access, so no separate token
+    or extra scope is needed."""
+    return authenticate_youtube()
 
 
 def upload_thumbnail(youtube, video_id, thumbnail_path):

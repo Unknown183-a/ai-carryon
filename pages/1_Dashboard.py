@@ -213,7 +213,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # ── Main Tabs ────────────────────────────────────────────────────
-english_tab, hindi_tab, cricket_tab = st.tabs(["🇬🇧 English Channel", "🇮🇳 Hindi Channel", "🏏 Cricket Channel"])
+english_tab, hindi_tab, cricket_tab, gaming_tab = st.tabs(["🇬🇧 English Channel", "🇮🇳 Hindi Channel", "🏏 Cricket Channel", "🎮 Gaming Channel"])
 
 # ════════════════════════════════════════════════════════════════
 # ENGLISH CHANNEL
@@ -793,6 +793,92 @@ with hindi_tab:
                         st.session_state.pop("hindi_competitor", None)
                     else:
                         st.info("💡 Auto-upload OFF hai. Toggle on karo YouTube par seedha upload karne ke liye.")
+
+# ════════════════════════════════════════════════════════════════
+# GAMING CHANNEL (fully automated — Twitch clips -> Shorts -> YouTube,
+# runs on GitHub Actions cron via scheduler_gaming.py)
+# ════════════════════════════════════════════════════════════════
+with gaming_tab:
+    st.title("🎮 AI CarryON - Gaming Channel Analytics")
+    st.caption("Live stats pulled from the gaming channel's own YouTube credentials, and snapshot history from its own database.")
+
+    col_refresh, col_track = st.columns([1, 2])
+    with col_refresh:
+        if st.button("🔄 Refresh", key="gaming_analytics_refresh"):
+            st.rerun()
+    with col_track:
+        if st.button("📸 Track views now", key="gaming_track_now",
+                     help="Manually pull current view counts for gaming videos into the DB — normally happens automatically ~hourly from scheduler_gaming.py."):
+            with st.spinner("Fetching current view counts from YouTube..."):
+                try:
+                    from agents_gaming.view_tracker_agent import track_views_gaming
+                    tracked = track_views_gaming()
+                    st.success(f"✅ Tracked {len(tracked)} gaming video(s)")
+                except Exception as e:
+                    st.error(f"Tracking failed: {e}")
+
+    st.divider()
+
+    with st.spinner("Fetching gaming channel data..."):
+        try:
+            from agents_gaming.analytics_agent import get_channel_stats, get_recent_videos
+            gaming_stats = get_channel_stats()
+            gaming_videos = get_recent_videos(20)
+            gaming_fetch_error = None
+        except Exception as e:
+            gaming_stats, gaming_videos = None, []
+            gaming_fetch_error = str(e)
+
+    if gaming_fetch_error:
+        st.error(f"Couldn't reach the gaming channel's YouTube API: {gaming_fetch_error}")
+        st.caption("Check that YOUTUBE_GAMING_TOKEN_B64 is set for this environment and has the youtube.readonly scope "
+                   "(re-run generate_gaming_token.py if the token predates that scope).")
+    else:
+        st.subheader("📡 Channel Overview")
+        g1, g2, g3, g4 = st.columns(4)
+        g1.metric("👤 Subscribers", f"{gaming_stats['subscribers']:,}")
+        g2.metric("👁️ Total Views", f"{gaming_stats['total_views']:,}")
+        g3.metric("🎬 Videos", f"{gaming_stats['video_count']:,}")
+        if gaming_videos:
+            avg_views = sum(v["views"] for v in gaming_videos) // len(gaming_videos)
+            g4.metric("📈 Avg Views", f"{avg_views:,}")
+
+        st.divider()
+
+        if not gaming_videos:
+            st.info("No gaming videos found yet.")
+        else:
+            st.subheader("🏆 Top Videos by Views")
+            import pandas as pd
+            df = pd.DataFrame(gaming_videos)
+            df["short_title"] = df["title"].str[:30] + "..."
+            st.bar_chart(df.set_index("short_title")["views"])
+
+            st.divider()
+            st.subheader("📋 All Gaming Videos")
+            for v in gaming_videos:
+                with st.container():
+                    vc1, vc2, vc3, vc4, vc5 = st.columns([4, 1, 1, 1, 1])
+                    vc1.markdown(f"[{v['title']}]({v['url']})")
+                    vc2.markdown(f"👁️ **{v['views']:,}**")
+                    vc3.markdown(f"👍 {v['likes']:,}")
+                    vc4.markdown(f"💬 {v['comments']:,}")
+                    vc5.markdown(f"📅 {v['published']}")
+                st.divider()
+
+    st.divider()
+    st.subheader("🕐 Clip Post History")
+    try:
+        from agents_gaming.database import db as _gdb, db_init_error as _gdb_err
+        if _gdb is None:
+            st.info(f"Clip history unavailable here: {_gdb_err}")
+        else:
+            posted_ids = _gdb.get_all_posted_clip_ids()
+            st.metric("Clips posted (all-time)", len(posted_ids))
+    except Exception as e:
+        st.info(f"Clip history unavailable: {e}")
+
+    st.caption("For hour-by-hour peak upload windows, see the **Peak Hours** and **Schedule** pages in the sidebar — select \"Gaming AI CarryON\" there.")
 
 # ════════════════════════════════════════════════════════════════
 # CRICKET CHANNEL (fully automated — same pipeline as Render)

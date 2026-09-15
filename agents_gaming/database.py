@@ -95,8 +95,9 @@ class GamingDatabase:
             conn.close()
 
     def _init_tables(self):
+        id_col = "id SERIAL PRIMARY KEY" if USE_POSTGRES else "id INTEGER PRIMARY KEY AUTOINCREMENT"
         with self._conn() as conn:
-            conn.executescript("""
+            conn.executescript(f"""
                 CREATE TABLE IF NOT EXISTS gaming_videos (
                     video_id    TEXT PRIMARY KEY,
                     title       TEXT,
@@ -116,7 +117,34 @@ class GamingDatabase:
                     broadcaster TEXT,
                     posted_at   TEXT NOT NULL
                 );
-            """)
+
+                CREATE TABLE IF NOT EXISTS gaming_snapshots (
+                    id          {id_col},
+                    video_id    TEXT NOT NULL,
+                    views       INTEGER DEFAULT 0,
+                    likes       INTEGER DEFAULT 0,
+                    comments    INTEGER DEFAULT 0,
+                    timestamp   TEXT NOT NULL,
+                    FOREIGN KEY (video_id) REFERENCES gaming_videos(video_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_gaming_snapshots_video_id
+                    ON gaming_snapshots(video_id);
+                CREATE INDEX IF NOT EXISTS idx_gaming_snapshots_timestamp
+                    ON gaming_snapshots(timestamp);
+
+                CREATE TABLE IF NOT EXISTS gaming_snapshots (
+                    id          {id_col},
+                    video_id    TEXT NOT NULL,
+                    views       INTEGER DEFAULT 0,
+                    likes       INTEGER DEFAULT 0,
+                    comments    INTEGER DEFAULT 0,
+                    timestamp   TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_gaming_snapshots_video_id
+                    ON gaming_snapshots(video_id);
+            """.replace("{id_col}", "SERIAL PRIMARY KEY" if USE_POSTGRES else "INTEGER PRIMARY KEY AUTOINCREMENT"))
 
     # ── Videos ───────────────────────────────────────────────────────────
 
@@ -141,6 +169,88 @@ class GamingDatabase:
         with self._conn() as conn:
             rows = conn.execute("SELECT * FROM gaming_videos ORDER BY created_at DESC").fetchall()
             return [dict(r) for r in rows]
+
+    # ── Snapshots ────────────────────────────────────────────────────────
+
+    def add_snapshot(self, video_id, views, likes=0, comments=0, timestamp=None):
+        if timestamp is None:
+            timestamp = _now_iso()
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO gaming_videos (video_id, title, published)
+                VALUES (?, '', '')
+                ON CONFLICT(video_id) DO NOTHING
+            """, (video_id,))
+            conn.execute("""
+                INSERT INTO gaming_snapshots (video_id, views, likes, comments, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            """, (video_id, views, likes, comments, timestamp))
+
+    def get_snapshots(self, video_id):
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT views, likes, comments, timestamp FROM gaming_snapshots
+                WHERE video_id = ? ORDER BY timestamp ASC
+            """, (video_id,)).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_all_snapshots(self):
+        """Grouped by video_id — {video_id: {title, published, snapshots: [...]}}.
+        Same shape as agents_cricket.database, so agents_gaming.velocity_agent
+        can reuse the exact same velocity-computation logic."""
+        with self._conn() as conn:
+            videos = conn.execute("SELECT * FROM gaming_videos").fetchall()
+            result = {}
+            for video in videos:
+                vid_id = video["video_id"]
+                snap_rows = conn.execute("""
+                    SELECT views, likes, comments, timestamp FROM gaming_snapshots
+                    WHERE video_id = ? ORDER BY timestamp ASC
+                """, (vid_id,)).fetchall()
+                result[vid_id] = {
+                    "title": video["title"],
+                    "published": video["published"],
+                    "snapshots": [dict(s) for s in snap_rows],
+                }
+            return result
+
+    # ── Snapshots (view velocity tracking) ─────────────────────────────────
+
+    def add_snapshot(self, video_id, views, likes=0, comments=0, timestamp=None):
+        if timestamp is None:
+            timestamp = _now_iso()
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO gaming_videos (video_id, title, published)
+                VALUES (?, '', '')
+                ON CONFLICT(video_id) DO NOTHING
+            """, (video_id,))
+            conn.execute("""
+                INSERT INTO gaming_snapshots (video_id, views, likes, comments, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            """, (video_id, views, likes, comments, timestamp))
+
+    def get_all_snapshots(self):
+        """Returns {video_id: {title, published, clip_id, snapshots: [...]}} —
+        same shape agents_cricket.database.get_all_snapshots() returns, so
+        agents_gaming.velocity_agent can reuse the same velocity math."""
+        with self._conn() as conn:
+            videos = conn.execute("SELECT * FROM gaming_videos").fetchall()
+            result = {}
+            for video in videos:
+                vid_id = video["video_id"]
+                snapshots = conn.execute("""
+                    SELECT views, likes, comments, timestamp
+                    FROM gaming_snapshots WHERE video_id = ?
+                    ORDER BY timestamp ASC
+                """, (vid_id,)).fetchall()
+                result[vid_id] = {
+                    "title": video["title"],
+                    "published": video["published"],
+                    "clip_id": video["clip_id"],
+                    "snapshots": [dict(s) for s in snapshots],
+                }
+            return result
 
     # ── Dedup ────────────────────────────────────────────────────────────
 

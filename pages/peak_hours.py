@@ -38,9 +38,10 @@ st.caption("View velocity analysis — when your channel gets the most traction.
 
 # ── Channel selector ────────────────────────────────────────────────────────
 
-channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON", "Cricket AI CarryON"], horizontal=True)
+channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON", "Cricket AI CarryON", "Gaming AI CarryON"], horizontal=True)
 is_hindi = channel == "Hindi AI CarryON"
 is_cricket = channel == "Cricket AI CarryON"
+is_gaming = channel == "Gaming AI CarryON"
 
 col_refresh, _ = st.columns([1, 5])
 with col_refresh:
@@ -51,9 +52,12 @@ with col_refresh:
 # ── Load analysis from Firestore ────────────────────────────────────────────
 
 @st.cache_data(ttl=300)
-def load_analysis(hindi: bool, cricket: bool):
+def load_analysis(hindi: bool, cricket: bool, gaming: bool):
     try:
-        if cricket:
+        if gaming:
+            from agents_gaming.velocity_agent import load_and_analyse_gaming
+            return load_and_analyse_gaming()
+        elif cricket:
             from agents_cricket.velocity_agent import load_and_analyse_cricket
             return load_and_analyse_cricket()
         elif hindi:
@@ -66,7 +70,7 @@ def load_analysis(hindi: bool, cricket: bool):
         return {"error": str(e)}
 
 with st.spinner("Loading velocity data…"):
-    analysis = load_analysis(is_hindi, is_cricket)
+    analysis = load_analysis(is_hindi, is_cricket, is_gaming)
 
 if "error" in analysis:
     st.error(f"Could not load data: {analysis['error']}")

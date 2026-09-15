@@ -27,6 +27,24 @@ def run_gaming_cycle():
         return {"status": "error", "error": str(e)}
 
 
+def _maybe_track_views():
+    """Runs gaming view tracking at most once per hour, so every scheduler
+    run doesn't burn YouTube API quota (same throttle pattern as cricket)."""
+    from datetime import datetime, timezone
+    VIEW_TRACK_INTERVAL_SECONDS = 55 * 60
+    try:
+        last = gaming_db.get_meta("last_view_track_at")
+        if last:
+            elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds()
+            if elapsed < VIEW_TRACK_INTERVAL_SECONDS:
+                return
+        from agents_gaming.view_tracker_agent import track_views_gaming
+        track_views_gaming()
+        gaming_db.set_meta("last_view_track_at", datetime.now(timezone.utc).isoformat())
+    except Exception as e:
+        print(f"Gaming view tracking skipped: {e}")
+
+
 def _check_daily_cap():
     from datetime import datetime, timezone
     try:
@@ -68,9 +86,17 @@ def _run_gaming_cycle_inner():
     from agents.voice_agent import generate_voice
     from agents.caption_agent import create_srt
     from agents.video_agent import _create_video_from_pexels_clips
+    from agents_gaming.adaptive_scheduler import should_upload_now_gaming, mark_upload_done_gaming
 
     if gaming_db is None:
         return {"status": "error", "error": f"Gaming DB unavailable: {gaming_db_init_error}"}
+
+    _maybe_track_views()
+
+    upload_ok, upload_reason = should_upload_now_gaming()
+    print(f"Adaptive scheduler: {upload_reason}")
+    if not upload_ok:
+        return {"status": "skipped_scheduler", "reason": upload_reason}
 
     uploads_today = _check_daily_cap()
     if uploads_today >= DAILY_UPLOAD_CAP:
@@ -122,6 +148,7 @@ def _run_gaming_cycle_inner():
         clip_id=clip["id"],
     )
     _increment_daily_cap()
+    mark_upload_done_gaming()
 
     return {"status": "uploaded", "video_url": video_url, "title": title}
 

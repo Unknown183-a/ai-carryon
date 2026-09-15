@@ -39,9 +39,10 @@ st.caption("Upload at the exact hour your audience is most active.")
 
 # ── Channel selector ────────────────────────────────────────────────────────
 
-channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON", "Cricket AI CarryON"], horizontal=True)
+channel = st.radio("Channel", ["AI CarryON (English)", "Hindi AI CarryON", "Cricket AI CarryON", "Gaming AI CarryON"], horizontal=True)
 is_hindi = channel == "Hindi AI CarryON"
 is_cricket = channel == "Cricket AI CarryON"
+is_gaming = channel == "Gaming AI CarryON"
 
 col_refresh, _ = st.columns([1, 5])
 with col_refresh:
@@ -52,9 +53,19 @@ with col_refresh:
 # ── Load data ─────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=300)
-def load_recommendation(hindi: bool, cricket: bool):
+def load_recommendation(hindi: bool, cricket: bool, gaming: bool):
     try:
-        if cricket:
+        if gaming:
+            from agents_gaming.velocity_agent import load_and_analyse_gaming, get_best_upload_hour_gaming
+            analysis = load_and_analyse_gaming()
+            if "error" in analysis:
+                return {"error": analysis["error"]}
+            best_hour = get_best_upload_hour_gaming()
+            windows = analysis["best_upload_windows"]
+            peak_hours = analysis["peak_hours"]
+            total_points = analysis["total_velocity_points"]
+            source = "Gaming DB"
+        elif cricket:
             from agents_cricket.velocity_agent import load_and_analyse_cricket, get_best_upload_hour_cricket
             analysis = load_and_analyse_cricket()
             if "error" in analysis:
@@ -91,7 +102,7 @@ def load_recommendation(hindi: bool, cricket: bool):
         return {"error": str(e)}
 
 with st.spinner("Analyzing view velocity data..."):
-    data = load_recommendation(is_hindi, is_cricket)
+    data = load_recommendation(is_hindi, is_cricket, is_gaming)
 
 if "error" in data:
     st.error(f"Error: {data['error']}")
@@ -126,7 +137,7 @@ st.divider()
 
 # ── 24h velocity chart ─────────────────────────────────────────────────────
 
-_channel_label = "Cricket" if is_cricket else ("Hindi" if is_hindi else "English")
+_channel_label = "Gaming" if is_gaming else ("Cricket" if is_cricket else ("Hindi" if is_hindi else "English"))
 st.subheader(f"📈 {_channel_label} view velocity by hour (UTC)")
 
 try:
@@ -206,11 +217,11 @@ with st.expander("How adaptive scheduling works"):
 3. It groups velocities by the UTC hour they were recorded
 4. The hour with the highest average velocity = best upload time
 
-**English, Hindi, and Cricket channels are tracked completely separately** — different audiences,
+**English, Hindi, Cricket, and Gaming channels are tracked completely separately** — different audiences,
 different timezones, different peak hours. This page shows whichever channel you select above.
-All three channels now share one Firestore database on Cloud Run, kept isolated by
-collection prefix — Cricket uses its own `cricket_`-prefixed collections rather than
-a separate database.
+English/Hindi/Cricket share one Firestore/Postgres database on Cloud Run, kept isolated by
+collection prefix. Gaming uses its own database module (agents_gaming.database) on the same
+DATABASE_URL, isolated via a `gaming_` table prefix.
 
 **Scheduler behavior:**
 - If best hour is within 90 minutes → waits and uploads at that hour
