@@ -2,9 +2,9 @@ name: English Scheduler
 
 on:
   schedule:
-    # Every 5 hours, on the hour (UTC). GitHub's cron scheduler can lag by
-    # a few minutes under load — that's fine, scheduler.py checks the
-    # current hour itself rather than assuming exact timing.
+    # Every hour (UTC). scheduler.py itself decides whether this hour is a
+    # top-3 peak hour and whether the daily cap is hit — this just needs to
+    # run often enough to actually land on peak hours.
     - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
