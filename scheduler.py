@@ -315,7 +315,18 @@ def track_views_job():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
+def is_comment_reply_hour():
+    """Comment replies run once a day, near 7PM IST. Hourly cron only fires
+    on the UTC hour, and IST is UTC+5:30, so the nearest reachable slot is
+    the run whose IST time falls in the 19:xx hour (UTC 14:00 -> 19:30 IST)."""
+    ist_now = datetime.datetime.utcnow() + datetime.timedelta(hours=5, minutes=30)
+    return ist_now.hour == 19
+
+
 def comment_reply_job():
+    if not is_comment_reply_hour():
+        log("Not the daily comment-reply hour (~7PM IST) — skipping comment replies this run")
+        return
     try:
         from agents.comment_reply_agent import process_comments
         process_comments(log_fn=log)
