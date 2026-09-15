@@ -32,3 +32,5 @@ token_b64_new.txt
 token_hindi.json
 federated-unlearning/
 *.patch
+assets/gaming_clips/
+output/
