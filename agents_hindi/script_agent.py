@@ -40,7 +40,7 @@ Rules:
 Research: {research_data}
 
 Example style (yeh example ~85 words ka hai, isi length ka target rakho):
-Yaar suno, ye sun ke tumhara dimaag ghoom jayega. Tumhare phone ke chip mein 15 billion transistors hain — jitne Milky Way mein taare hain. Aur ye sab tumhari thumbnail se bhi chote hain. Har transistor second mein billions baar on-off hota hai, isliye phone itna fast hai. Par ab hum aur chota nahi kar sakte — physics ke laws aad aa rahe hain. Isliye companies ab chips ko upar ki taraf stack kar rahi hain. Samsung aur TSMC dono is par kaam kar rahe hain. Follow karo aur aisi videos dekhte raho.
+Yaar suno, ye chemical reaction dekh ke tumhara dimaag ghoom jayega. Jab hydrogen peroxide aur potassium iodide milte hain, seconds mein itna foam nikalta hai ki poora table bhar jaata hai. Ise log "elephant toothpaste" bolte hain kyunki yeh bilkul asli toothpaste jaisa dikhta hai. Par yahan baat aur hai — is reaction mein itni garmi bhi paida hoti hai ki container garam ho jaata hai. Yeh oxygen gas itni fast release hoti hai ki foam upar ki taraf explode karta hai. Scientists ise catalytic decomposition kehte hain. Follow karo aur aisi videos dekhte raho.
 """
 
     response = safe_invoke(prompt)

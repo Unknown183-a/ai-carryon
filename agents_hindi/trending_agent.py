@@ -114,6 +114,7 @@ def _fetch_recent_search(youtube, region_code, hours=96, max_results=50):
             publishedAfter=published_after,
             regionCode=region_code,
             videoCategoryId="28",
+            q="experiment OR science experiment OR chemistry experiment OR physics experiment",
             maxResults=max_results,
         ).execute()
         return [
@@ -127,6 +128,12 @@ def _fetch_recent_search(youtube, region_code, hours=96, max_results=50):
 
 
 def _fetch_most_popular(youtube, region_code, max_results=50):
+    """Fallback chart search — mostPopular has no query param, so we filter
+    titles for experiment-related keywords after fetching category 28."""
+    EXPERIMENT_KEYWORDS = (
+        "experiment", "chemistry", "chemical", "physics", "reaction",
+        "science", "prayog", "vigyan",
+    )
     try:
         response = youtube.videos().list(
             part="snippet",
@@ -135,7 +142,12 @@ def _fetch_most_popular(youtube, region_code, max_results=50):
             maxResults=max_results,
             videoCategoryId="28",
         ).execute()
-        return response.get("items", [])
+        items = response.get("items", [])
+        filtered = [
+            v for v in items
+            if any(k in v["snippet"]["title"].lower() for k in EXPERIMENT_KEYWORDS)
+        ]
+        return filtered or items
     except Exception as e:
         print(f"Trending agent (hindi) mostPopular error: {e}")
         return []
@@ -199,8 +211,10 @@ def _generate_dynamic_topic(recent_used, attempts=3):
     used_list = "\n".join(f"- {t}" for t in used_titles) if used_titles else "(none yet)"
 
     prompt = f"""Generate ONE punchy YouTube video title idea in casual Hinglish about a
-technology or AI topic (new gadgets, AI tools, robots, phones, space tech, chips,
-EVs, etc). Write it in Roman/Latin script (Hinglish), NOT Devanagari script. Style should be like viral Hindi tech-news shorts — but NOT similar in
+visually striking science/chemical/physical EXPERIMENT (color-change reactions, foam,
+crystal growth, dry ice, pressure/vacuum demos, magnetism, optical illusions,
+non-Newtonian fluids, DIY science tricks, etc). Write it in Roman/Latin script
+(Hinglish), NOT Devanagari script. Style should be like viral Hindi experiment/science shorts — but NOT similar in
 content or wording to ANY of these already-used titles:
 
 {used_list}
@@ -224,39 +238,39 @@ Rules:
 
 
 def _fallback_topic():
-    """Proven high-performing Hindi/Hinglish tech topics, excluding recent ones.
+    """Proven high-performing Hindi/Hinglish experiment topics, excluding recent ones.
     Falls through to LLM-generated topics if the static list is exhausted."""
     fallbacks = [
-        "Artificial Intelligence kya hai",
-        "Naya AI robot jo sab kuch kar sakta hai",
-        "iPhone 17 Pro ke chhupe hue features",
-        "Google ka naya AI sabse best hai",
-        "Yeh naya invention phone use karne ka tarika badal dega",
-        "Tesla ka self-driving update sab kuch badal diya",
-        "Naya humanoid robot launch hua hai",
-        "OpenAI ne kuch naya release kiya hai",
-        "Samsung Galaxy S26 ke leaked features dekho",
-        "Yeh AI tool 10 apps ki jagah leta hai free mein",
-        "Naya chip phone ko 10x fast banata hai",
-        "NASA ne kuch aisa dhoondha jo sab kuch badal dega",
-        "Yeh AI aapki awaaz clone kar sakta hai 3 second mein",
-        "Yeh electric vehicle Tesla ko half price mein beat karta hai",
-        "Google ne sabse powerful AI assistant launch kiya",
-        "Yeh naya chip market ke sabse tez chip se bhi tez hai",
-        "Apple ka secret AI project leak ho gaya",
-        "Yeh robot khud khana bana sakta hai",
-        "Naya drone 10 ghante tak udd sakta hai",
-        "Yeh smart home gadget ek din mein sold out ho gaya",
-        "Scientists ne dimaag jaisa sochne wala computer banaya",
-        "Yeh AI seconds mein poori app likh sakta hai",
-        "Naya satellite internet fiber se bhi tez hai",
-        "Yeh gadget aapke phone ko laptop bana deta hai",
-        "Naya battery tech phone ko 5 minute mein charge karta hai",
-        "Yeh AI model ne real medical exam pass kiya",
-        "Naya VR headset bilkul real jaisa lagta hai",
-        "Is startup ne flying car banayi jo sach mein chalti hai",
-        "Naya chip phone ke andar hi AI chala sakta hai",
-        "Yeh robot dog darwaza khol sakta hai aur seedhi chad sakta hai",
+        "Yeh chemical mix karo toh instant baraf ban jaati hai",
+        "Coca Cola aur Mentos ka asli reaction kya hota hai",
+        "Yeh liquid aag ki tarah dikhta hai par jalta nahi",
+        "Dry ice paani mein daalo toh yeh hota hai",
+        "Yeh powder paani ko instant solid bana deta hai",
+        "Egg ko vinegar mein daalo toh bouncy ball ban jaata hai",
+        "Magnet se yeh cheez uda sakte ho, believe nahi hoga",
+        "Non-Newtonian fluid — chalo par toh solid, ruko toh liquid",
+        "Yeh chemical reaction se rangeen aag banti hai",
+        "Balloon ko needle se pierce karo par phate nahi",
+        "Yeh crystal ek raat mein khud ban jaata hai",
+        "Vacuum mein marshmallow ka kya hota hai dekho",
+        "Yeh do liquids milao toh foam explosion hota hai",
+        "Static electricity se paani ka flow mod sakte ho",
+        "Yeh optical illusion se dimaag confuse ho jaata hai",
+        "Copper coin ko is chemical mein daalo, color badal jaayega",
+        "Yeh experiment se pata chalta hai density kaise kaam karti hai",
+        "Ice cube salt ke saath itni jaldi kyun pighalta hai",
+        "Yeh DIY lava lamp ghar pe 2 minute mein banta hai",
+        "Pressure difference se can crush ho jaata hai seconds mein",
+        "Yeh liquid nitrogen se phool touch karte hi toot jaata hai",
+        "Simple chemicals se rocket jaisa launch ho sakta hai",
+        "Yeh trick se paani upside down glass mein ruka rehta hai",
+        "Elephant toothpaste experiment — itna foam kaise banta hai",
+        "Yeh acid-base reaction se instant color change hota hai",
+        "Chumbak se yeh dhaatu float karti hai, kaise",
+        "Yeh experiment se pata chalta hai surface tension kya hai",
+        "Baloon ko candle ke upar rakho, phate ga ya nahi",
+        "Yeh simple setup se apna mini volcano bana sakte ho",
+        "Sound waves se paani ka pattern kaise badalta hai dekho",
     ]
     recent_used = _load_recent() + _load_uploaded_titles()
     unused = [t for t in fallbacks if not _is_repeat(t, recent_used)]

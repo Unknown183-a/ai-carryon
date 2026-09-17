@@ -38,7 +38,7 @@ Rules:
 - Title Hindi/Hinglish mein (max 60 chars)
 - Title curiosity jagaye — shocking, surprising angle lo
 - Description 100-150 words, Hindi mein, original likho
-- 15 hashtags — Hindi + English tech mix
+- 15 hashtags — Hindi + English science/experiment mix
 - Competitor ke exact words BILKUL copy mat karo
 - Copyright se bachne ke liye apna unique angle lo
 
@@ -64,9 +64,9 @@ Ye EXACT JSON format mein return karo:
         return data
     except Exception:
         return {
-            "title": f"{topic} - Hindi Facts",
-            "description": f"{topic} ke baare mein amazing facts. {script[:100]}",
-            "hashtags": ["hindi", "technology", "facts", "shorts", "viral",
-                        "india", "tech", "trending", "ai", "techtips",
-                        "hinditech", "indiantech", "techshorts", "viralshorts", "techfacts"]
+            "title": f"{topic} - Hindi Experiment",
+            "description": f"{topic} ka amazing experiment. {script[:100]}",
+            "hashtags": ["hindi", "experiment", "science", "shorts", "viral",
+                        "india", "sciencefacts", "trending", "chemistry", "physics",
+                        "hindiexperiment", "indianscience", "scienceshorts", "viralshorts", "sciencefacts"]
         }
