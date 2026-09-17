@@ -179,14 +179,17 @@ def get_schedule_recommendation():
 
 
 
-def should_upload_now_for_channel(channel="english"):
+def should_upload_now_for_channel(channel="english", top_n=5, tolerance_hours=1):
     """
     Multi-channel adaptive scheduler.
     Returns (bool, reason_string).
-    
+
     Logic:
-    - Get top 3 peak hours for the channel (priority queue by avg velocity)
-    - Current hour must be in top 3
+    - Get top `top_n` peak hours for the channel (priority queue by avg velocity)
+    - Current hour must be within `tolerance_hours` of one of those peak hours
+      (not just an exact match — since Cloud Scheduler only fires on the hour,
+      an exact match can miss a peak window that shifts by a bit as new data
+      comes in)
     - Minimum 1 hour gap between consecutive uploads (checked via last_upload_hour in DB)
     - Falls back to default hours if not enough data
     """
@@ -207,16 +210,30 @@ def should_upload_now_for_channel(channel="english"):
         total_samples = sum(h["sample_count"] for h in peak_hours.values()) if peak_hours else 0
 
         if total_samples >= 10:
-            # Build priority queue — top 3 hours by avg velocity
+            # Build priority queue — top N hours by avg velocity
             windows = sorted(
                 [{"hour": int(h), "avg_velocity": d["avg_velocity"], "samples": d["sample_count"]}
                  for h, d in peak_hours.items() if d["sample_count"] >= 2],
                 key=lambda x: x["avg_velocity"], reverse=True
-            )[:3]
+            )[:top_n]
             top_hours = [w["hour"] for w in windows]
 
-            if current_hour not in top_hours:
-                return False, f"[{channel}] Hour {current_hour:02d}:00 UTC not in top-3 peak hours {top_hours}"
+            # Match if current hour is within tolerance_hours of ANY peak hour
+            # (circular distance, so e.g. hour 23 is 1 away from hour 0)
+            def _circular_distance(a, b):
+                d = abs(a - b)
+                return min(d, 24 - d)
+
+            matched_hour = next(
+                (h for h in top_hours if _circular_distance(current_hour, h) <= tolerance_hours),
+                None
+            )
+
+            if matched_hour is None:
+                return False, (
+                    f"[{channel}] Hour {current_hour:02d}:00 UTC not within "
+                    f"{tolerance_hours}h of top-{top_n} peak hours {top_hours}"
+                )
 
             # Check minimum 1 hour gap from last upload
             try:
@@ -230,7 +247,10 @@ def should_upload_now_for_channel(channel="english"):
             except Exception:
                 pass
 
-            return True, f"[{channel}] Hour {current_hour:02d}:00 UTC is peak (top-3: {top_hours})"
+            return True, (
+                f"[{channel}] Hour {current_hour:02d}:00 UTC is within {tolerance_hours}h of "
+                f"peak hour {matched_hour:02d}:00 (top-{top_n}: {top_hours})"
+            )
 
     except Exception as e:
         print(f"[{channel}] DB peak hours error: {e}")
