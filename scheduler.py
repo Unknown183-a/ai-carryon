@@ -83,47 +83,14 @@ def get_fresh_trending_topic(region_code="US", max_attempts=5):
     return topic + " - extra"
 
 
-def get_top_upload_hours(n=3, min_gap_hours=1):
-    """Pick top N distinct upload hours by real velocity. No averaging.
-    No longer cached — this now runs once per process (one Job execution),
-    so the old 3-minute TTL cache (built for a 30s poll loop) is pointless."""
-    try:
-        from agents.database import db
-        peak_hours = db.get_peak_hours()
-        candidates = sorted(
-            [{"hour": h, "avg_velocity": data["avg_velocity"]}
-             for h, data in peak_hours.items()
-             if data["sample_count"] >= 2 and data["avg_velocity"] > 0],
-            key=lambda x: x["avg_velocity"], reverse=True
-        )
-        chosen = []
-        for c in candidates:
-            h = c["hour"]
-            too_close = any(
-                min(abs(h - ch), 24 - abs(h - ch)) < min_gap_hours
-                for ch in chosen
-            )
-            if not too_close:
-                chosen.append(h)
-            if len(chosen) == n:
-                break
-        if len(chosen) >= 1:
-            result = sorted(chosen)
-            log(f"Top upload hours from real data (UTC): {result}")
-            return result
-    except Exception as e:
-        log(f"Could not get top upload hours: {e}")
-    fallback = [4, 12, 19]
-    log(f"Using fallback upload hours (UTC): {fallback}")
-    return fallback
-
-
-def should_upload_now():
-    top_hours = get_top_upload_hours(n=3, min_gap_hours=1)
-    current_hour = datetime.datetime.utcnow().hour
-    if current_hour in top_hours:
-        return True, f"Hour {current_hour:02d}:00 UTC is in top slots {top_hours}"
-    return False, f"Hour {current_hour:02d}:00 UTC not in top slots {top_hours}"
+# NOTE: The schedule-gate logic used to live here (get_top_upload_hours /
+# should_upload_now), but main() never called it — it calls
+# should_upload_now_for_channel() from agents/adaptive_scheduler.py instead.
+# The two copies had different fallback hours ([4, 12, 19] here vs
+# [6, 12, 18] there) and different log wording, so editing this file did
+# nothing in production. Removed to avoid that trap. The single source of
+# truth for peak-hour / fallback-hour logic is now only in
+# agents/adaptive_scheduler.py — edit should_upload_now_for_channel() there.
 
 
 def run_generation_pipeline(topic_override=None):
