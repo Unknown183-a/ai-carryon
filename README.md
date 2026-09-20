@@ -1,108 +1,182 @@
-# Deployment Runbook
+# AI CarryON — Autonomous Multi-Channel YouTube Shorts Platform
 
-Deploy target: **Cloud Run** (per the SAD, Ch.17 — GitHub → Actions → Docker →
-Cloud Run → load balancer → FastAPI). Railway is documented in `deploy.yml` as
-a fallback but is not the chosen path.
+An autonomous AI system that discovers trending topics, researches them, writes scripts, generates voiceovers, renders Shorts, writes SEO metadata, and uploads to YouTube with no human in the loop. It then tracks how each video performs and feeds that data back into what it makes next.
 
-## One-time GCP setup
+It runs **four independent production channels**, each with its own content source, audience, credentials, and schedule, all deployed as scheduled GitHub Actions workflows.
 
-1. Create (or reuse) a GCP project. Note the project ID — it's `GCP_PROJECT_ID`.
-2. Enable APIs: Cloud Run, Artifact Registry (or keep using `ghcr.io`, which
-   Cloud Run can pull from directly), Secret Manager.
-3. Create a deploy service account:
-   ```
-   gcloud iam service-accounts create ai-carryon-deployer \
-     --display-name="AI CarryON CI deployer"
-   ```
-4. Grant it the two roles it needs:
-   ```
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
-     --member="serviceAccount:ai-carryon-deployer@$PROJECT_ID.iam.gserviceaccount.com" \
-     --role="roles/run.admin"
+**Dashboard**: <https://ai-carryon-tqndlmjbcfvtznagmef2ap.streamlit.app/Dashboard>
+**Repo**: <https://github.com/Unknown183-a/ai-carryon>
+**Channels**: [English](https://www.youtube.com/@AIcarryONAI) · [Hindi](https://www.youtube.com/@AICarryONHindi) · [Cricket](https://www.youtube.com/@AICarryONSports) · [Gaming](https://www.youtube.com/@AICarryONGaming)
 
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
-     --member="serviceAccount:ai-carryon-deployer@$PROJECT_ID.iam.gserviceaccount.com" \
-     --role="roles/iam.serviceAccountUser"
+---
 
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
-     --member="serviceAccount:ai-carryon-deployer@$PROJECT_ID.iam.gserviceaccount.com" \
-     --role="roles/secretmanager.secretAccessor"
-   ```
-5. Create and download its key:
-   ```
-   gcloud iam service-accounts keys create key.json \
-     --iam-account=ai-carryon-deployer@$PROJECT_ID.iam.gserviceaccount.com
-   ```
-6. In the GitHub repo → Settings → Secrets and variables → Actions, add:
-   - `GCP_PROJECT_ID` — the project ID from step 1
-   - `GCP_SA_KEY` — the full contents of `key.json`
-   Delete `key.json` locally once it's pasted in — don't commit it.
+## Channels in Production
 
-## Moving `.env` values into Secret Manager
+| Channel | Audience / Niche | Content source | Voice | Workflow |
+| --- | --- | --- | --- | --- |
+| **English** ([@AIcarryONAI](https://www.youtube.com/@AIcarryONAI)) | US, Tech/AI | Trending-topic discovery + LLM research | Edge TTS | `english-scheduler.yml` (every 5h) |
+| **Hindi** ([@AICarryONHindi](https://www.youtube.com/@AICarryONHindi)) | India, experiment-style videos (chemical, physical and technology experiments from around the world) | LLM-generated trending topics, Hinglish scripts | Sarvam AI Bulbul, Edge TTS fallback | `hindi-scheduler.yml` (hourly check, adaptive, max 3 uploads/day) |
+| **Cricket** ([@AICarryONSports](https://www.youtube.com/@AICarryONSports)) | Cricket news and match content | CricAPI match data + trending cricket topics | Edge TTS | `cricket-scheduler.yml` |
+| **Gaming** ([@AICarryONGaming](https://www.youtube.com/@AICarryONGaming)) | Gaming moments and trends | Twitch Helix Clips API (followed streamers + top clips by game category) | Edge TTS | `gaming-scheduler.yml` |
 
-Every variable in `.env.example` that isn't build-time config becomes a
-Secret Manager secret, then gets wired into the Cloud Run revision via
-`--set-secrets` (already in `deploy.yml`'s `secrets:` block). To create them:
+The Hindi channel was pivoted from tech news to experiment-style videos after poor retention, to make content more visual and interactive.
+
+---
+
+## What Each Pipeline Does
+
+Every channel runs on its own schedule and, without human input:
+
+1. Checks whether the current hour matches a learned peak-engagement window (English/Hindi; falls back to safe defaults until enough data exists)
+2. Finds a trending topic, filtered to the channel's niche
+3. Checks topic saturation and skips topics that are already over-covered (English/Hindi)
+4. Benchmarks competitors on the same topic (English/Hindi)
+5. Researches the topic and writes a script tuned to the channel's length and style
+6. Generates three title variations using different psychological patterns, scores them, and picks a winner
+7. Writes the SEO description and hashtags
+8. Generates a voiceover and word-by-word captions
+9. Pulls background footage: topic-relevant Pexels video clips (English, Hindi, Cricket), or real Twitch clips downloaded with `yt-dlp` (Gaming)
+10. Renders the final video with ffmpeg
+11. Uploads to YouTube with full metadata
+12. Records view snapshots on a schedule for ongoing analytics
+
+### Pipeline (per channel)
 
 ```
-for VAR in FIREBASE_SERVICE_ACCOUNT_JSON UPSTASH_REDIS_REST_URL \
-  UPSTASH_REDIS_REST_TOKEN QDRANT_URL QDRANT_API_KEY \
-  CHANNEL_SECRETS_ENCRYPTION_KEY GEMINI_API_KEY GROQ_API_KEY \
-  OPENAI_API_KEY YOUTUBE_CLIENT_SECRETS_B64 YOUTUBE_TOKEN_B64 \
-  ELEVENLABS_API_KEY CELERY_BROKER_URL INTERNAL_SCHEDULER_TOKEN; do
-    printf '%s' "${!VAR}" | gcloud secrets create "$VAR" --data-file=-
-done
+Adaptive Hour Check -> Trending Topic (niche-filtered)
+    -> Saturation Check -> Competitor Comparison
+    -> Research (LLM) -> Script
+    -> A/B Title Test -> SEO
+    -> Voiceover -> Captions
+    -> Background footage (Pexels clips / Twitch clips)
+    -> Video render (ffmpeg) -> YouTube upload
+    -> View snapshots -> Postgres (channel-tagged)
 ```
 
-(Run this from a shell that has your real local `.env` sourced — never
-paste real secret values into a commit, an issue, or this file.)
+---
 
-`FIREBASE_PROJECT_ID` and `RATE_LIMIT_REQUESTS_PER_MINUTE` are non-secret
-config and can stay as plain `--set-env-vars` if the app needs them at
-runtime — add them to the `deploy.yml` flags line if so, rather than
-Secret Manager.
+## Architecture
 
-### Rotating a key in production
+**Compute and scheduling.** Each channel is a GitHub Actions cron workflow (`.github/workflows/`). Runs are stateless, so all state lives in Postgres and all credentials in GitHub Secrets.
 
-1. Create a new version of the secret: `gcloud secrets versions add VAR_NAME --data-file=-`
-2. Redeploy (push to `main`, or `gcloud run services update <service> --region <region>`
-   with no image change — Cloud Run picks up `:latest` secret versions on
-   new revisions only, so a redeploy is required, not just the secret update).
-3. Confirm `/health` still returns 200 before considering the rotation done.
-4. Disable (don't delete) the old secret version once you've confirmed the
-   new one works, in case of rollback.
+**LLM routing.** Groq (`openai/gpt-oss-120b`) is the primary model, with Gemini (`gemini-3.5-flash`) as fallback. The English and Hindi routing layers (`model_invoke_agent_english.py`, `model_invoke_agent_hindi.py`) include circuit breakers and per-run call budgets so a provider outage or rate limit degrades gracefully instead of failing a run.
 
-## Confirming Redis/Qdrant reachability from Cloud Run
+**Data.** Supabase Postgres, accessed through the transaction pooler (port 6543), because GitHub Actions runners are IPv4-only and Supabase direct connections are IPv6-only. English and Hindi share one database, partitioned by a `channel` column so their learning never mixes. Cricket uses its own Supabase project for topic de-duplication.
 
-Both Upstash Redis and Qdrant Cloud are public REST/TLS endpoints reachable
-over the internet — Cloud Run's default egress (no VPC connector) can reach
-them with no extra networking config. After the first deploy, confirm with:
+**Dashboard.** A Streamlit app on Streamlit Community Cloud reads the same Postgres database. Pages: Dashboard, Peak Hours, Schedule, Analytics, Comparison, and A/B Titles. The channel selector covers English, Hindi, and Cricket.
+
+**Shared rendering.** Every channel reuses the same video renderer (`agents/video_agent.py`), so a fix or improvement there benefits all four.
+
+### Repository Layout
 
 ```
-curl https://<cloud-run-url>/health
+agents/            English pipeline agents + shared video/voice/caption agents
+agents_hindi/      Hindi (Hinglish) pipeline agents
+agents_cricket/    Cricket pipeline agents
+agents_gaming/     Gaming pipeline agents (Twitch client, clip finder, etc.)
+pages/             Streamlit dashboard pages
+scheduler.py, scheduler_hindi.py, scheduler_cricket.py, scheduler_gaming.py
+app.py             Streamlit entrypoint
+.github/workflows/ english / hindi / cricket / gaming scheduler workflows
 ```
 
-and check the health response includes passing Redis and Qdrant checks (the
-Health Agent from Ch.18 covers this ongoing, once Phase 10 is built — for now,
-`/health` returning 200 is the Phase 9 bar).
+---
 
-## Rollback
+## Intelligence Layer (English and Hindi)
 
-Cloud Run keeps prior revisions automatically. To roll back without a new
-deploy:
+| Component | What it does |
+| --- | --- |
+| **Velocity and peak-hour detection** | Computes views gained per hour per video, aggregated by hour of day, to find the best upload windows |
+| **Saturation engine** | Scores topics 0-100 from recent competing video count and authority-channel coverage. Fails open if the YouTube API is unavailable |
+| **Comparison engine** | Benchmarks the top 10 competing videos (views, engagement, title length, duration) and feeds recommendations into script and SEO generation |
+| **A/B title testing** | Generates 3 titles from 8 psychological patterns, scores each on a 10-point rubric, and logs every test for pattern tracking |
+| **Adaptive scheduling** | Generates and uploads only when the current hour matches a learned peak window (minimum 3 samples), with default hours as fallback |
+| **View tracking** | Hourly snapshots of views, likes, and comments per video |
+
+---
+
+## Engineering Highlights
+
+- **Moved off paid hosting to a zero-cost deployment.** English and Hindi were migrated from Railway (which began requiring a credit card) to GitHub Actions cron workflows. The SQLite store was replaced with Postgres so state survives across stateless runs. The gaming channel was built directly on the same pattern.
+- **Replaced the database layer.** The original per-feature JSON files became a single SQLite database and then Supabase Postgres, with an idempotent migration script and a timezone fix for mixed naive/aware timestamps that had silently broken velocity calculation.
+- **Survived a model deprecation.** When Groq retired `llama-3.3-70b-versatile`, roughly 25 hardcoded call sites across all channels were migrated to `openai/gpt-oss-120b`, and a retired Gemini model in the routing layer was replaced.
+- **Upgraded visuals from static to dynamic.** Ken-Burns still images were replaced with topic-relevant Pexels video clips for English and Hindi.
+- **Fixed silent audio truncation in Hindi TTS.** Sarvam splits long text into multiple WAV segments and only the first was being saved, cutting about 70% of each voiceover. Concatenating all segments fixed it, and script length was retuned to 110-130 words to stay under the 60-second Shorts limit.
+- **Built the gaming pipeline end to end.** Twitch OAuth app registration, Helix Clips API integration, per-clip download with `yt-dlp`, and a category filter that automatically excludes non-gameplay categories (Just Chatting, Music, ASMR, etc.) from top-clip discovery.
+- **Cricket state moved to Postgres.** De-duplication tracking was moved from a JSON file to Supabase so it survives ephemeral compute.
+
+---
+
+## Local Setup
 
 ```
-gcloud run services update-traffic ai-carryon-gateway \
-  --region asia-south1 \
-  --to-revisions=<previous-revision-name>=100
+git clone https://github.com/Unknown183-a/ai-carryon.git
+cd ai-carryon
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Dashboard
+streamlit run app.py
+
+# Run a channel scheduler locally
+python scheduler.py           # English
+python scheduler_hindi.py     # Hindi
+python scheduler_cricket.py   # Cricket
+python scheduler_gaming.py    # Gaming
 ```
 
-List revisions with `gcloud run revisions list --service ai-carryon-gateway --region asia-south1`.
+### Configuration
 
-## Cloud Run vs Railway — why Cloud Run
+| Variable | Purpose | Scope |
+| --- | --- | --- |
+| `DATABASE_URL` | Postgres connection (Supabase transaction pooler) | All |
+| `GROQ_API_KEY` | Primary LLM inference | All |
+| `GEMINI_API_KEY` | LLM fallback | All |
+| `PEXELS_API_KEY` | Background clips and images | English, Hindi, Cricket |
+| `YOUTUBE_API_KEY` | YouTube Data API (search, public stats) | All |
+| `YOUTUBE_TOKEN_B64`, `YOUTUBE_CLIENT_SECRETS_B64`, `YOUTUBE_ANALYTICS_TOKEN_B64` | English OAuth upload and analytics credentials | English |
+| `YOUTUBE_TOKEN_JSON` | Hindi OAuth token (needs `youtube.upload` and `youtube.readonly` scopes) | Hindi |
+| `SARVAM_API_KEY` | Hindi native TTS | Hindi |
+| `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` | Twitch Helix API | Gaming |
+| `YOUTUBE_GAMING_CLIENT_SECRETS_B64`, `YOUTUBE_GAMING_TOKEN_B64` | Gaming channel OAuth credentials | Gaming |
+| `APP_PASSWORD` | Streamlit dashboard login | Dashboard |
 
-Railway was the short-term option while no GCP project existed yet. Now that
-GCP is set up (Firebase already lives there from Phase 1), Cloud Run keeps
-everything in one ecosystem, scales to zero for this system's bursty/
-scheduled workload (per Ch.17), and is what the architecture doc specifies.
-The Railway block stays in `deploy.yml`, commented, in case that ever changes.
+Cricket additionally needs a CricAPI key and its own YouTube credentials.
+
+---
+
+## Deployment
+
+All four pipelines deploy the same way: push to `main`, and the scheduled workflows in `.github/workflows/` pick up the new code on their next run. Secrets live in GitHub repository secrets. To trigger a run without waiting for the cron, use "Run workflow" on the relevant workflow in the Actions tab.
+
+---
+
+## Operational Notes
+
+- **YouTube API quota**: 10,000 units/day per Google Cloud project, and each upload costs about 1,650 units. The gaming channel uses its own Google Cloud project and OAuth client.
+- **OAuth tokens** can expire (`invalid_grant`). Re-authenticate locally and update the matching GitHub secret. A Hindi token with upload-only scope silently fails view tracking with a 403.
+- **Sarvam text limits**: long scripts come back as multiple audio chunks, so always concatenate every returned segment.
+- **Flow/Veo clips**: an optional manual mode for cinematic clips exists in the English and Hindi agents (`flow_prompt_agent.py`), but the automated pipelines use Pexels or Twitch footage. Real brand names in clip prompts can trigger Flow's policy filter.
+
+## Known Limitations
+
+- Sarvam Hindi TTS currently errors on `target_language_code` and falls back to Edge TTS
+- Custom thumbnail upload is blocked by a 403 on some channels (likely requires channel phone verification)
+- The comment-reply agent needs the `youtube.force-ssl` OAuth scope
+- Saturation gating is not bypassed by `FORCE_GENERATE` (only the schedule-hour gate is)
+
+---
+
+## Roadmap
+
+- **Close the A/B loop**: title scores are LLM-predicted today. Validate them against real 24h view counts and let pattern selection use ground truth.
+- **Extend the intelligence layer to Cricket and Gaming**: saturation, comparison, and adaptive scheduling currently run for English and Hindi only.
+- **Failure and hook analysis**: systematic tracking of why videos underperform.
+- **Audience, opportunity, and monetization intelligence**: demographic pulls, pre-trend prediction, and RPM-correlated topic scoring.
+- **Centralized "brain" service**: deliberately deferred until the pipeline stabilized. With four channels now running the same pattern, it is the natural next abstraction.
+- **Multi-tenant SaaS rebuild**: a from-scratch rebuild of this pipeline as a multi-tenant platform (FastAPI, Firebase, Celery workers on Cloud Run) lives in [ai-carryon-saas](https://github.com/Unknown183-a/ai-carryon-saas).
+
+---
+
+*AI CarryON — Built by Amit Kumar*
