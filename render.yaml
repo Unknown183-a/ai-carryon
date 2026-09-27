@@ -18,3 +18,13 @@ services:
       name: aicarryon-data
       mountPath: /opt/render/project/src/output
       sizeGB: 1
+
+  - type: worker
+    name: worker-bhakti
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scheduler_bhakti.py
+    disk:
+      name: aicarryon-data-bhakti
+      mountPath: /opt/render/project/src/output
+      sizeGB: 1
