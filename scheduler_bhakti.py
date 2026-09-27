@@ -197,7 +197,9 @@ def generate_and_upload_bhakti(force=False):
 
         log("Video ban raha hai...")
         from agents.video_agent import create_video
-        video = create_video(use_pexels_clips=use_pexels)
+        from agents_bhakti.music_agent import get_background_music
+        music_path = get_background_music(topic, seo["title"])
+        video = create_video(use_pexels_clips=use_pexels, music_path=music_path)
 
         log("YouTube Bhakti channel par upload ho raha hai...")
         from agents_bhakti.upload_agent import upload_video

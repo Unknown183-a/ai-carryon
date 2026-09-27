@@ -331,10 +331,11 @@ def extract_frames_from_clip(clip_path, target_fps=24):
     return duration
 
 
-def create_video(manim_path=None, use_flow_clips=False, use_pexels_clips=False):
+def create_video(manim_path=None, use_flow_clips=False, use_pexels_clips=False, music_path=None):
     audio_path = "output/voice.mp3"
     srt_path = "output/captions.srt"
-    music_path = "assets/music/background.wav"
+    if music_path is None:
+        music_path = "assets/music/background.wav"  # unchanged default for English/Hindi
 
     # Flow/Veo clips (manual Streamlit generation) — these bring their own audio.
     flow_clips = get_background_clips() if use_flow_clips else []
@@ -619,7 +620,7 @@ def _create_video_from_pexels_clips(clip_paths, audio_path, srt_path, music_path
         vf = None
 
     if has_music:
-        filter_complex = "[1:a]volume=1.0[voice];[2:a]volume=0.15[music];[voice][music]amix=inputs=2:duration=first[aout]"
+        filter_complex = "[1:a]volume=1.0[voice];[2:a]aloop=loop=-1:size=2e9,volume=0.15[music];[voice][music]amix=inputs=2:duration=first[aout]"
         cmd = [ffmpeg, "-y", "-i", silent_bg, "-i", audio_path, "-i", music_path]
         if vf:
             cmd += ["-filter_complex", filter_complex, "-vf", vf]
