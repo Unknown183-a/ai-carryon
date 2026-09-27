@@ -30,14 +30,16 @@ CC0 = 'Creative Commons 0'
 CC_BY = 'Attribution'
 
 MOOD_MAP = [
-    (["aarti", "diya", "deep"], ["temple bells", "temple ambient", "bells devotional"]),
-    (["mantra", "dhyan", "meditation", "shanti"], ["meditation drone", "tanpura", "om chant"]),
-    (["katha", "bhagwat", "pravachan", "satsang"], ["harmonium instrumental", "harmonium", "indian instrumental calm"]),
-    (["krishna", "radha", "bansuri", "flute"], ["flute instrumental indian", "bansuri", "indian flute calm"]),
-    (["shiv", "mahadev", "rudra"], ["tibetan bowl", "om chant", "meditation drone"]),
-    (["hanuman", "ram", "durga", "devi"], ["indian devotional instrumental", "temple instrumental", "indian classical calm"]),
+    (["aarti", "diya", "deep"], ["aarti chant vocal", "temple bells", "temple ambient", "bells devotional"]),
+    (["mantra", "dhyan", "meditation", "shanti"], ["om chanting vocal", "sanskrit mantra chant", "meditation drone", "tanpura"]),
+    (["katha", "bhagwat", "pravachan", "satsang"], ["kirtan vocal chant", "harmonium instrumental", "harmonium", "indian instrumental calm"]),
+    (["krishna", "radha", "bansuri", "flute"], ["krishna bhajan chant", "flute instrumental indian", "bansuri", "indian flute calm"]),
+    (["shiv", "mahadev", "rudra"], ["om namah shivaya chant", "tibetan bowl", "om chant", "meditation drone"]),
+    (["hanuman", "ram", "durga", "devi"], ["kirtan vocal chant", "indian devotional instrumental", "temple instrumental", "indian classical calm"]),
 ]
-DEFAULT_QUERIES = ["indian instrumental meditation", "calm instrumental ambient", "peaceful instrumental"]
+# Vocal-chant queries tried before pure instrumental ones, so a genuine
+# sung/chanted recording wins whenever Freesound actually has one.
+DEFAULT_QUERIES = ["sanskrit chant vocal", "kirtan chant", "indian instrumental meditation", "calm instrumental ambient", "peaceful instrumental"]
 
 
 def _pick_queries(topic: str, title: str) -> list:
