@@ -198,15 +198,30 @@ def get_trending_topic(region_code="IN"):
 
 
 def _is_devotional(snippet):
-    """Loose keyword filter so a generic search doesn't drag in unrelated
-    Hindi content — must look devotional to be considered."""
-    text = (snippet.get("title", "") + " " + snippet.get("description", "")).lower()
+    """Strict keyword filter so a generic search doesn't drag in unrelated
+    content — must look devotional to be considered. Checks the TITLE only
+    (not description, which can contain unrelated boilerplate/hashtags that
+    cause false-positive matches on totally unrelated videos)."""
+    title = snippet.get("title", "")
+    title_lower = title.lower()
+
     keywords = (
         "bhakti", "bhagwan", "mandir", "aarti", "bhajan", "katha", "shiv",
         "ram", "krishna", "hanuman", "durga", "devi", "ganesh", "mantra",
         "puja", "vrat", "temple", "god", "spiritual", "dharmik",
     )
-    return any(k in text for k in keywords)
+    if not any(k in title_lower for k in keywords):
+        return False
+
+    # Reject junk/spam titles: strip hashtags and punctuation, require at
+    # least 3 real words left so a bare "#fdccompany #bhaktistatus" style
+    # title (matched only via a stray hashtag) doesn't get chosen as a topic.
+    stripped = re.sub(r"#\S+", "", title)
+    stripped = re.sub(r"[^\w\s]", " ", stripped).strip()
+    if len(stripped.split()) < 3:
+        return False
+
+    return True
 
 
 def _fetch_live_devotional_trend(region_code, recent_used):
