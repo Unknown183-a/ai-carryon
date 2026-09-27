@@ -1,11 +1,18 @@
 """
 agents_bhakti/music_agent.py
 
-Fetches free, CC0-licensed devotional/instrumental background music from
-Freesound.org, matched to the video's topic/title by mood keyword, caches
-it locally, and returns a path ready for ffmpeg mixing.
+Fetches free, CC-licensed instrumental background music from Freesound.org,
+matched to the video's topic/title by mood keyword, with a tiered fallback
+so a niche query never comes back completely empty. Prefers CC0 (public
+domain, no attribution needed); falls back to CC-BY (needs attribution,
+which the caller should append to the video description) only if no CC0
+track is found. Caches downloads locally by search tier.
 
 Requires: FREESOUND_API_KEY (free at https://freesound.org/apiv2/apply/)
+
+Returns a dict: {"path", "license", "name", "author", "url"} or None if
+every tier fails — the caller MUST treat None as "no track available"
+and should not upload a silent video in that case.
 """
 
 import os
@@ -19,29 +26,30 @@ FREESOUND_SEARCH_URL = "https://freesound.org/apiv2/search/text/"
 CACHE_DIR = "output/music_cache"
 CACHE_INDEX = os.path.join(CACHE_DIR, "cache_index.json")
 
-# Map devotional keywords found in the topic/title to a search query that
-# tends to return the right *mood* of instrumental track on Freesound.
+CC0 = 'Creative Commons 0'
+CC_BY = 'Attribution'
+
 MOOD_MAP = [
-    (["aarti", "diya", "deep"], "temple bells ambient devotional"),
-    (["mantra", "dhyan", "meditation", "shanti"], "meditation drone tanpura"),
-    (["katha", "bhagwat", "pravachan", "satsang"], "soft harmonium instrumental"),
-    (["krishna", "radha", "bansuri", "flute"], "bansuri flute instrumental indian"),
-    (["shiv", "mahadev", "rudra"], "tibetan bowl om chant instrumental"),
-    (["hanuman", "ram", "durga", "devi"], "indian devotional instrumental temple"),
+    (["aarti", "diya", "deep"], ["temple bells", "temple ambient", "bells devotional"]),
+    (["mantra", "dhyan", "meditation", "shanti"], ["meditation drone", "tanpura", "om chant"]),
+    (["katha", "bhagwat", "pravachan", "satsang"], ["harmonium instrumental", "harmonium", "indian instrumental calm"]),
+    (["krishna", "radha", "bansuri", "flute"], ["flute instrumental indian", "bansuri", "indian flute calm"]),
+    (["shiv", "mahadev", "rudra"], ["tibetan bowl", "om chant", "meditation drone"]),
+    (["hanuman", "ram", "durga", "devi"], ["indian devotional instrumental", "temple instrumental", "indian classical calm"]),
 ]
-DEFAULT_QUERY = "indian devotional instrumental meditation"
+DEFAULT_QUERIES = ["indian instrumental meditation", "calm instrumental ambient", "peaceful instrumental"]
 
 
-def _pick_query(topic: str, title: str) -> str:
+def _pick_queries(topic: str, title: str) -> list:
     text = f"{topic} {title}".lower()
-    for keywords, query in MOOD_MAP:
+    for keywords, queries in MOOD_MAP:
         if any(kw in text for kw in keywords):
-            return query
-    return DEFAULT_QUERY
+            return queries + DEFAULT_QUERIES
+    return DEFAULT_QUERIES
 
 
-def _cache_key(query: str) -> str:
-    return hashlib.md5(query.encode("utf-8")).hexdigest()
+def _cache_key(query: str, license_name: str) -> str:
+    return hashlib.md5(f"{query}|{license_name}".encode("utf-8")).hexdigest()
 
 
 def _load_cache_index() -> dict:
@@ -57,113 +65,85 @@ def _save_cache_index(index: dict):
         json.dump(index, f)
 
 
-def get_background_music(topic: str, title: str, min_duration: float = 20.0):
-    """
-    Returns a local file path to a CC0 instrumental track matched to the
-    topic/title mood, or None if unavailable (caller should skip music
-    gracefully rather than fail the pipeline).
-    """
-    if not FREESOUND_API_KEY:
-        print("[music_agent:bhakti] FREESOUND_API_KEY not set — skipping background music")
-        return None
+def _search_one(query: str, license_name: str, min_duration: float):
+    resp = requests.get(
+        FREESOUND_SEARCH_URL,
+        params={
+            "query": query,
+            "token": FREESOUND_API_KEY,
+            "filter": f'license:"{license_name}" duration:[{min_duration} TO 400]',
+            "fields": "id,name,previews,duration,license,username,url",
+            "sort": "rating_desc",
+            "page_size": 5,
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json().get("results", [])
 
-    query = _pick_query(topic, title)
-    key = _cache_key(query)
-    index = _load_cache_index()
 
-    # Serve from cache if we already downloaded this mood
-    if key in index and os.path.exists(index[key]):
-        print(f"[music_agent:bhakti] Using cached track for mood '{query}'")
-        return index[key]
-
-    print(f"[music_agent:bhakti] Searching Freesound for: {query}")
-    try:
-        resp = requests.get(
-            FREESOUND_SEARCH_URL,
-            params={
-                "query": query,
-                "token": FREESOUND_API_KEY,
-                "filter": f'license:"Creative Commons 0" duration:[{min_duration} TO 400]',
-                "fields": "id,name,previews,duration,license",
-                "sort": "rating_desc",
-                "page_size": 5,
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        results = resp.json().get("results", [])
-    except Exception as e:
-        print(f"[music_agent:bhakti] Freesound search failed: {e}")
-        return None
-
-    if not results:
-        print(f"[music_agent:bhakti] No CC0 results for '{query}' — trying default query")
-        if query != DEFAULT_QUERY:
-            return get_background_music_by_query(DEFAULT_QUERY, min_duration)
-        return None
-
-    track = results[0]
+def _download(track: dict, key: str) -> str:
     preview_url = track.get("previews", {}).get("preview-hq-mp3")
     if not preview_url:
-        print("[music_agent:bhakti] Selected track has no downloadable preview — skipping")
         return None
-
     os.makedirs(CACHE_DIR, exist_ok=True)
     safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", track["name"])[:40]
     local_path = os.path.join(CACHE_DIR, f"{key}_{safe_name}.mp3")
-
-    try:
-        audio_resp = requests.get(preview_url, timeout=20)
-        audio_resp.raise_for_status()
-        with open(local_path, "wb") as f:
-            f.write(audio_resp.content)
-    except Exception as e:
-        print(f"[music_agent:bhakti] Download failed: {e}")
-        return None
-
-    index[key] = local_path
-    _save_cache_index(index)
-    print(f"[music_agent:bhakti] Downloaded '{track['name']}' (CC0) -> {local_path}")
+    audio_resp = requests.get(preview_url, timeout=20)
+    audio_resp.raise_for_status()
+    with open(local_path, "wb") as f:
+        f.write(audio_resp.content)
     return local_path
 
 
-def get_background_music_by_query(query: str, min_duration: float):
-    """Fallback helper used when the mood-specific search returns nothing."""
-    key = _cache_key(query)
-    index = _load_cache_index()
-    if key in index and os.path.exists(index[key]):
-        return index[key]
-    try:
-        resp = requests.get(
-            FREESOUND_SEARCH_URL,
-            params={
-                "query": query,
-                "token": FREESOUND_API_KEY,
-                "filter": f'license:"Creative Commons 0" duration:[{min_duration} TO 400]',
-                "fields": "id,name,previews,duration,license",
-                "sort": "rating_desc",
-                "page_size": 5,
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        results = resp.json().get("results", [])
-        if not results:
-            return None
-        track = results[0]
-        preview_url = track.get("previews", {}).get("preview-hq-mp3")
-        if not preview_url:
-            return None
-        os.makedirs(CACHE_DIR, exist_ok=True)
-        safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", track["name"])[:40]
-        local_path = os.path.join(CACHE_DIR, f"{key}_{safe_name}.mp3")
-        audio_resp = requests.get(preview_url, timeout=20)
-        audio_resp.raise_for_status()
-        with open(local_path, "wb") as f:
-            f.write(audio_resp.content)
-        index[key] = local_path
-        _save_cache_index(index)
-        return local_path
-    except Exception as e:
-        print(f"[music_agent:bhakti] Fallback search failed: {e}")
+def get_background_music(topic: str, title: str, min_duration: float = 20.0):
+    if not FREESOUND_API_KEY:
+        print("[music_agent:bhakti] FREESOUND_API_KEY not set — cannot fetch music")
         return None
+
+    queries = _pick_queries(topic, title)
+    index = _load_cache_index()
+
+    for license_name in (CC0, CC_BY):
+        for query in queries:
+            key = _cache_key(query, license_name)
+
+            if key in index and os.path.exists(index[key]["path"]):
+                cached = index[key]
+                print(f"[music_agent:bhakti] Using cached track for '{query}' ({license_name})")
+                return cached
+
+            print(f"[music_agent:bhakti] Searching Freesound: '{query}' ({license_name})")
+            try:
+                results = _search_one(query, license_name, min_duration)
+            except Exception as e:
+                print(f"[music_agent:bhakti] Search failed for '{query}': {e}")
+                continue
+
+            if not results:
+                continue
+
+            track = results[0]
+            try:
+                local_path = _download(track, key)
+            except Exception as e:
+                print(f"[music_agent:bhakti] Download failed: {e}")
+                continue
+
+            if not local_path:
+                continue
+
+            record = {
+                "path": local_path,
+                "license": license_name,
+                "name": track.get("name", "Unknown"),
+                "author": track.get("username", "Unknown"),
+                "url": track.get("url", ""),
+            }
+            index[key] = record
+            _save_cache_index(index)
+            print(f"[music_agent:bhakti] Found '{track.get('name')}' by {track.get('username')} ({license_name})")
+            return record
+
+    print("[music_agent:bhakti] Exhausted all queries and licenses — no track found")
+    return None

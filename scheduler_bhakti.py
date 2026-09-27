@@ -187,19 +187,20 @@ def generate_and_upload_bhakti(force=False):
             log(f"Images nahi bani: {errors}")
             return
 
-        log("Bhakti awaaz generate ho rahi hai...")
-        from agents_bhakti.voice_agent import generate_voice
-        voice = generate_voice(script)
-
-        log("Captions ban rahe hain...")
-        from agents.caption_agent import create_srt
-        create_srt(script, voice)
-
-        log("Video ban raha hai...")
-        from agents.video_agent import create_video
+        log("Bhakti background music dhoond rahe hain...")
         from agents_bhakti.music_agent import get_background_music
-        music_path = get_background_music(topic, seo["title"])
-        video = create_video(use_pexels_clips=use_pexels, music_path=music_path)
+        music = get_background_music(topic, seo["title"])
+        if not music:
+            raise RuntimeError("No background music track found — aborting rather than uploading a silent video")
+        if music["license"] != "Creative Commons 0":
+            seo["description"] += (
+                f"\n\nMusic: \"{music['name']}\" by {music['author']} "
+                f"({music['license']}) - {music['url']}"
+            )
+
+        log("Video ban raha hai (music-only, no narration)...")
+        from agents_bhakti.silent_video_agent import create_silent_music_video
+        video = create_silent_music_video(music_path=music["path"])
 
         log("YouTube Bhakti channel par upload ho raha hai...")
         from agents_bhakti.upload_agent import upload_video
