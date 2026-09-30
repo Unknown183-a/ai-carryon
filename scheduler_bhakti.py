@@ -12,6 +12,10 @@ LOG_FILE = "output/scheduler_bhakti_log.txt"
 # How many videos per day to aim for (fully adaptive)
 VIDEOS_PER_DAY = int(os.environ.get("BHAKTI_VIDEOS_PER_DAY", "6"))
 
+# "narrated" (default): Hindi voiceover + captions over a ducked bhajan track.
+# "music_only": previous behaviour (no voice, no captions, bhajan only).
+BHAKTI_MODE = os.environ.get("BHAKTI_MODE", "narrated").lower()
+
 
 def log(message):
     os.makedirs("output", exist_ok=True)
@@ -198,9 +202,26 @@ def generate_and_upload_bhakti(force=False):
                 f"({music['license']}) - {music['url']}"
             )
 
-        log("Video ban raha hai (music-only, no narration)...")
-        from agents_bhakti.silent_video_agent import create_silent_music_video
-        video = create_silent_music_video(music_path=music["path"])
+        if BHAKTI_MODE == "music_only":
+            log("Video ban raha hai (music-only, no narration)...")
+            from agents_bhakti.silent_video_agent import create_silent_music_video
+            video = create_silent_music_video(music_path=music["path"])
+        else:
+            log("Hindi bhakti awaaz generate ho rahi hai...")
+            from agents_bhakti.voice_agent import generate_voice
+            voice = generate_voice(script)
+
+            log("Captions ban rahe hain...")
+            from agents.caption_agent import create_srt
+            create_srt(script, voice)
+
+            log("Video ban raha hai (voiceover + bhajan background)...")
+            if use_pexels:
+                from agents_bhakti.narrated_video_agent import create_narrated_music_video
+                video = create_narrated_music_video(music_path=music["path"], audio_path=voice)
+            else:
+                from agents.video_agent import create_video
+                video = create_video(use_pexels_clips=False, music_path=music["path"])
 
         log("YouTube Bhakti channel par upload ho raha hai...")
         from agents_bhakti.upload_agent import upload_video
