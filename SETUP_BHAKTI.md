@@ -124,3 +124,45 @@ voice -> video -> upload) works end-to-end before leaving it on a cron.
   copyrighted bhajans, songs, or footage from other channels. Keep it
   that way if you extend it (e.g. don't wire in real bhajan audio tracks
   without proper licensing).
+
+## Pipeline v2 (cinematic, scene-planned)
+
+Implements `BHAKTI_PIPELINE_IMPLEMENTATION.md`. Enabled by default; set
+`BHAKTI_PIPELINE=legacy` to use the original renderer. If v2 errors at any
+stage the scheduler falls back to legacy automatically — **except** when
+the QA gate rejects a finished video, which is never uploaded.
+
+```
+trending -> saturation -> comparison
+  -> bhakti_research_agent   structured JSON (deity, event, key_visuals...)
+  -> bhakti_story_agent      Devanagari script, hook/setup/conflict/divine/resolution/ending
+  -> bhakti_retention_agent  heuristic + LLM scores, regenerates once if rejected
+  -> bhakti_scene_agent      5-8 scenes, 3-5 Pexels queries each, camera/mood/sfx
+  -> (A/B title, SEO, thumbnail: unchanged)
+  -> bhakti_voice_agent      per-scene TTS with direction, silence trim, EQ/compress/loudnorm
+  -> bhakti_visual_agent     multi-query Pexels search, filter+rank, no repeats (tracked across videos)
+  -> bhakti_music_agent      deity-aware pick, avoids recent tracks, per-scene music gain timeline
+  -> bhakti_sfx_agent        CC0 Freesound SFX synced to scene starts (optional)
+  -> bhakti_audio_agent      voice > music (sidechain duck) > SFX, limiter, -14 LUFS
+  -> bhakti_caption_agent    2-3 word Devanagari phrases, emphasis, fade/scale entrance
+  -> bhakti_video_agent      crop + camera move + warm grade + vignette, crossfades, 1080x1920/30fps
+  -> bhakti_qa_agent         visual/voice/audio/caption/technical/story scores; swaps only failed scenes
+  -> upload
+```
+
+New environment variables (all optional):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `BHAKTI_PIPELINE` | `v2` | `legacy` restores the old renderer |
+| `BHAKTI_QA_THRESHOLD` | `7` | Minimum score per QA category (spec suggests 8; calibrate) |
+| `BHAKTI_ENFORCE_QA_GATE` | `true` | `false` = log QA failures but still upload |
+| `BHAKTI_RETENTION_THRESHOLD` | `7` | Minimum average story score |
+| `BHAKTI_MAX_STORY_ATTEMPTS` | `2` | Story regenerations on retention failure |
+| `BHAKTI_MAX_REPAIR_ROUNDS` | `1` | Scene-level re-render rounds after QA |
+| `BHAKTI_ALLOW_AI_DEITY` | `false` | Reserved for the spec's hybrid AI-visual step (not implemented; see below) |
+| `BHAKTI_CRF`, `BHAKTI_PRESET` | `21`, `veryfast` | Render quality/speed |
+| `BHAKTI_VOICE_REVERB` | `1` | Very light temple-room tail on narration |
+
+Captions need a Devanagari font: the workflow and Dockerfile now install
+`fonts-noto-core`. Tests: `python -m unittest tests.test_bhakti_pipeline`.

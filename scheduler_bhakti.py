@@ -16,6 +16,11 @@ VIDEOS_PER_DAY = int(os.environ.get("BHAKTI_VIDEOS_PER_DAY", "6"))
 # "music_only": previous behaviour (no voice, no captions, bhajan only).
 BHAKTI_MODE = os.environ.get("BHAKTI_MODE", "narrated").lower()
 
+# "v2" (default): scene-planned, cinematic pipeline (agents_bhakti/bhakti_pipeline.py,
+# see BHAKTI_PIPELINE_IMPLEMENTATION.md). "legacy": the original research -> script ->
+# 4 Pexels clips -> narrated render. v2 falls back to legacy automatically if it errors.
+BHAKTI_PIPELINE = os.environ.get("BHAKTI_PIPELINE", "v2").lower()
+
 
 def log(message):
     os.makedirs("output", exist_ok=True)
@@ -148,14 +153,27 @@ def generate_and_upload_bhakti(force=False):
             log(f"Comparison skip: {ce}")
             comparison_insights = {}
 
-        log("Devotional research ho raha hai...")
-        from agents_bhakti.research_agent import research
-        research_data = research(topic)
+        job = None
+        use_v2 = BHAKTI_PIPELINE == "v2" and BHAKTI_MODE != "music_only"
+        if use_v2:
+            try:
+                log("Bhakti v2: research + story + retention + scene plan...")
+                from agents_bhakti.bhakti_pipeline import build_story_job
+                job = build_story_job(topic, comparison_insights, log=log)
+                script = job.script
+            except Exception as ve:
+                log(f"Bhakti v2 story stage failed ({ve}) — falling back to legacy script")
+                job = None
 
-        log("Bhakti script ban rahi hai...")
-        from agents_bhakti.script_agent import create_script
-        script = create_script(research_data, topic=topic,
-                               comparison_insights=comparison_insights)
+        if job is None:
+            log("Devotional research ho raha hai...")
+            from agents_bhakti.research_agent import research
+            research_data = research(topic)
+
+            log("Bhakti script ban rahi hai...")
+            from agents_bhakti.script_agent import create_script
+            script = create_script(research_data, topic=topic,
+                                   comparison_insights=comparison_insights)
 
         log("A/B title testing ho raha hai...")
         ab_winner_title = None
@@ -178,50 +196,79 @@ def generate_and_upload_bhakti(force=False):
         from agents_bhakti.thumbnail_agent import generate_thumbnail
         thumbnail = generate_thumbnail(seo["title"], topic)
 
-        log("Pexels devotional video clips fetch ho rahe hain...")
-        from agents_bhakti.image_agent import generate_background_clips, generate_backgrounds
-        image_paths, errors = generate_background_clips(topic, script, num_clips=4)
-        if len(image_paths) < 2:
-            log(f"Bahut kam Pexels clips mile ({errors}) — static images par fallback ho raha hai...")
-            image_paths, errors = generate_backgrounds(topic, script, num_images=4)
-            use_pexels = False
-        else:
-            use_pexels = True
-        if not image_paths:
-            log(f"Images nahi bani: {errors}")
-            return
+        video = None
+        if job is not None:
+            try:
+                from agents_bhakti.bhakti_pipeline import build_video, QAGateFailed
+                job = build_video(job, log=log, title=seo["title"])
+                video = job.final_video
+                music = job.music
+                if music and music["license"] != "Creative Commons 0":
+                    seo["description"] += (
+                        f"\n\nMusic: \"{music['name']}\" by {music['author']} "
+                        f"({music['license']}) - {music['url']}"
+                    )
+                log(f"Bhakti v2 render OK — QA scores: {job.qa.get('scores')}")
+            except QAGateFailed as qe:
+                log(f"Upload skipped — {qe}")
+                return
+            except Exception as ve:
+                log(f"Bhakti v2 render failed ({ve}) — falling back to legacy renderer")
+                video = None
 
-        log("Bhakti background music dhoond rahe hain...")
-        from agents_bhakti.music_agent import get_background_music
-        music = get_background_music(topic, seo["title"])
-        if not music:
-            raise RuntimeError("No background music track found — aborting rather than uploading a silent video")
-        if music["license"] != "Creative Commons 0":
-            seo["description"] += (
-                f"\n\nMusic: \"{music['name']}\" by {music['author']} "
-                f"({music['license']}) - {music['url']}"
-            )
-
-        if BHAKTI_MODE == "music_only":
-            log("Video ban raha hai (music-only, no narration)...")
-            from agents_bhakti.silent_video_agent import create_silent_music_video
-            video = create_silent_music_video(music_path=music["path"])
-        else:
-            log("Hindi bhakti awaaz generate ho rahi hai...")
-            from agents_bhakti.voice_agent import generate_voice
-            voice = generate_voice(script)
-
-            log("Captions ban rahe hain...")
-            from agents.caption_agent import create_srt
-            create_srt(script, voice)
-
-            log("Video ban raha hai (voiceover + bhajan background)...")
-            if use_pexels:
-                from agents_bhakti.narrated_video_agent import create_narrated_music_video
-                video = create_narrated_music_video(music_path=music["path"], audio_path=voice)
+        if video is None:
+            log("Pexels devotional video clips fetch ho rahe hain...")
+            from agents_bhakti.image_agent import generate_background_clips, generate_backgrounds
+            image_paths, errors = generate_background_clips(topic, script, num_clips=4)
+            if len(image_paths) < 2:
+                log(f"Bahut kam Pexels clips mile ({errors}) — static images par fallback ho raha hai...")
+                image_paths, errors = generate_backgrounds(topic, script, num_images=4)
+                use_pexels = False
             else:
-                from agents.video_agent import create_video
-                video = create_video(use_pexels_clips=False, music_path=music["path"])
+                use_pexels = True
+            if not image_paths:
+                log(f"Images nahi bani: {errors}")
+                return
+
+            log("Bhakti background music dhoond rahe hain...")
+            from agents_bhakti.music_agent import get_background_music
+            music = get_background_music(topic, seo["title"])
+            if not music:
+                raise RuntimeError("No background music track found — aborting rather than uploading a silent video")
+            if music["license"] != "Creative Commons 0":
+                seo["description"] += (
+                    f"\n\nMusic: \"{music['name']}\" by {music['author']} "
+                    f"({music['license']}) - {music['url']}"
+                )
+
+            if BHAKTI_MODE == "music_only":
+                log("Video ban raha hai (music-only, no narration)...")
+                from agents_bhakti.silent_video_agent import create_silent_music_video
+                video = create_silent_music_video(music_path=music["path"])
+            else:
+                log("Hindi bhakti awaaz generate ho rahi hai...")
+                from agents_bhakti.voice_agent import generate_voice
+                voice = generate_voice(script)
+
+                log("Captions ban rahe hain...")
+                from agents.caption_agent import create_srt
+                create_srt(script, voice)
+                try:  # legacy captions use DejaVu, which has no Devanagari glyphs
+                    if any("\u0900" <= c <= "\u097f" for c in script):
+                        with open("output/captions.ass", encoding="utf-8") as cf:
+                            ass = cf.read().replace("DejaVu Sans Bold", "Noto Sans Devanagari")
+                        with open("output/captions.ass", "w", encoding="utf-8") as cf:
+                            cf.write(ass)
+                except Exception as fe:
+                    log(f"Caption font patch skipped: {fe}")
+
+                log("Video ban raha hai (voiceover + bhajan background)...")
+                if use_pexels:
+                    from agents_bhakti.narrated_video_agent import create_narrated_music_video
+                    video = create_narrated_music_video(music_path=music["path"], audio_path=voice)
+                else:
+                    from agents.video_agent import create_video
+                    video = create_video(use_pexels_clips=False, music_path=music["path"])
 
         log("YouTube Bhakti channel par upload ho raha hai...")
         from agents_bhakti.upload_agent import upload_video
