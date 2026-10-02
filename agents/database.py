@@ -189,6 +189,34 @@ class Database:
                     value  TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS comment_history (
+                    comment_id        TEXT PRIMARY KEY,
+                    channel           TEXT DEFAULT 'english',
+                    video_id          TEXT,
+                    username          TEXT,
+                    original_comment  TEXT,
+                    category          TEXT,
+                    generated_reply   TEXT,
+                    status            TEXT DEFAULT 'replied',
+                    attempts          INTEGER DEFAULT 0,
+                    last_error        TEXT,
+                    timestamp         TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS topic_requests (
+                    {id_col},
+                    channel     TEXT DEFAULT 'english',
+                    topic       TEXT,
+                    comment     TEXT,
+                    video_id    TEXT,
+                    timestamp   TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_comment_history_channel
+                    ON comment_history(channel, timestamp);
+                CREATE INDEX IF NOT EXISTS idx_topic_requests_channel
+                    ON topic_requests(channel, timestamp);
+
                 CREATE INDEX IF NOT EXISTS idx_snapshots_video_id
                     ON snapshots(video_id);
                 CREATE INDEX IF NOT EXISTS idx_snapshots_timestamp
@@ -682,6 +710,74 @@ class Database:
                 """, (actual_views, closed_at, test_id))
         except Exception as e:
             print(f"close_ab_test error: {e}")
+
+
+    # ── Comment replies (English / Hindi; partitioned by channel) ────────
+    # Replaces output/comment_history*.json and output/topic_requests*.json,
+    # which were wiped on every GitHub Actions run.
+
+    def get_comments(self, comment_ids):
+        """{comment_id: {"status":..., "attempts":...}} for the ids we know."""
+        ids = [c for c in comment_ids if c]
+        if not ids:
+            return {}
+        placeholders = ",".join("?" for _ in ids)
+        with self._conn() as conn:
+            rows = conn.execute(
+                f"SELECT comment_id, status, attempts FROM comment_history "
+                f"WHERE comment_id IN ({placeholders})", tuple(ids)
+            ).fetchall()
+            return {r["comment_id"]: {"status": r["status"], "attempts": r["attempts"] or 0}
+                    for r in rows}
+
+    def upsert_comment(self, comment_id, channel, video_id, username, original_comment,
+                       category, generated_reply, status, attempts=0, last_error=None):
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO comment_history
+                (comment_id, channel, video_id, username, original_comment, category,
+                 generated_reply, status, attempts, last_error, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(comment_id) DO UPDATE SET
+                    category = excluded.category,
+                    generated_reply = excluded.generated_reply,
+                    status = excluded.status,
+                    attempts = excluded.attempts,
+                    last_error = excluded.last_error,
+                    timestamp = excluded.timestamp
+            """, (comment_id, channel, video_id, username, original_comment, category,
+                  generated_reply, status, attempts, last_error, now))
+
+    def get_comment_history(self, channel=None, limit=200):
+        query = "SELECT * FROM comment_history"
+        params = []
+        if channel:
+            query += " WHERE channel = ?"
+            params.append(channel)
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+        with self._conn() as conn:
+            return [dict(r) for r in conn.execute(query, tuple(params)).fetchall()]
+
+    def save_topic_request(self, channel, topic, comment, video_id):
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO topic_requests (channel, topic, comment, video_id, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            """, (channel, topic, comment, video_id, now))
+
+    def get_topic_requests(self, channel=None, limit=100):
+        query = "SELECT * FROM topic_requests"
+        params = []
+        if channel:
+            query += " WHERE channel = ?"
+            params.append(channel)
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+        with self._conn() as conn:
+            return [dict(r) for r in conn.execute(query, tuple(params)).fetchall()]
 
 
 # Singleton instance

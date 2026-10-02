@@ -16,6 +16,8 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 SCOPES_READ = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    # Needed by the comment-reply agent (reading threads + posting replies).
+    "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
 
 

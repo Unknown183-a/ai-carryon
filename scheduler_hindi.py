@@ -260,21 +260,13 @@ def track_views_hindi_job():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-def is_comment_reply_hour():
-    """Comment replies run once a day, near 7PM IST. Hourly cron only fires
-    on the UTC hour, and IST is UTC+5:30, so the nearest reachable slot is
-    the run whose IST time falls in the 19:xx hour (UTC 14:00 -> 19:30 IST)."""
-    ist_now = datetime.datetime.utcnow() + datetime.timedelta(hours=5, minutes=30)
-    return ist_now.hour == 19
-
-
 def comment_reply_job_hindi():
-    if not is_comment_reply_hour():
-        log("Not the daily comment-reply hour (~7PM IST) — skipping comment replies this run")
-        return
+    """Daily comment replies (19:00-23:59 IST, once per IST day — the gate and
+    the once-a-day bookkeeping live in agents/comment_engine.py and use the
+    shared database). Never raises."""
     try:
-        from agents_hindi.comment_reply_agent import process_comments_hindi
-        process_comments_hindi(log_fn=log)
+        from agents_hindi.comment_reply_agent import run_scheduled
+        run_scheduled(log_fn=log)
     except Exception as e:
         log(f"Comment reply job error: {e}")
 
@@ -293,6 +285,8 @@ def main():
 
     track_views_hindi_job()
     comment_reply_job_hindi()
+    # Fresh Groq budget for generation (the comment job shares it).
+    reset_groq_budget()
 
     if os.environ.get("FORCE_GENERATE", "false").lower() == "true":
         generate_and_upload_hindi(force=True)

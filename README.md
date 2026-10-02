@@ -159,11 +159,32 @@ All four pipelines deploy the same way: push to `main`, and the scheduled workfl
 - **Sarvam text limits**: long scripts come back as multiple audio chunks, so always concatenate every returned segment.
 - **Flow/Veo clips**: an optional manual mode for cinematic clips exists in the English and Hindi agents (`flow_prompt_agent.py`), but the automated pipelines use Pexels or Twitch footage. Real brand names in clip prompts can trigger Flow's policy filter.
 
+## Comment Reply Agent
+
+One shared engine (`agents/comment_engine.py`) with thin per-channel wrappers
+(`comment_reply_agent.py` in `agents/`, `agents_hindi/`, `agents_cricket/`). English and Hindi run it from
+their scheduler once per IST day (any time 19:00-23:59 IST, tracked in the DB so a late GitHub cron still
+counts); Cricket runs it from its own `14:00 UTC` cron (`--comments`).
+
+- One LLM call per comment returns category + reply + topic. Spam/Offensive are never answered.
+- State lives in the database (`comment_history`, `topic_requests`; cricket: `cricket_comment_history`,
+  `cricket_match_requests`), not `output/*.json`, which Actions wipes every run.
+- A comment is only finished once the reply is posted, deliberately skipped, or failed permanently. LLM/API
+  hiccups are retried on the next run (3 attempts).
+- A missing `youtube.force-ssl` scope, expired token or exhausted quota aborts the run with the fix in the log.
+- Skips the channel's own comments and threads that already have a reply; never posts links or @mentions.
+- Per-run caps: 25 replies, 15 minutes, newest 250 threads.
+- `COMMENT_AUTO_REPLY=false` is a dry run (drafts stored, nothing posted); `COMMENT_FORCE=true` ignores the
+  window. Both are inputs on the English/Hindi/Cricket workflows' manual "Run workflow" button.
+- Tokens must include `youtube.force-ssl`: `generate_english_token.py`, `generate_hindi_token_v3.py`,
+  `generate_cricket_token.py` (the old cricket token cannot post; regenerate it).
+- Tests: `python -m unittest tests.test_comment_engine -v`
+
 ## Known Limitations
 
 - Sarvam Hindi TTS currently errors on `target_language_code` and falls back to Edge TTS
 - Custom thumbnail upload is blocked by a 403 on some channels (likely requires channel phone verification)
-- The comment-reply agent needs the `youtube.force-ssl` OAuth scope
+- The comment-reply agent needs the `youtube.force-ssl` OAuth scope (see the Comment Reply Agent section); Gaming and Bhakti have no comment agent yet
 - Saturation gating is not bypassed by `FORCE_GENERATE` (only the schedule-hour gate is)
 
 ---

@@ -349,6 +349,19 @@ class CricketDatabase:
             ).fetchone()
             return row is not None
 
+    def get_processed_comment_ids(self, comment_ids):
+        """Subset of comment_ids already in cricket_comment_history (one query)."""
+        ids = [c for c in comment_ids if c]
+        if not ids:
+            return set()
+        placeholders = ",".join("?" for _ in ids)
+        with self._conn() as conn:
+            rows = conn.execute(
+                f"SELECT comment_id FROM cricket_comment_history "
+                f"WHERE comment_id IN ({placeholders})", tuple(ids)
+            ).fetchall()
+            return {r["comment_id"] for r in rows}
+
     def save_comment_history(self, comment_id, video_id, username, original_comment,
                               category, generated_reply):
         with self._conn() as conn:

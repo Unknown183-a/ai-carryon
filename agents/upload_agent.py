@@ -54,6 +54,33 @@ def authenticate_youtube():
     return youtube
 
 
+def authenticate_youtube_headless():
+    """Non-interactive variant of authenticate_youtube() for CI/cron use.
+
+    authenticate_youtube() falls back to InstalledAppFlow.run_local_server()
+    when the token is missing or can't be refreshed. On a GitHub Actions
+    runner that blocks forever waiting for a browser, which would stall the
+    whole scheduler run. Anything that runs unattended (e.g. the comment
+    agent) should use this instead: it either returns a working client or
+    raises immediately with a clear message."""
+    creds = None
+    token_b64 = os.getenv("YOUTUBE_TOKEN_B64")
+    if token_b64:
+        creds = pickle.loads(base64.b64decode(token_b64))
+    elif os.path.exists("token.pickle"):
+        with open("token.pickle", "rb") as token:
+            creds = pickle.load(token)
+
+    if not creds:
+        raise RuntimeError("No English YouTube token found (set YOUTUBE_TOKEN_B64)")
+    if not creds.valid:
+        if creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            raise RuntimeError("English YouTube token is invalid and has no refresh token (invalid_grant)")
+    return build("youtube", "v3", credentials=creds)
+
+
 def upload_thumbnail(youtube, video_id, thumbnail_path):
     try:
         youtube.thumbnails().set(

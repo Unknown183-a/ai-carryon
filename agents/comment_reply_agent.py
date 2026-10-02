@@ -1,392 +1,51 @@
 # agents/comment_reply_agent.py
 """
-Comment Reply Agent — fetches new YouTube comments, classifies them,
-generates human-sounding replies, and (optionally) publishes them.
+Comment Reply Agent — English channel.
 
-Reuses the existing authenticated YouTube client from agents.upload_agent —
-no duplicate OAuth flow. Reuses the existing Groq LLM setup pattern already
-used elsewhere in this codebase (agents/ab_title_agent.py, agents/script_agent.py).
-
-Does not modify any existing agent or scheduler. Pluggable standalone:
+Thin wrapper around agents/comment_engine.py (shared by every channel).
+All the logic (fetch, classify+reply in one LLM call, sanitise, publish,
+retry/persist, daily window) lives in the engine.
 
     from agents.comment_reply_agent import process_comments
-    process_comments()
+    process_comments()                  # run now, ignoring the daily window
 
-Config:
-    AUTO_REPLY = False -> only generate + save replies locally, don't publish
-    AUTO_REPLY = True   -> also publish replies to YouTube via the API
+    from agents.comment_reply_agent import run_scheduled
+    run_scheduled(log_fn=log)           # what scheduler.py calls (gated)
+
+Config (env):
+    COMMENT_AUTO_REPLY=false   dry run: draft + store replies, don't publish
+    COMMENT_FORCE=true         bypass the 19:00-23:59 IST once-a-day window
+
+Requires an OAuth token with youtube.force-ssl (see generate_english_token.py).
 """
 
-import os
-import json
-import datetime
-from dotenv import load_dotenv
+from agents import comment_engine as ce
 
-load_dotenv()
-
-# ─────────────────────────────────────────────
-# Config
-# ─────────────────────────────────────────────
-
-AUTO_REPLY = True   # flip to True to actually publish replies to YouTube
-
-COMMENT_HISTORY_FILE = "output/comment_history.json"
-TOPIC_REQUESTS_FILE = "output/topic_requests.json"
-
-MAX_REPLY_WORDS = 40
-
-VALID_CATEGORIES = [
-    "Question", "Appreciation", "Suggestion", "Criticism",
-    "AI Related", "Spam", "Offensive", "Other",
-]
-
-NO_REPLY_CATEGORIES = {"Spam", "Offensive"}
+CHANNEL = "english"
+TOKEN_HINT = ("Run `python generate_english_token.py` locally (scopes: youtube.upload + "
+              "youtube.force-ssl) and update the YOUTUBE_TOKEN_B64 secret.")
 
 
-# ─────────────────────────────────────────────
-# Local storage helpers
-# ─────────────────────────────────────────────
-
-def _load_json(path):
-    if os.path.exists(path):
-        try:
-            with open(path, "r") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
-            return []
-    return []
-
-
-def _save_json(path, data):
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-
-def _already_processed_ids():
-    history = _load_json(COMMENT_HISTORY_FILE)
-    return {entry.get("comment_id") for entry in history if entry.get("comment_id")}
-
-
-def save_comment_history(comment_id, video_id, username, original_comment,
-                          category, generated_reply):
-    """Append a processed comment record to output/comment_history.json."""
-    history = _load_json(COMMENT_HISTORY_FILE)
-    history.append({
-        "comment_id": comment_id,
-        "video_id": video_id,
-        "username": username,
-        "original_comment": original_comment,
-        "category": category,
-        "generated_reply": generated_reply,
-        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-    })
-    _save_json(COMMENT_HISTORY_FILE, history)
-
-
-def save_topic_request(topic, comment, video_id):
-    """Append a video-topic suggestion to output/topic_requests.json."""
-    requests_list = _load_json(TOPIC_REQUESTS_FILE)
-    requests_list.append({
-        "topic": topic,
-        "comment": comment,
-        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "video_id": video_id,
-    })
-    _save_json(TOPIC_REQUESTS_FILE, requests_list)
-
-
-# ─────────────────────────────────────────────
-# YouTube fetch / publish (reuses existing auth)
-# ─────────────────────────────────────────────
-
-def fetch_new_comments(max_results=50):
-    """
-    Fetch recent top-level comment threads across the authenticated channel,
-    skipping any comment_id already present in comment_history.json.
-    Returns empty list on 403 insufficientPermissions (missing scope).
-
-    Returns a list of dicts:
-        {comment_id, video_id, username, text}
-    """
-    from agents.upload_agent import authenticate_youtube
-
-    youtube = authenticate_youtube()
-    already_seen = _already_processed_ids()
-
-    try:
-        channel_response = youtube.channels().list(part="id", mine=True).execute()
-    except Exception as e:
-        err_str = str(e)
-        if "insufficientPermissions" in err_str or "403" in err_str:
-            print(f"[comment_reply_agent] Skipping — insufficient OAuth scope for comments: {err_str[:120]}")
-            return []
-        raise
-    items = channel_response.get("items", [])
-    if not items:
-        print("[comment_reply_agent] Could not resolve channel id — skipping fetch")
-        return []
-    channel_id = items[0]["id"]
-
-    fetched = []
-    page_token = None
-
-    try:
-        while len(fetched) < max_results:
-            response = youtube.commentThreads().list(
-                part="snippet",
-                allThreadsRelatedToChannelId=channel_id,
-                maxResults=min(50, max_results - len(fetched)),
-                order="time",
-                pageToken=page_token,
-                textFormat="plainText",
-            ).execute()
-
-            for item in response.get("items", []):
-                top_comment = item["snippet"]["topLevelComment"]
-                comment_id = top_comment["id"]
-
-                if comment_id in already_seen:
-                    continue
-
-                # Skip if this thread already has ANY reply — whether posted
-                # manually by the channel owner or by someone else. We only
-                # want to act on genuinely untouched comments.
-                reply_count = item["snippet"].get("totalReplyCount", 0)
-                if reply_count > 0:
-                    continue
-
-                snippet = top_comment["snippet"]
-                fetched.append({
-                    "comment_id": comment_id,
-                    "video_id": snippet.get("videoId", ""),
-                    "username": snippet.get("authorDisplayName", "unknown"),
-                    "text": snippet.get("textOriginal", snippet.get("textDisplay", "")),
-                })
-
-            page_token = response.get("nextPageToken")
-            if not page_token:
-                break
-
-    except Exception as e:
-        print(f"[comment_reply_agent] Error fetching comments: {e}")
-
-    print(f"[comment_reply_agent] Fetched {len(fetched)} new comment(s)")
-    return fetched
-
-
-def publish_reply(comment_id, reply_text):
-    """Publish a reply to a specific top-level comment via the YouTube API."""
-    from agents.upload_agent import authenticate_youtube
-
-    try:
-        youtube = authenticate_youtube()
-        youtube.comments().insert(
-            part="snippet",
-            body={
-                "snippet": {
-                    "parentId": comment_id,
-                    "textOriginal": reply_text,
-                }
-            },
-        ).execute()
-        print(f"[comment_reply_agent] Reply published for comment {comment_id}")
-        return True
-    except Exception as e:
-        print(f"[comment_reply_agent] Failed to publish reply for {comment_id}: {e}")
-        return False
-
-
-# ─────────────────────────────────────────────
-# LLM classification + reply generation
-# ─────────────────────────────────────────────
-
-def classify_comment(comment_text):
-    """
-    Classify a comment into one of VALID_CATEGORIES using the LLM.
-    Falls back to 'Other' on any parsing/LLM failure — never crashes the
-    caller, never invents a category outside the fixed list.
-    Routed through model_invoke_agent_english — shares the run's Groq
-    budget/circuit breaker and falls back to Gemini automatically.
-    """
+def _build_spec():
+    from agents.upload_agent import authenticate_youtube_headless
     from agents.model_invoke_agent_english import safe_invoke
 
-    prompt = f"""Classify this YouTube comment into EXACTLY ONE of these categories:
-Question, Appreciation, Suggestion, Criticism, AI Related, Spam, Offensive, Other
+    return ce.ChannelSpec(
+        name=CHANNEL,
+        get_client=authenticate_youtube_headless,
+        invoke=lambda prompt: safe_invoke(prompt, temperature=0.4).content,
+        store=ce.DbStore(CHANNEL),
+        profile=ce.PROFILES[CHANNEL],
+        token_hint=TOKEN_HINT,
+    )
 
-Rules:
-- "Spam" = promotional links, unrelated ads, bot-like repeated text
-- "Offensive" = insults, hate speech, harassment, explicit content
-- "AI Related" = comments specifically about AI, this being AI-generated, or asking if the content is AI
-- "Suggestion" = comment asks for or proposes a future video topic
-- Reply with ONLY the category name, nothing else.
-
-Comment: "{comment_text}"
-
-Category:"""
-
-    try:
-        response = safe_invoke(prompt, temperature=0.4)
-        raw = response.content.strip()
-        for category in VALID_CATEGORIES:
-            if category.lower() in raw.lower():
-                return category
-        return "Other"
-    except Exception as e:
-        print(f"[comment_reply_agent] Classification failed, defaulting to 'Other': {e}")
-        return "Other"
-
-
-def generate_reply(comment_text, category):
-    """
-    Generate a reply for a classified comment.
-
-    Returns the literal string "NO_REPLY" for Spam/Offensive categories,
-    or a short, casual, human-sounding reply otherwise.
-    """
-    if category in NO_REPLY_CATEGORIES:
-        return "NO_REPLY"
-
-    from agents.model_invoke_agent_english import safe_invoke
-
-    extra_note = ""
-    if category == "AI Related":
-        extra_note = """
-This comment is accusing/asking if the content is AI-generated or AI-made.
-Don't get defensive, don't over-explain, don't deny weirdly. A real creator
-in this niche would either own it casually, joke about it, or brush it off
-lightly — not write a formal denial or a formal admission."""
-
-    prompt = f"""Reply to this YouTube comment as the actual creator of the channel replying
-casually from their phone. NOT as a support agent, NOT as an assistant.
-
-The comment was classified as: {category}
-{extra_note}
-
-STRICT RULES:
-- Sound like a real person typing fast on their phone, not a customer service rep
-- Under {MAX_REPLY_WORDS} words, but shorter is usually better (5-15 words is often enough)
-- Use contractions, casual lowercase, mild internet phrasing where natural
-- React to what they SPECIFICALLY said — no generic "I understand your concern" phrasing
-- Never say "I understand", "thank you for your feedback", "can you clarify/specify", or anything that sounds like a script
-- It's fine to be a little blunt, funny, sarcastic, or dismissive if the comment is negative or trolling — match the energy
-- No emojis unless the comment itself is very casual/funny
-- Never rude to the point of being nasty, never argue for multiple sentences, never hallucinate facts
-- If it's a question you can't confidently answer, keep it short and honest, don't guess
-- Do not mention you are an AI unless directly and specifically asked
-- Reply with ONLY the reply text, nothing else — no quotes, no preamble
-
-Examples of the tone you should match:
-"lol fair enough"
-"nah man it's just editing, not that deep"
-"haha yeah that part got me too"
-"appreciate it, more coming soon"
-"it's satire, don't take it too serious"
-
-Examples of tone to NEVER use:
-"I understand you have strong feelings, can you specify what concerns you?"
-"Thank you for your feedback, we appreciate your input."
-"I understand your concern regarding this matter."
-
-Comment: "{comment_text}"
-
-Reply:"""
-
-    try:
-        response = safe_invoke(prompt, temperature=0.4)
-        reply = response.content.strip().strip('"')
-
-        # Hard enforce the word limit even if the model overshoots
-        words = reply.split()
-        if len(words) > MAX_REPLY_WORDS:
-            reply = " ".join(words[:MAX_REPLY_WORDS])
-
-        return reply
-    except Exception as e:
-        print(f"[comment_reply_agent] Reply generation failed: {e}")
-        return "NO_REPLY"
-
-
-def _extract_topic_suggestion(comment_text):
-    """
-    For Suggestion-category comments, ask the LLM to extract a short,
-    clean topic phrase suitable for feeding into the trending/topic pipeline.
-    Falls back to the raw comment text if extraction fails.
-    """
-    from agents.model_invoke_agent_english import safe_invoke
-    prompt = f"""Extract a short video topic (5-10 words) suggested in this comment.
-Reply with ONLY the topic phrase, nothing else.
-
-Comment: "{comment_text}"
-
-Topic:"""
-    try:
-        response = safe_invoke(prompt, temperature=0.4)
-        topic = response.content.strip().strip('"')
-        return topic if topic else comment_text[:80]
-    except Exception:
-        return comment_text[:80]
-
-
-# ─────────────────────────────────────────────
-# Orchestration
-# ─────────────────────────────────────────────
 
 def process_comments(max_results=50, log_fn=print):
-    """
-    Main entry point — fetch new comments, classify, generate replies,
-    save history, save topic requests, and publish if AUTO_REPLY is True.
+    return ce.process(_build_spec(), max_results=max_results, log_fn=log_fn)
 
-    Safe to call repeatedly (e.g. from the scheduler's hourly loop) —
-    already-processed comments are skipped via comment_history.json.
-    """
-    log_fn("[comment_reply_agent] Checking for new comments...")
 
-    comments = fetch_new_comments(max_results=max_results)
-    if not comments:
-        log_fn("[comment_reply_agent] No new comments to process")
-        return {"processed": 0, "replied": 0, "published": 0, "topic_requests": 0}
-
-    stats = {"processed": 0, "replied": 0, "published": 0, "topic_requests": 0}
-
-    for c in comments:
-        try:
-            category = classify_comment(c["text"])
-            reply = generate_reply(c["text"], category)
-
-            save_comment_history(
-                comment_id=c["comment_id"],
-                video_id=c["video_id"],
-                username=c["username"],
-                original_comment=c["text"],
-                category=category,
-                generated_reply=reply,
-            )
-            stats["processed"] += 1
-
-            if category == "Suggestion":
-                topic = _extract_topic_suggestion(c["text"])
-                save_topic_request(topic=topic, comment=c["text"], video_id=c["video_id"])
-                stats["topic_requests"] += 1
-
-            if reply != "NO_REPLY":
-                stats["replied"] += 1
-                log_fn(f"[comment_reply_agent] [{category}] {c['username']}: {c['text'][:60]}... -> {reply[:60]}...")
-
-                if AUTO_REPLY:
-                    if publish_reply(c["comment_id"], reply):
-                        stats["published"] += 1
-            else:
-                log_fn(f"[comment_reply_agent] [{category}] {c['username']}: skipped (NO_REPLY)")
-
-        except Exception as e:
-            log_fn(f"[comment_reply_agent] Error processing comment {c.get('comment_id')}: {e}")
-            continue
-
-    log_fn(f"[comment_reply_agent] Done. Processed {stats['processed']}, "
-           f"replied {stats['replied']}, published {stats['published']}, "
-           f"topic requests {stats['topic_requests']}")
-    return stats
+def run_scheduled(log_fn=print):
+    return ce.run_daily(CHANNEL, lambda: process_comments(log_fn=log_fn), log_fn=log_fn)
 
 
 if __name__ == "__main__":
