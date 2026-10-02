@@ -6,6 +6,7 @@
 
 import random
 import re
+import unicodedata
 
 CATEGORIES = {
     "science": {
@@ -102,3 +103,16 @@ def looks_hindi(text, min_marker_ratio=0.15, min_devanagari_ratio=0.3):
         return False
     hits = sum(1 for w in words if w in _HINGLISH_MARKERS)
     return hits / len(words) >= min_marker_ratio
+
+
+def has_unsupported_script(text):
+    """True if text has letters that are not Latin or Devanagari (e.g. Telugu,
+    Tamil, Arabic). Emoji and punctuation are ignored. Used to reject topics
+    copied from non-Hindi YouTube videos."""
+    for c in text or "":
+        if not c.isalpha():
+            continue
+        name = unicodedata.name(c, "")
+        if not (name.startswith("LATIN") or name.startswith("DEVANAGARI")):
+            return True
+    return False

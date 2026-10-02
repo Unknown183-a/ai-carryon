@@ -19,6 +19,7 @@ langchain-google-genai
 google-genai
 sarvamai
 pydub
+audioop-lts; python_version >= "3.13"
 psycopg2-binary
 yt-dlp
 selenium

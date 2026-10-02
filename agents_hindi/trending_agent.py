@@ -97,6 +97,11 @@ def _load_uploaded_titles():
 # ─────────────────────────────────────────────
 
 def _is_relevant_lang(snippet):
+    from agents_hindi.categories import has_unsupported_script
+    # Reject titles written in other Indian scripts (Telugu, Tamil, ...). The
+    # language tag is often empty, so the title text is the reliable check.
+    if has_unsupported_script(snippet.get("title", "")):
+        return False
     lang = snippet.get("defaultAudioLanguage", "")
     return lang.startswith("hi") or lang.startswith("en") or lang == ""
 

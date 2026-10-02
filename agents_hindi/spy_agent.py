@@ -69,22 +69,21 @@ Return JSON array of 12 items:
 Return ONLY the JSON array. Make all 12 experiment ideas UNIQUE and DIFFERENT from each other.
 """
 
-    try:
-        response = safe_invoke(prompt, temperature=0.9)  # High temperature = more variety
-
-        content = response.content or ""
-        content = content.strip()
-        content = re.sub(r'^```json\n?', '', content)
-        content = re.sub(r'^```\n?', '', content)
-        content = re.sub(r'\n?```$', '', content)
-
-        topics = json.loads(content)
-        if not isinstance(topics, list):
-            topics = []
-
-    except Exception as e:
-        print(f"Groq error: {e}")
-        topics = []
+    topics = []
+    for attempt in range(2):
+        try:
+            response = safe_invoke(prompt, temperature=0.9)  # High temperature = more variety
+            content = (response.content or "").strip()
+            # Keep only the JSON array, even if the model added text around it
+            start, end = content.find("["), content.rfind("]")
+            if start == -1 or end <= start:
+                raise ValueError(f"no JSON array in response: {content[:150]!r}")
+            parsed = json.loads(content[start:end + 1])
+            if isinstance(parsed, list) and parsed:
+                topics = parsed
+                break
+        except Exception as e:
+            print(f"Spy agent (hindi) attempt {attempt + 1}/2 failed: {e}")
 
     # Normalize
     result = []

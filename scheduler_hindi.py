@@ -114,7 +114,7 @@ def generate_and_upload_hindi(force=False):
         log("Hindi trending topic dhundh raha hai...")
         from agents_hindi.spy_agent import get_best_hindi_topic, get_hindi_trending_topics
         from agents_hindi.trending_agent import get_trending_topic
-        from agents_hindi.categories import pick_category, classify_topic, looks_hindi
+        from agents_hindi.categories import pick_category, classify_topic, looks_hindi, has_unsupported_script
 
         # V2: channel only makes experiment videos in science / ai / tech / gadgets.
         category = pick_category(last_category=db.get_meta("last_category_hindi"))
@@ -131,6 +131,13 @@ def generate_and_upload_hindi(force=False):
             topic = get_trending_topic(region_code="IN", category=category)
             category = classify_topic(topic) or category
             log(f"Trending topic [{category}]: {topic}")
+
+        if has_unsupported_script(topic):
+            log(f"Topic Hindi/English script mein nahi hai ({topic[:40]}...) — LLM se naya topic bana raha hai")
+            from agents_hindi.trending_agent import _fallback_topic
+            topic = _fallback_topic(category=category)
+            category = classify_topic(topic) or category
+            log(f"Naya topic [{category}]: {topic}")
 
         posted_today = get_posted_today()
         if topic in posted_today:

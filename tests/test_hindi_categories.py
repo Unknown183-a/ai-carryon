@@ -35,3 +35,20 @@ def test_spy_filters_by_category(monkeypatch, tmp_path):
     monkeypatch.setattr(spy, "get_hindi_trending_topics", lambda: topics)
     assert spy.get_best_hindi_topic(category="gadgets")["topic"] == "b"
     assert spy.get_best_hindi_topic(category="tech")["topic"] in ("a", "b")  # falls back
+
+
+def test_unsupported_script():
+    from agents_hindi.categories import has_unsupported_script
+    assert has_unsupported_script("భారీ అలల మధ్య పడవ ప్రయాణం Telugu Experiments")
+    assert not has_unsupported_script("Dry ice paani mein daalo 😮")
+    assert not has_unsupported_script("क्या आपने कभी यह प्रयोग देखा है?")
+
+
+def test_spy_parses_json_with_extra_text(monkeypatch, tmp_path):
+    import types, agents_hindi.spy_agent as spy
+    import agents_hindi.model_invoke_agent_hindi as m
+    monkeypatch.chdir(tmp_path)
+    reply = 'Here you go:\n[{"category": "ai", "topic": "AI vs human drawing", "title": "x"}]\nDone'
+    monkeypatch.setattr(m, "safe_invoke", lambda *a, **k: types.SimpleNamespace(content=reply))
+    topics = spy.get_hindi_trending_topics()
+    assert topics and topics[0]["category"] == "ai"
