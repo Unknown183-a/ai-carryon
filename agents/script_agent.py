@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agents.model_invoke_agent_english import safe_invoke
+from agents.script_utils import trim_to_sentences
 
 HOOK_TEMPLATES = [
     "Nobody talks about the fact that {topic_angle}...",
@@ -98,9 +99,9 @@ Return ONLY the script text, nothing else."""
         script = safe_invoke(prompt2).content.strip()
         print(f"Expansion attempt {attempt+1}: {len(script.split())} words")
 
-    words = script.split()
-    if len(words) > 100:
-        script = " ".join(words[:100])
+    # Trim on sentence boundaries (keeps the CTA) instead of slicing words
+    if len(script.split()) > 100:
+        script = trim_to_sentences(script, 100, keep_last_sentence=True)
 
     first_sentence = script.split('.')[0].strip()
     hook_score = score_hook(first_sentence)
@@ -114,5 +115,9 @@ Return ONLY the script text, nothing else."""
         script = new_hook + ". " + rest_of_script
         new_score = score_hook(new_hook)
         print(f"Improved hook score: {new_score}/10 — '{new_hook}'")
+
+    # The hook rewrite can push the script back over the limit — re-check
+    if len(script.split()) > 100:
+        script = trim_to_sentences(script, 100, keep_last_sentence=True)
 
     return script

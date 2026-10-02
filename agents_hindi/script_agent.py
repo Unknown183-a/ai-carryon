@@ -1,5 +1,6 @@
 # agents_hindi/script_agent.py
 from agents_hindi.model_invoke_agent_hindi import safe_invoke
+from agents.script_utils import trim_to_sentences
 
 
 def create_script(research_data, topic=None, comparison_insights=None):
@@ -62,10 +63,9 @@ Yaar suno, ye chemical reaction dekh ke tumhara dimaag ghoom jayega. Jab hydroge
         print(f"Expansion attempt {attempt+1}: {len(script.split())} words")
 
     # Hard trim if over 95 words (would exceed ~40-45s at speaking pace)
-    words = script.split()
-    if len(words) > 95:
-        script = " ".join(words[:95])
-        print(f"Trimmed script to 95 words to stay under ~45s limit")
+    if len(script.split()) > 95:
+        script = trim_to_sentences(script, 95, keep_last_sentence=True)
+        print("Trimmed script to <=95 words on a sentence boundary")
 
     final_word_count = len(script.split())
     print(f"Final Hindi script: {final_word_count} words")
