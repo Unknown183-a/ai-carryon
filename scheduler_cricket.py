@@ -78,7 +78,7 @@ def _increment_daily_cap():
 def _run_cricket_cycle_inner():
     from agents_cricket.trending_agent import get_all_topics
     from agents_cricket.research_agent import get_summary_for_topic
-    from agents_cricket.script_agent import create_cricket_script
+    from agents_cricket.story_pipeline import create_story_script, record_story_meta
     from agents_cricket.seo_agent import generate_cricket_seo
     from agents_cricket.ab_title_agent import get_best_title_cricket
     from agents_cricket.saturation_agent import rank_topics_by_opportunity
@@ -136,7 +136,9 @@ def _run_cricket_cycle_inner():
         print("Could not fetch summary — skipping this cycle.")
         return {"status": "summary_fetch_failed", "topic": topic_label}
 
-    script = create_cricket_script(summary, standout_player=structured.get("standout_player"))
+    story = create_story_script(new_match, summary, structured)
+    script = story["script"]
+    print(f"Story: format={story['format']} hook_type={story['hook_type']} v2={story['used_v2']}")
     print(f"Script ({len(script.split())} words): {script[:80]}...")
 
     # Phase 3 — A/B title testing. Falls back to seo_agent's own single-shot
@@ -181,6 +183,8 @@ def _run_cricket_cycle_inner():
     except Exception as e:
         print(f"Clip usage tracking skipped: {e}")
 
+    record_story_meta(story)
+
     cricket_db.mark_posted(new_match["id"], new_match.get("name") or new_match.get("title", ""))
     cricket_db.upsert_video(
         video_id=video_id,
@@ -198,7 +202,8 @@ def _run_cricket_cycle_inner():
     except Exception:
         pass
 
-    return {"status": "uploaded", "video_url": video_url, "title": seo["title"]}
+    return {"status": "uploaded", "video_url": video_url, "title": seo["title"],
+            "format": story["format"], "hook_type": story["hook_type"]}
 
 
 def run_comment_replies():

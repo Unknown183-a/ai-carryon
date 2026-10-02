@@ -29,7 +29,7 @@ def safe_invoke(prompt):
     print("Groq timeout/fail — falling back to Gemini Flash")
     try:
         gemini = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-3.5-flash",
             google_api_key=_os.getenv("GEMINI_API_KEY")
         )
         return gemini.invoke(prompt)

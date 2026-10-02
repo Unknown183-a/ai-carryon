@@ -70,7 +70,7 @@ def safe_invoke(prompt):
     try:
         from langchain_google_genai import ChatGoogleGenerativeAI
         gemini = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-3.5-flash",
             google_api_key=_os.getenv("GEMINI_API_KEY"),
         )
         return gemini.invoke(prompt)
