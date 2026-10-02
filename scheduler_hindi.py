@@ -212,7 +212,7 @@ def generate_and_upload_hindi(force=False):
         thumbnail = generate_thumbnail(seo["title"], topic)
 
         log("Pexels video clips fetch ho rahe hain...")
-        from agents.video_clip_agent import generate_background_clips
+        from agents_hindi.video_clip_agent import generate_background_clips
         from agents.image_agent import generate_backgrounds
         image_paths, errors = generate_background_clips(topic, script, num_clips=4)
         if len(image_paths) < 2:
