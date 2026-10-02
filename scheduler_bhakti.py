@@ -271,6 +271,17 @@ def track_views_bhakti_job():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
+def comment_reply_job_bhakti():
+    """Daily comment replies (19:00-23:59 IST, once per IST day; evening aarti
+    time suits a devotional audience). Gate + bookkeeping live in
+    agents/comment_engine.py. Never raises."""
+    try:
+        from agents_bhakti.comment_reply_agent import run_scheduled
+        run_scheduled(log_fn=log)
+    except Exception as e:
+        log(f"Comment reply job error: {e}")
+
+
 def main():
     log("Bhakti Scheduler run started (single pass, Fully Adaptive Mode)")
 
@@ -284,6 +295,9 @@ def main():
         log(f"Cleanup skipped: {e}")
 
     track_views_bhakti_job()
+    comment_reply_job_bhakti()
+    # Fresh Groq budget for generation (the comment job shares it).
+    reset_groq_budget()
 
     if os.environ.get("FORCE_GENERATE", "false").lower() == "true":
         generate_and_upload_bhakti(force=True)

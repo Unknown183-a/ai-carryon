@@ -17,6 +17,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    # Needed by the comment-reply agent (reading threads + posting replies).
+    "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
 
 flow = InstalledAppFlow.from_client_secrets_file("client_secrets_bhakti.json", SCOPES)

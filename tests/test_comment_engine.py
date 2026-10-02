@@ -313,6 +313,44 @@ class GateTests(unittest.TestCase):
         self.assertIsNone(ce.run_daily("english", boom, log_fn=lambda *_: None))
 
 
+class BhaktiTests(unittest.TestCase):
+    def setUp(self):
+        reset_db()
+        os.environ.pop("COMMENT_AUTO_REPLY", None)
+
+    def spec(self, yt, llm):
+        return ce.ChannelSpec(name="bhakti", get_client=lambda: yt, invoke=llm,
+                              store=ce.DbStore("bhakti"), profile=ce.PROFILES["bhakti"],
+                              token_hint="regen bhakti token")
+
+    def test_religious_debate_is_never_answered(self):
+        yt = FakeYT([thread("c1", "tumhara dharm galat hai"), thread("c2", "Jai Shree Ram")])
+        llm = make_llm({"galat": ("Religious Debate", "arre bhai aisa mat bolo", ""),
+                        "Jai Shree Ram": ("Appreciation", "Jai Shree Ram 🙏", "")})
+        ce.process(self.spec(yt, llm), log_fn=lambda *_: None)
+        self.assertEqual([c for c, _ in yt.published], ["c2"])      # only the greeting
+        self.assertEqual(state("c1")["status"], "skipped")
+        self.assertEqual(yt.published[0][1], "Jai Shree Ram 🙏")      # emoji survives sanitising
+
+    def test_suggestion_stored_under_bhakti_channel_only(self):
+        yt = FakeYT([thread("c1", "Hanuman Chalisa ka arth bataiye")])
+        llm = make_llm(default=("Suggestion", "zaroor, jald laayenge 🙏", "Hanuman Chalisa meaning"))
+        ce.process(self.spec(yt, llm), log_fn=lambda *_: None)
+        self.assertEqual(len(db.get_topic_requests("bhakti")), 1)
+        self.assertEqual(len(db.get_topic_requests("english")), 0)
+
+    def test_prompt_has_devotional_guardrails(self):
+        p = ce.build_prompt(self.spec(FakeYT([]), make_llm()), "Om Namah Shivaya")
+        for needle in ("Religious Debate", "joke", "chamatkar", "panchang"):
+            self.assertIn(needle, p)
+
+    def test_wrapper_builds_spec(self):
+        from agents_bhakti.comment_reply_agent import _build_spec
+        sp = _build_spec()
+        self.assertEqual(sp.name, "bhakti")
+        self.assertIn("Religious Debate", sp.profile["no_reply"])
+
+
 class CricketStoreTests(unittest.TestCase):
     def test_roundtrip(self):
         from agents_cricket.database import db as cdb

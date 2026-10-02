@@ -2,7 +2,7 @@
 
 An autonomous AI system that discovers trending topics, researches them, writes scripts, generates voiceovers, renders Shorts, writes SEO metadata, and uploads to YouTube with no human in the loop. It then tracks how each video performs and feeds that data back into what it makes next.
 
-It runs **four independent production channels**, each with its own content source, audience, credentials, and schedule, all deployed as scheduled GitHub Actions workflows.
+It runs **five independent production channels**, each with its own content source, audience, credentials, and schedule, all deployed as scheduled GitHub Actions workflows.
 
 **Dashboard**: <https://ai-carryon-tqndlmjbcfvtznagmef2ap.streamlit.app/Dashboard>
 **Repo**: <https://github.com/Unknown183-a/ai-carryon>
@@ -18,8 +18,11 @@ It runs **four independent production channels**, each with its own content sour
 | **Hindi** ([@AICarryONHindi](https://www.youtube.com/@AICarryONHindi)) | India, experiment-style videos (chemical, physical and technology experiments from around the world) | LLM-generated trending topics, Hinglish scripts | Sarvam AI Bulbul, Edge TTS fallback | `hindi-scheduler.yml` (hourly check, adaptive, max 3 uploads/day) |
 | **Cricket** ([@AICarryONSports](https://www.youtube.com/@AICarryONSports)) | Cricket news and match content | CricAPI match data + trending cricket topics | Edge TTS | `cricket-scheduler.yml` |
 | **Gaming** ([@AICarryONGaming](https://www.youtube.com/@AICarryONGaming)) | Gaming moments and trends | Twitch Helix Clips API (followed streamers + top clips by game category) | Edge TTS | `gaming-scheduler.yml` |
+| **Bhakti** | India, Hindi devotional Shorts (mythological stories, mantra meanings, festival significance) | Devotional topic pool + live trend check, LLM research, Pexels temple/diya/aarti footage, Freesound bhajan-style music | Sarvam AI (devotional pace); `BHAKTI_MODE=music_only` skips voice and captions | `bhakti-scheduler.yml` (hourly check, adaptive, up to 6 uploads/day) |
 
 The Hindi channel was pivoted from tech news to experiment-style videos after poor retention, to make content more visual and interactive.
+
+The Bhakti channel is the fifth pipeline and is documented in [`SETUP_BHAKTI.md`](SETUP_BHAKTI.md). It has two modes: `narrated` (the default: Hindi voiceover and captions over a ducked bhajan track) and `music_only` (bhajan only, no voice). It uses stock footage only, with no AI-generated deity imagery, and it reuses the English/Hindi intelligence layer (saturation, comparison, A/B titles, velocity).
 
 ---
 
@@ -27,15 +30,15 @@ The Hindi channel was pivoted from tech news to experiment-style videos after po
 
 Every channel runs on its own schedule and, without human input:
 
-1. Checks whether the current hour matches a learned peak-engagement window (English/Hindi; falls back to safe defaults until enough data exists)
+1. Checks whether the current hour matches a learned peak-engagement window (English/Hindi/Bhakti; falls back to safe defaults until enough data exists)
 2. Finds a trending topic, filtered to the channel's niche
-3. Checks topic saturation and skips topics that are already over-covered (English/Hindi)
-4. Benchmarks competitors on the same topic (English/Hindi)
+3. Checks topic saturation and skips topics that are already over-covered (English/Hindi/Bhakti)
+4. Benchmarks competitors on the same topic (English/Hindi/Bhakti)
 5. Researches the topic and writes a script tuned to the channel's length and style
 6. Generates three title variations using different psychological patterns, scores them, and picks a winner
 7. Writes the SEO description and hashtags
 8. Generates a voiceover and word-by-word captions
-9. Pulls background footage: topic-relevant Pexels video clips (English, Hindi, Cricket), or real Twitch clips downloaded with `yt-dlp` (Gaming)
+9. Pulls background footage: topic-relevant Pexels video clips (English, Hindi, Cricket, Bhakti), or real Twitch clips downloaded with `yt-dlp` (Gaming)
 10. Renders the final video with ffmpeg
 11. Uploads to YouTube with full metadata
 12. Records view snapshots on a schedule for ongoing analytics
@@ -61,11 +64,11 @@ Adaptive Hour Check -> Trending Topic (niche-filtered)
 
 **LLM routing.** Groq (`openai/gpt-oss-120b`) is the primary model, with Gemini (`gemini-3.5-flash`) as fallback. The English and Hindi routing layers (`model_invoke_agent_english.py`, `model_invoke_agent_hindi.py`) include circuit breakers and per-run call budgets so a provider outage or rate limit degrades gracefully instead of failing a run.
 
-**Data.** Supabase Postgres, accessed through the transaction pooler (port 6543), because GitHub Actions runners are IPv4-only and Supabase direct connections are IPv6-only. English and Hindi share one database, partitioned by a `channel` column so their learning never mixes. Cricket uses its own Supabase project for topic de-duplication.
+**Data.** Supabase Postgres, accessed through the transaction pooler (port 6543), because GitHub Actions runners are IPv4-only and Supabase direct connections are IPv6-only. English, Hindi and Bhakti share one database, partitioned by a `channel` column so their learning never mixes. Cricket uses its own Supabase project for topic de-duplication.
 
-**Dashboard.** A Streamlit app on Streamlit Community Cloud reads the same Postgres database. Pages: Dashboard, Peak Hours, Schedule, Analytics, Comparison, and A/B Titles. The channel selector covers English, Hindi, and Cricket.
+**Dashboard.** A Streamlit app on Streamlit Community Cloud reads the same Postgres database. Pages: Dashboard, Peak Hours, Schedule, Analytics, Comparison, and A/B Titles. The channel selector covers English, Hindi, and Cricket. The dashboard has no Bhakti tab yet; Bhakti data is stored in the shared Postgres database under `channel='bhakti'`.
 
-**Shared rendering.** Every channel reuses the same video renderer (`agents/video_agent.py`), so a fix or improvement there benefits all four.
+**Shared rendering.** Every channel reuses the same video renderer (`agents/video_agent.py`), so a fix or improvement there benefits every channel.
 
 ### Repository Layout
 
@@ -74,15 +77,17 @@ agents/            English pipeline agents + shared video/voice/caption agents
 agents_hindi/      Hindi (Hinglish) pipeline agents
 agents_cricket/    Cricket pipeline agents
 agents_gaming/     Gaming pipeline agents (Twitch client, clip finder, etc.)
+agents_bhakti/     Bhakti (Hindi devotional) pipeline agents
+tests/             Offline tests (comment engine)
 pages/             Streamlit dashboard pages
-scheduler.py, scheduler_hindi.py, scheduler_cricket.py, scheduler_gaming.py
+scheduler.py, scheduler_hindi.py, scheduler_cricket.py, scheduler_gaming.py, scheduler_bhakti.py
 app.py             Streamlit entrypoint
-.github/workflows/ english / hindi / cricket / gaming scheduler workflows
+.github/workflows/ english / hindi / cricket / gaming / bhakti scheduler workflows
 ```
 
 ---
 
-## Intelligence Layer (English and Hindi)
+## Intelligence Layer (English, Hindi and Bhakti)
 
 | Component | What it does |
 | --- | --- |
@@ -124,6 +129,7 @@ python scheduler.py           # English
 python scheduler_hindi.py     # Hindi
 python scheduler_cricket.py   # Cricket
 python scheduler_gaming.py    # Gaming
+python scheduler_bhakti.py    # Bhakti
 ```
 
 ### Configuration
@@ -133,11 +139,15 @@ python scheduler_gaming.py    # Gaming
 | `DATABASE_URL` | Postgres connection (Supabase transaction pooler) | All |
 | `GROQ_API_KEY` | Primary LLM inference | All |
 | `GEMINI_API_KEY` | LLM fallback | All |
-| `PEXELS_API_KEY` | Background clips and images | English, Hindi, Cricket |
+| `PEXELS_API_KEY` | Background clips and images | English, Hindi, Cricket, Bhakti |
 | `YOUTUBE_API_KEY` | YouTube Data API (search, public stats) | All |
 | `YOUTUBE_TOKEN_B64`, `YOUTUBE_CLIENT_SECRETS_B64`, `YOUTUBE_ANALYTICS_TOKEN_B64` | English OAuth upload and analytics credentials | English |
-| `YOUTUBE_TOKEN_JSON` | Hindi OAuth token (needs `youtube.upload` and `youtube.readonly` scopes) | Hindi |
-| `SARVAM_API_KEY` | Hindi native TTS | Hindi |
+| `YOUTUBE_TOKEN_JSON` / `HINDI_TOKEN_JSON` | Hindi OAuth token (needs `youtube.upload`, `youtube.readonly` and `youtube.force-ssl` scopes) | Hindi |
+| `SARVAM_API_KEY` | Hindi native TTS | Hindi, Bhakti |
+| `BHAKTI_TOKEN_JSON` | Bhakti OAuth token (needs `youtube.upload`, `youtube.readonly` and `youtube.force-ssl`) | Bhakti |
+| `YOUTUBE_BHAKTI_CHANNEL_ID`, `BHAKTI_AUTHORITY_CHANNEL_IDS` | Own channel id and authority channels for saturation scoring | Bhakti |
+| `FREESOUND_API_KEY` | Bhajan-style background music | Bhakti |
+| `BHAKTI_MODE`, `BHAKTI_VIDEOS_PER_DAY` | `narrated` (default) or `music_only`; daily upload target (default 6) | Bhakti |
 | `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` | Twitch Helix API | Gaming |
 | `YOUTUBE_GAMING_CLIENT_SECRETS_B64`, `YOUTUBE_GAMING_TOKEN_B64` | Gaming channel OAuth credentials | Gaming |
 | `APP_PASSWORD` | Streamlit dashboard login | Dashboard |
@@ -148,7 +158,7 @@ Cricket additionally needs a CricAPI key and its own YouTube credentials.
 
 ## Deployment
 
-All four pipelines deploy the same way: push to `main`, and the scheduled workflows in `.github/workflows/` pick up the new code on their next run. Secrets live in GitHub repository secrets. To trigger a run without waiting for the cron, use "Run workflow" on the relevant workflow in the Actions tab.
+All five pipelines deploy the same way: push to `main`, and the scheduled workflows in `.github/workflows/` pick up the new code on their next run. Secrets live in GitHub repository secrets. To trigger a run without waiting for the cron, use "Run workflow" on the relevant workflow in the Actions tab.
 
 ---
 
@@ -162,11 +172,12 @@ All four pipelines deploy the same way: push to `main`, and the scheduled workfl
 ## Comment Reply Agent
 
 One shared engine (`agents/comment_engine.py`) with thin per-channel wrappers
-(`comment_reply_agent.py` in `agents/`, `agents_hindi/`, `agents_cricket/`). English and Hindi run it from
+(`comment_reply_agent.py` in `agents/`, `agents_hindi/`, `agents_bhakti/`, `agents_cricket/`). English, Hindi and Bhakti run it from
 their scheduler once per IST day (any time 19:00-23:59 IST, tracked in the DB so a late GitHub cron still
 counts); Cricket runs it from its own `14:00 UTC` cron (`--comments`).
 
 - One LLM call per comment returns category + reply + topic. Spam/Offensive are never answered.
+- Bhakti has a devotional voice: it mirrors greetings ("Jai Shree Ram" gets "Jai Shree Ram 🙏"), never jokes about deities, never promises miracles, and never answers religious arguments (`Religious Debate` is skipped like Spam).
 - State lives in the database (`comment_history`, `topic_requests`; cricket: `cricket_comment_history`,
   `cricket_match_requests`), not `output/*.json`, which Actions wipes every run.
 - A comment is only finished once the reply is posted, deliberately skipped, or failed permanently. LLM/API
@@ -175,16 +186,17 @@ counts); Cricket runs it from its own `14:00 UTC` cron (`--comments`).
 - Skips the channel's own comments and threads that already have a reply; never posts links or @mentions.
 - Per-run caps: 25 replies, 15 minutes, newest 250 threads.
 - `COMMENT_AUTO_REPLY=false` is a dry run (drafts stored, nothing posted); `COMMENT_FORCE=true` ignores the
-  window. Both are inputs on the English/Hindi/Cricket workflows' manual "Run workflow" button.
+  window. Both are inputs on the English/Hindi/Bhakti/Cricket workflows' manual "Run workflow" button.
 - Tokens must include `youtube.force-ssl`: `generate_english_token.py`, `generate_hindi_token_v3.py`,
-  `generate_cricket_token.py` (the old cricket token cannot post; regenerate it).
+  `generate_bhakti_token.py`, `generate_cricket_token.py` (the old cricket and bhakti tokens cannot post; regenerate them).
 - Tests: `python -m unittest tests.test_comment_engine -v`
 
 ## Known Limitations
 
 - Sarvam Hindi TTS currently errors on `target_language_code` and falls back to Edge TTS
 - Custom thumbnail upload is blocked by a 403 on some channels (likely requires channel phone verification)
-- The comment-reply agent needs the `youtube.force-ssl` OAuth scope (see the Comment Reply Agent section); Gaming and Bhakti have no comment agent yet
+- The comment-reply agent needs the `youtube.force-ssl` OAuth scope (see the Comment Reply Agent section); Gaming has no comment agent yet
+- Bhakti has no tab in the Streamlit dashboard yet (its data is in the database)
 - Saturation gating is not bypassed by `FORCE_GENERATE` (only the schedule-hour gate is)
 
 ---
@@ -195,7 +207,7 @@ counts); Cricket runs it from its own `14:00 UTC` cron (`--comments`).
 - **Extend the intelligence layer to Cricket and Gaming**: saturation, comparison, and adaptive scheduling currently run for English and Hindi only.
 - **Failure and hook analysis**: systematic tracking of why videos underperform.
 - **Audience, opportunity, and monetization intelligence**: demographic pulls, pre-trend prediction, and RPM-correlated topic scoring.
-- **Centralized "brain" service**: deliberately deferred until the pipeline stabilized. With four channels now running the same pattern, it is the natural next abstraction.
+- **Centralized "brain" service**: deliberately deferred until the pipeline stabilized. With five channels now running the same pattern, it is the natural next abstraction.
 - **Multi-tenant SaaS rebuild**: a from-scratch rebuild of this pipeline as a multi-tenant platform (FastAPI, Firebase, Celery workers on Cloud Run) lives in [ai-carryon-saas](https://github.com/Unknown183-a/ai-carryon-saas).
 
 ---
