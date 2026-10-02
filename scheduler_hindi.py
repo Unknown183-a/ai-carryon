@@ -114,16 +114,23 @@ def generate_and_upload_hindi(force=False):
         log("Hindi trending topic dhundh raha hai...")
         from agents_hindi.spy_agent import get_best_hindi_topic, get_hindi_trending_topics
         from agents_hindi.trending_agent import get_trending_topic
+        from agents_hindi.categories import pick_category, classify_topic, looks_hindi
 
-        best = get_best_hindi_topic()
+        # V2: channel only makes experiment videos in science / ai / tech / gadgets.
+        category = pick_category(last_category=db.get_meta("last_category_hindi"))
+        log(f"Category chosen: {category}")
+
+        best = get_best_hindi_topic(category=category)
 
         if best:
             topic = best['topic']
-            log(f"Spy agent se topic mila: {topic} ({best['views']:,} views)")
+            category = best.get('category', category)
+            log(f"Spy agent se topic mila [{category}]: {topic} ({best['views']:,} views)")
         else:
             log("24 ghante mein koi video nahi mili, trending agent use kar raha hai...")
-            topic = get_trending_topic(region_code="IN")
-            log(f"Trending topic: {topic}")
+            topic = get_trending_topic(region_code="IN", category=category)
+            category = classify_topic(topic) or category
+            log(f"Trending topic [{category}]: {topic}")
 
         posted_today = get_posted_today()
         if topic in posted_today:
@@ -132,7 +139,8 @@ def generate_and_upload_hindi(force=False):
             for t in all_topics:
                 if t['topic'] not in posted_today:
                     topic = t['topic']
-                    log(f"Alternative topic: {topic}")
+                    category = t.get('category', category)
+                    log(f"Alternative topic [{category}]: {topic}")
                     break
 
         log("Saturation check ho raha hai...")
@@ -164,6 +172,13 @@ def generate_and_upload_hindi(force=False):
         from agents_hindi.script_agent import create_script
         script = create_script(research_data, topic=topic,
                                comparison_insights=comparison_insights)
+        if not looks_hindi(script):
+            log("Script Hindi nahi lag rahi — ek baar dobara try kar raha hai...")
+            script = create_script(research_data, topic=topic,
+                                   comparison_insights=comparison_insights)
+            if not looks_hindi(script):
+                log("Script dobara bhi Hindi nahi — is run ko skip kar raha hai (kuch upload nahi hoga)")
+                return
 
         log("A/B title testing ho raha hai...")
         ab_winner_title = None
@@ -180,6 +195,9 @@ def generate_and_upload_hindi(force=False):
         seo = generate_seo(topic, script, comparison_insights=comparison_insights)
         if ab_winner_title:
             seo["title"] = ab_winner_title
+        if not looks_hindi(f"{seo['title']} {seo.get('description', '')}"):
+            log("Title/description Hindi nahi lag rahe — is run ko skip kar raha hai (kuch upload nahi hoga)")
+            return
         log(f"Title: {seo['title']}")
 
         log("Thumbnail ban raha hai...")
@@ -223,6 +241,11 @@ def generate_and_upload_hindi(force=False):
         )
 
         mark_posted_today(topic)
+        try:
+            db.set_meta(f"hindi_video_category:{video_id}", category)
+            db.set_meta("last_category_hindi", category)
+        except Exception as me:
+            log(f"Category save skipped: {me}")
         try:
             from agents.adaptive_scheduler import mark_upload_done
             mark_upload_done("hindi")

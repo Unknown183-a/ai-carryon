@@ -153,7 +153,14 @@ def _fetch_most_popular(youtube, region_code, max_results=50):
         return []
 
 
-def get_trending_topic(region_code="IN"):
+def get_trending_topic(region_code="IN", category=None):
+    # The YouTube search below is science-experiment specific. For ai/tech/gadgets
+    # go straight to the LLM topic generator so the category is respected.
+    if category in ("ai", "tech", "gadgets"):
+        chosen = _fallback_topic(category=category)
+        _save_recent(chosen)
+        return chosen
+
     try:
         youtube = googleapiclient.discovery.build(
             "youtube", "v3", developerKey=YOUTUBE_API_KEY
@@ -193,12 +200,12 @@ def get_trending_topic(region_code="IN"):
     except Exception as e:
         print(f"Trending agent (hindi) error: {e}")
 
-    chosen = _fallback_topic()
+    chosen = _fallback_topic(category=category)
     _save_recent(chosen)
     return chosen
 
 
-def _generate_dynamic_topic(recent_used, attempts=3):
+def _generate_dynamic_topic(recent_used, attempts=3, category=None):
     """
     Ask the LLM to invent a fresh Hinglish tech video topic when the
     static fallback list has been exhausted.
@@ -210,10 +217,14 @@ def _generate_dynamic_topic(recent_used, attempts=3):
     used_titles = [e["title"] for e in recent_used][-25:]
     used_list = "\n".join(f"- {t}" for t in used_titles) if used_titles else "(none yet)"
 
-    prompt = f"""Generate ONE punchy YouTube video title idea in casual Hinglish about a
-visually striking science/chemical/physical EXPERIMENT (color-change reactions, foam,
-crystal growth, dry ice, pressure/vacuum demos, magnetism, optical illusions,
-non-Newtonian fluids, DIY science tricks, etc). Write it in Roman/Latin script
+    focus = {
+        "ai": "an AI-tool EXPERIMENT/TEST (AI vs human, what an AI tool gets wrong, AI image/voice/video tests)",
+        "tech": "a TECH EXPERIMENT/TEST (wifi/bluetooth range, robots, drones, 3D printing, simple electronics)",
+        "gadgets": "a GADGET EXPERIMENT/TEST (phone water/drop/battery tests, earbuds, power banks, smartwatches)",
+    }.get(category or "", "a visually striking science/chemical/physical EXPERIMENT (color-change reactions, foam, crystal growth, dry ice, pressure/vacuum demos, magnetism, optical illusions, non-Newtonian fluids, DIY science tricks, etc)")
+
+    prompt = f"""Generate ONE punchy YouTube video title idea in casual Hinglish about
+{focus}. Write it in Roman/Latin script
 (Hinglish), NOT Devanagari script. Style should be like viral Hindi experiment/science shorts — but NOT similar in
 content or wording to ANY of these already-used titles:
 
@@ -237,7 +248,7 @@ Rules:
     return None
 
 
-def _fallback_topic():
+def _fallback_topic(category=None):
     """Proven high-performing Hindi/Hinglish experiment topics, excluding recent ones.
     Falls through to LLM-generated topics if the static list is exhausted."""
     fallbacks = [
@@ -275,10 +286,11 @@ def _fallback_topic():
     recent_used = _load_recent() + _load_uploaded_titles()
     unused = [t for t in fallbacks if not _is_repeat(t, recent_used)]
 
-    if unused:
+    # The static list is science-only, so use it only for science (or no category).
+    if unused and category in (None, "science"):
         return random.choice(unused)
 
-    dynamic = _generate_dynamic_topic(recent_used)
+    dynamic = _generate_dynamic_topic(recent_used, category=category)
     if dynamic:
         return dynamic
 

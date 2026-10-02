@@ -6,6 +6,7 @@ import re
 import random
 from datetime import datetime
 from dotenv import load_dotenv
+from agents_hindi.categories import normalize_category
 
 load_dotenv()
 
@@ -29,26 +30,33 @@ def get_hindi_trending_topics():
 Current date and time: {today}
 Random seed: {random_seed}
 
-You are a viral-shorts trend analyst for India. Find 10 DIFFERENT visually striking
-science/chemical/physical EXPERIMENT ideas that would make excellent 30-45 second
-YouTube Shorts for an Indian Hindi-speaking audience.
+You are a viral-shorts trend analyst for India. Find 12 DIFFERENT visually striking
+EXPERIMENT ideas that would make excellent 30-45 second YouTube Shorts for an Indian
+Hindi-speaking audience.
 
-Search for these specifically:
-- Viral chemical reaction experiments (color-change, foam, crystal growth, dry ice)
-- Viral physics demos (pressure/vacuum tricks, magnetism, optical illusions, non-Newtonian fluids)
-- Everyday "myth or fact" science tests people can visualize
-- Simple DIY tech/gadget experiments
-- Famous international viral experiment trends worth localizing for India
+Every idea must be an EXPERIMENT or a TEST (something that is tried and the result is shown)
+in exactly one of these 4 categories — 3 ideas per category:
+- "science": viral chemical reactions, physics demos, pressure/vacuum tricks, magnetism,
+  non-Newtonian fluids, optical illusions, everyday "myth or fact" science tests
+- "ai": experiments with AI tools (chatbots, image/video/voice AI) — e.g. "AI se X banwaya,
+  result dekho", AI vs human tests, what AI gets wrong
+- "tech": experiments with technology — wifi/bluetooth range tests, robots, drones, 3D printing,
+  simple electronics, internet/app tricks
+- "gadgets": experiments with gadgets — phone tests (water/drop/battery), earbuds, power banks,
+  smartwatches, cameras, "does this gadget really work?" tests
+
+Do NOT include history, general facts lists, news, or topics that are not an experiment/test.
 
 For each idea, make sure it is:
 1. DIFFERENT from common topics already done to death (no basic baking-soda-volcano)
-2. Visually specific — describe the concrete experiment/materials/result, not vague "science facts"
+2. Visually specific — describe the concrete experiment/materials/result, not vague "facts"
 3. Safe to depict and describe without real safety risk, and clearly explainable in under 45 seconds
 
-Return JSON array of 10 items:
+Return JSON array of 12 items:
 [
   {{
-    "channel": "type of channel eg: Chemical Experiment, Physics Demo, DIY Science",
+    "category": "one of: science, ai, tech, gadgets",
+    "channel": "type of channel eg: Chemical Experiment, AI Test, Gadget Test",
     "title": "catchy hindi title for this experiment",
     "topic": "specific experiment in english with concrete materials/setup/result",
     "why_trending": "why this experiment is visually striking / shareworthy",
@@ -58,7 +66,7 @@ Return JSON array of 10 items:
   }}
 ]
 
-Return ONLY the JSON array. Make all 10 experiment ideas UNIQUE and DIFFERENT from each other.
+Return ONLY the JSON array. Make all 12 experiment ideas UNIQUE and DIFFERENT from each other.
 """
 
     try:
@@ -82,6 +90,8 @@ Return ONLY the JSON array. Make all 10 experiment ideas UNIQUE and DIFFERENT fr
     result = []
     for i, t in enumerate(topics):
         result.append({
+            'category': normalize_category(
+                t.get('category'), f"{t.get('topic', '')} {t.get('title', '')}"),
             'channel': t.get('channel', 'Hindi Experiment'),
             'title': t.get('title', t.get('topic', '')),
             'topic': t.get('topic', ''),
@@ -101,8 +111,14 @@ Return ONLY the JSON array. Make all 10 experiment ideas UNIQUE and DIFFERENT fr
     return result
 
 
-def get_best_hindi_topic():
+def get_best_hindi_topic(category=None):
+    """Pick a topic. If category is given (science/ai/tech/gadgets), prefer
+    ideas from that category; fall back to any idea if none match."""
     topics = get_hindi_trending_topics()
-    if topics:
-        return random.choice(topics[:5])  # Random from top 5
-    return None
+    if not topics:
+        return None
+    if category:
+        matching = [t for t in topics if t.get('category') == category]
+        if matching:
+            return random.choice(matching[:5])
+    return random.choice(topics[:5])  # Random from top 5
