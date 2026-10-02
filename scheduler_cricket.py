@@ -84,7 +84,8 @@ def _run_cricket_cycle_inner():
     from agents_cricket.saturation_agent import rank_topics_by_opportunity
     from agents_cricket.adaptive_scheduler import should_upload_now_cricket, mark_upload_done_cricket
     from agents_cricket.image_agent import generate_backgrounds
-    from agents_cricket.video_clip_agent import generate_background_clips_cricket
+    from agents_cricket import video_clip_agent
+    from agents_cricket.video_clip_agent import pick_clips
     from agents_cricket.upload_agent import upload_video
     from agents_cricket.voice_agent import generate_voice
     from agents.caption_agent import create_srt
@@ -157,7 +158,7 @@ def _run_cricket_cycle_inner():
     create_srt(script, audio_path="output/voice.mp3")
 
     print("Pexels video clips fetch ho rahe hain...")
-    clip_paths, clip_errors = generate_background_clips_cricket(structured, num_clips=4)
+    clip_paths, clip_errors = pick_clips(structured, num_clips=4, script_words=len(script.split()))
     if len(clip_paths) < 2:
         print(f"Too few Pexels clips ({clip_errors}) — falling back to static images...")
         generate_backgrounds(summary, num_images=4, structured=structured)
@@ -171,6 +172,14 @@ def _run_cricket_cycle_inner():
         video_path, seo["title"], seo["description"], seo["hashtags"]
     )
     print(f"Uploaded: {video_url}")
+
+    # V2 Phase 1 — only now (after a successful upload) put the clips on cooldown.
+    try:
+        from agents_cricket import asset_registry
+        if use_pexels:
+            asset_registry.record_usage(video_id, video_clip_agent.LAST_SELECTED)
+    except Exception as e:
+        print(f"Clip usage tracking skipped: {e}")
 
     cricket_db.mark_posted(new_match["id"], new_match.get("name") or new_match.get("title", ""))
     cricket_db.upsert_video(
