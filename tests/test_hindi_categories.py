@@ -52,3 +52,17 @@ def test_spy_parses_json_with_extra_text(monkeypatch, tmp_path):
     monkeypatch.setattr(m, "safe_invoke", lambda *a, **k: types.SimpleNamespace(content=reply))
     topics = spy.get_hindi_trending_topics()
     assert topics and topics[0]["category"] == "ai"
+
+
+def test_router_falls_back_to_gemini_on_empty_groq(monkeypatch):
+    import types
+    import agents_hindi.model_invoke_agent_hindi as m
+
+    class Fake:
+        def __init__(self, text): self.text = text
+        def invoke(self, prompt): return types.SimpleNamespace(content=self.text)
+
+    m.reset_groq_budget()
+    monkeypatch.setattr(m, "_get_groq", lambda *a, **k: Fake(""))
+    monkeypatch.setattr(m, "_get_gemini", lambda *a, **k: Fake("from gemini"))
+    assert m.safe_invoke("hi").content == "from gemini"

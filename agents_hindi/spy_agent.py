@@ -30,12 +30,12 @@ def get_hindi_trending_topics():
 Current date and time: {today}
 Random seed: {random_seed}
 
-You are a viral-shorts trend analyst for India. Find 12 DIFFERENT visually striking
+You are a viral-shorts trend analyst for India. Find 8 DIFFERENT visually striking
 EXPERIMENT ideas that would make excellent 30-45 second YouTube Shorts for an Indian
 Hindi-speaking audience.
 
 Every idea must be an EXPERIMENT or a TEST (something that is tried and the result is shown)
-in exactly one of these 4 categories — 3 ideas per category:
+in exactly one of these 4 categories — 2 ideas per category:
 - "science": viral chemical reactions, physics demos, pressure/vacuum tricks, magnetism,
   non-Newtonian fluids, optical illusions, everyday "myth or fact" science tests
 - "ai": experiments with AI tools (chatbots, image/video/voice AI) — e.g. "AI se X banwaya,
@@ -52,25 +52,18 @@ For each idea, make sure it is:
 2. Visually specific — describe the concrete experiment/materials/result, not vague "facts"
 3. Safe to depict and describe without real safety risk, and clearly explainable in under 45 seconds
 
-Return JSON array of 12 items:
+Return a JSON array of 8 items (2 per category). Keep every field SHORT:
 [
-  {{
-    "category": "one of: science, ai, tech, gadgets",
-    "channel": "type of channel eg: Chemical Experiment, AI Test, Gadget Test",
-    "title": "catchy hindi title for this experiment",
-    "topic": "specific experiment in english with concrete materials/setup/result",
-    "why_trending": "why this experiment is visually striking / shareworthy",
-    "tags": ["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8","tag9","tag10"],
-    "description": "50 word hindi description",
-    "views": 150000
-  }}
+  {{"category": "one of: science, ai, tech, gadgets",
+    "title": "catchy hindi title, max 10 words",
+    "topic": "the experiment in english: materials/setup/result, max 25 words"}}
 ]
 
-Return ONLY the JSON array. Make all 12 experiment ideas UNIQUE and DIFFERENT from each other.
+Return ONLY the JSON array. Make all 8 experiment ideas UNIQUE and DIFFERENT from each other.
 """
 
     topics = []
-    for attempt in range(2):
+    for attempt in range(1):
         try:
             response = safe_invoke(prompt, temperature=0.9)  # High temperature = more variety
             content = (response.content or "").strip()
@@ -83,7 +76,7 @@ Return ONLY the JSON array. Make all 12 experiment ideas UNIQUE and DIFFERENT fr
                 topics = parsed
                 break
         except Exception as e:
-            print(f"Spy agent (hindi) attempt {attempt + 1}/2 failed: {e}")
+            print(f"Spy agent (hindi) attempt {attempt + 1}/1 failed: {e}")
 
     # Normalize
     result = []

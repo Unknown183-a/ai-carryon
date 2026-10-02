@@ -175,18 +175,33 @@ def _try_groq(prompt, groq_model, temperature):
     resp, err = _run_with_timeout(
         lambda: _get_groq(groq_model, temperature).invoke(prompt), GROQ_TIMEOUT_SECONDS
     )
+    resp = _normalize_response(resp)
+    if resp is not None and not _has_text(resp):
+        # HTTP 200 but an empty answer (reasoning model used up its tokens).
+        # Treat it as a failure so the router tries Gemini instead.
+        err = "empty response"
+        resp = None
     _record_outcome("groq", resp is not None)
     if resp is None:
         print(f"[llm_router:hindi] Groq failed: {err}")
-    return _normalize_response(resp)
+    return resp
 def _try_gemini(prompt):
     """Attempt Gemini once. Returns response or None."""
     print("[llm_router:hindi] Trying Gemini")
     resp, err = _run_with_timeout(lambda: _get_gemini().invoke(prompt), GEMINI_TIMEOUT_SECONDS)
+    resp = _normalize_response(resp)
+    if resp is not None and not _has_text(resp):
+        err = "empty response"
+        resp = None
     _record_outcome("gemini", resp is not None)
     if resp is None:
         print(f"[llm_router:hindi] Gemini failed: {err}")
-    return _normalize_response(resp)
+    return resp
+
+def _has_text(resp):
+    content = getattr(resp, "content", None)
+    return isinstance(content, str) and bool(content.strip())
+
 
 def _normalize_response(resp):
     """
