@@ -1,4 +1,5 @@
 import os
+import re
 import glob
 import shutil
 import datetime
@@ -17,6 +18,11 @@ if platform.system() == "Darwin":
     FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 else:
     FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+# Bundled font with BOTH Devanagari (Hindi) and Latin glyphs. DejaVu has no
+# Devanagari, which made Hindi captions render as empty boxes.
+FONTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "fonts")
+HINDI_FONT_PATH = os.path.join(FONTS_DIR, "Hind-Bold.ttf")
 
 def get_background_images():
     folder = "assets/backgrounds"
@@ -131,6 +137,8 @@ def draw_caption(frame_img, text, font_path=FONT_PATH):
     draw = ImageDraw.Draw(frame_img)
     text = _strip_emoji(text)
     text = text.upper()
+    if re.search(r"[\u0900-\u097F]", text) and os.path.exists(HINDI_FONT_PATH):
+        font_path = HINDI_FONT_PATH  # Devanagari needs a font that has the glyphs
     max_width = int(SHORTS_WIDTH * 0.88)
     font_size = 95
     font = ImageFont.load_default()
@@ -500,9 +508,9 @@ def burn_captions(input_video_path, output_path=None):
     output_path = output_path or input_video_path
 
     if os.path.exists(ass_path):
-        vf = f"ass={ass_path}"
+        vf = f"ass={ass_path}:fontsdir={FONTS_DIR}"
     elif os.path.exists(srt_path):
-        vf = f"subtitles={srt_path}:force_style='{_caption_force_style()}'"
+        vf = f"subtitles={srt_path}:fontsdir={FONTS_DIR}:force_style='{_caption_force_style()}'"
     else:
         return input_video_path
 
@@ -539,7 +547,7 @@ def _caption_force_style():
     # Mirrors the previous PIL caption style: big bold yellow text,
     # black outline, positioned around 65% down the frame.
     return (
-        "FontName=DejaVu Sans Bold,FontSize=78,"
+        "FontName=Hind,FontSize=78,"
         "PrimaryColour=&H00DCFF&,OutlineColour=&H000000&,"
         "BorderStyle=1,Outline=4,Shadow=0,Alignment=2,MarginV=650,Bold=1"
     )
@@ -613,9 +621,9 @@ def _create_video_from_pexels_clips(clip_paths, audio_path, srt_path, music_path
     has_captions = has_ass or (srt_path and os.path.exists(srt_path))
 
     if has_ass:
-        vf = f"ass={ass_path}"
+        vf = f"ass={ass_path}:fontsdir={FONTS_DIR}"
     elif has_captions:
-        vf = f"subtitles={srt_path}:force_style='{_caption_force_style()}'"
+        vf = f"subtitles={srt_path}:fontsdir={FONTS_DIR}:force_style='{_caption_force_style()}'"
     else:
         vf = None
 
