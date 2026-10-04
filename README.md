@@ -16,7 +16,7 @@ It runs **five independent production channels**, each with its own content sour
 | --- | --- | --- | --- | --- |
 | **English** ([@AIcarryONAI](https://www.youtube.com/@AIcarryONAI)) | US, Tech/AI | Trending-topic discovery + LLM research | Edge TTS | `english-scheduler.yml` (every 5h) |
 | **Hindi** ([@AICarryONHindi](https://www.youtube.com/@AICarryONHindi)) | India, experiment-style videos (chemical, physical and technology experiments from around the world) | LLM-generated trending topics, Hinglish scripts | Sarvam AI Bulbul, Edge TTS fallback | `hindi-scheduler.yml` (hourly check, adaptive, max 3 uploads/day) |
-| **Cricket** ([@AICarryONSports](https://www.youtube.com/@AICarryONSports)) | Cricket news and match content | CricAPI match data + trending cricket topics | Edge TTS | `cricket-scheduler.yml` |
+| **Cricket** ([@AICarryONSports](https://www.youtube.com/@AICarryONCricket)) | Cricket news and match content | CricAPI match data + trending cricket topics | Edge TTS | `cricket-scheduler.yml` |
 | **Gaming** ([@AICarryONGaming](https://www.youtube.com/@AICarryONGaming)) | Gaming moments and trends | Twitch Helix Clips API (followed streamers + top clips by game category) | Edge TTS | `gaming-scheduler.yml` |
 | **Bhakti** | India, Hindi devotional Shorts (mythological stories, mantra meanings, festival significance) | Devotional topic pool + live trend check, LLM research, Pexels temple/diya/aarti footage, Freesound bhajan-style music | Sarvam AI (devotional pace); `BHAKTI_MODE=music_only` skips voice and captions | `bhakti-scheduler.yml` (hourly check, adaptive, up to 6 uploads/day) |
 
