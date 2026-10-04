@@ -159,6 +159,30 @@ def _run_cricket_cycle_inner():
     generate_voice(script, output_path="output/voice.mp3")
     create_srt(script, audio_path="output/voice.mp3")
 
+    # Hook Engine: topic-relevant opening clip, chosen BEFORE the normal clips. The cricket
+    # text hook type (STAT/TACTICAL/...) steers the visual hook type. There is no licensed
+    # match footage in this pipeline, so candidates come from Pexels and must clear the
+    # 70% relevance gate: generic "cricket" footage for a player-specific story is rejected.
+    hook = None
+    try:
+        from agents.hook_engine import select_hook
+        from agents_cricket.script_agent import safe_invoke as _hook_invoke
+        _visual_type = {"STAT_HOOK": "curiosity", "TACTICAL_HOOK": "curiosity",
+                        "MYSTERY_HOOK": "mystery", "EMOTIONAL_HOOK": "emotional",
+                        "RECORD_HOOK": "shock"}.get(story.get("hook_type"))
+        _ctx = "; ".join(x for x in (
+            f"teams: {', '.join(structured.get('teams') or [])}" if structured.get("teams") else "",
+            f"venue: {structured.get('venue')}" if structured.get("venue") else "",
+            f"standout player: {structured.get('standout_player')}" if structured.get("standout_player") else "",
+        ) if x)
+        hook = select_hook(topic_label, script, "cricket", invoke=_hook_invoke,
+                           meta_get=cricket_db.get_meta, meta_set=cricket_db.set_meta,
+                           hint_hook_type=_visual_type, context=_ctx)
+        print(f"Hook: {hook['clip_id']} ({hook['duration']}s, relevance {hook['relevance']:.2f})"
+              if hook else "Hook: none suitable - normal opening")
+    except Exception as e:
+        print(f"Hook engine skipped: {e}")
+
     print("Pexels video clips fetch ho rahe hain...")
     clip_paths, clip_errors = pick_clips(structured, num_clips=4, script_words=len(script.split()))
     if len(clip_paths) < 2:
@@ -168,7 +192,8 @@ def _run_cricket_cycle_inner():
     else:
         use_pexels = True
 
-    video_path = create_video(use_pexels_clips=use_pexels)  # writes to output/final_video.mp4
+    video_path = create_video(use_pexels_clips=use_pexels,
+                              hook=hook if use_pexels else None)  # writes to output/final_video.mp4
 
     video_id, video_url = upload_video(
         video_path, seo["title"], seo["description"], seo["hashtags"]
@@ -182,6 +207,14 @@ def _run_cricket_cycle_inner():
             asset_registry.record_usage(video_id, video_clip_agent.LAST_SELECTED)
     except Exception as e:
         print(f"Clip usage tracking skipped: {e}")
+
+    if hook and use_pexels:
+        try:
+            from agents.hook_engine import record_usage as record_hook_usage
+            record_hook_usage(hook, topic_label, "cricket", cricket_db.get_meta,
+                              cricket_db.set_meta, video_id)
+        except Exception as e:
+            print(f"Hook usage tracking skipped: {e}")
 
     record_story_meta(story)
 

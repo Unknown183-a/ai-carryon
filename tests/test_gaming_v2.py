@@ -670,3 +670,44 @@ def test_normalize_moment_is_gameplay_parsing():
     assert moment_analyzer.normalize_moment({**base, "is_gameplay": "true"}, {})["is_gameplay"] is True
     assert moment_analyzer.normalize_moment(base, {})["is_gameplay"] is True            # missing -> assume gameplay
     assert moment_analyzer.heuristic_moment({"title": "x"})["is_gameplay"] is True
+
+
+def test_full_cycle_gameplay_hook_reaches_renderer_and_keeps_text_hook_memory(sched, monkeypatch):
+    """Hook Engine wiring: an intense, vision-analysed moment gets a gameplay cold open that is
+    handed to the renderer and logged. Regression guard: the visual hook must not clobber the
+    TEXT hook (`hook`) that feeds remember_script() / the hook-type cooldown."""
+    import sys
+    import types
+    record = {}
+    _fake_modules(monkeypatch, record)
+
+    def render(paths, a, s, music_path=None, hook=None):
+        record["render_hook"] = hook
+        return "output/v.mp4"
+    m = types.ModuleType("agents.video_agent")
+    m._create_video_from_pexels_clips = render
+    monkeypatch.setitem(sys.modules, "agents.video_agent", m)
+
+    db = _CycleDB()
+    monkeypatch.setattr(sched, "gaming_db", db)
+    import agents_gaming.trending_agent as ta
+    clips = [_clip("best", 5000, 3, title="1 HP clutch", dur=25)] + \
+            [_clip(f"c{i}", 4000 - 100 * i, 3, title="1 HP clutch", dur=25) for i in range(5)]
+    monkeypatch.setattr(ta, "get_all_topics", lambda: clips)
+    monkeypatch.setattr(ta, "FOLLOWED_STREAMERS", [])
+    _wire(monkeypatch, sched, clips)                       # "best" is analysed at intensity 10
+    monkeypatch.setattr(script_agent, "create_gaming_script_v2",
+                        lambda clip, mo, sm, st, db=None: {"script": "He had 1 HP.\n...\nand won", "passed": True,
+                                                           "hook": {"type": "SHOCK", "text": "He had 1 HP."},
+                                                           "quality": None})
+    res = sched._run_gaming_cycle_inner()
+
+    assert res["status"] == "uploaded"
+    h = record["render_hook"]
+    assert h and h["provider"] == "gameplay" and h["relevance"] == 1.0
+    assert 0.8 <= h["duration"] <= 3.0 and h["start"] >= 0
+    # the text-hook cooldown memory is intact (this failed when both used the name `hook`)
+    assert json.loads(db.meta[script_agent.RECENT_HOOKS_KEY]) == ["SHOCK"]
+    # selection was logged against the uploaded video
+    log = json.loads(db.meta["hook_history:gaming"])["log"]
+    assert log[-1]["video_id"] == "vid123" and log[-1]["hook_provider"] == "gameplay"

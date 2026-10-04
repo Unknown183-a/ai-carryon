@@ -57,13 +57,13 @@ def _create_static_video(audio_path, images_folder, output_path):
 
 
 def create_video(audio_path="output/voice.mp3", images_folder="assets/backgrounds",
-                  output_path="output/final_video.mp4", use_pexels_clips=False):
+                  output_path="output/final_video.mp4", use_pexels_clips=False, hook=None):
     os.makedirs("output", exist_ok=True)
 
     pexels_clips = get_pexels_clips() if use_pexels_clips else []
     if pexels_clips:
         print(f"Using {len(pexels_clips)} Pexels clips as cricket background")
-        return _create_video_from_pexels_clips(pexels_clips, audio_path, "output/captions.srt")
+        return _create_video_from_pexels_clips(pexels_clips, audio_path, "output/captions.srt", hook=hook)
 
     raw_path = _create_static_video(audio_path, images_folder, output_path)
     return burn_captions(raw_path, output_path)

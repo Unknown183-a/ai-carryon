@@ -169,6 +169,33 @@ def run_generation_pipeline(topic_override=None):
             thumbnail_image = generate_thumbnail(seo["title"], topic)
             save_checkpoint(topic, "thumbnail", thumbnail_image)
 
+        # Hook Engine: choose a topic-relevant opening clip BEFORE the normal clips.
+        # Never blocks the run: no suitable hook -> hook=None -> renders as before.
+        hook = None
+        try:
+            from agents.hook_engine import select_hook
+            if is_stage_done(topic, "hook"):
+                hook = get_stage_data(topic, "hook")
+                if hook and not os.path.exists(hook.get("path", "")):
+                    hook = None
+                    is_hook_cached = False
+                else:
+                    is_hook_cached = True
+                    log("Resuming: hook stage already done")
+            else:
+                is_hook_cached = False
+            if not is_hook_cached:
+                log("Selecting hook clip...")
+                from agents.model_invoke_agent_english import safe_invoke as _hook_invoke
+                hook = select_hook(topic, script, "english", invoke=_hook_invoke,
+                                   meta_get=db.get_meta, meta_set=db.set_meta)
+                save_checkpoint(topic, "hook", hook)
+            log(f"Hook: {hook['clip_id']} ({hook['duration']}s, relevance {hook['relevance']:.2f})"
+                if hook else "Hook: none suitable - normal opening")
+        except Exception as hook_err:
+            log(f"Hook engine skipped: {hook_err}")
+            hook = None
+
         if is_stage_done(topic, "images") and get_stage_data(topic, "images") and all(os.path.exists(p) for p in get_stage_data(topic, "images")):
             image_paths = get_stage_data(topic, "images")
             log("Resuming: images already done")
@@ -207,7 +234,8 @@ def run_generation_pipeline(topic_override=None):
             log("Resuming: video already rendered")
         else:
             log("Creating video...")
-            video_file = create_video(use_pexels_clips=use_pexels)
+            video_file = create_video(use_pexels_clips=use_pexels,
+                                      hook=hook if use_pexels else None)
             save_checkpoint(topic, "video", video_file)
 
         if is_stage_done(topic, "upload"):
@@ -223,6 +251,9 @@ def run_generation_pipeline(topic_override=None):
                 thumbnail_path=thumbnail_image
             )
             save_checkpoint(topic, "upload", [video_id, video_url])
+            if hook and use_pexels:
+                from agents.hook_engine import record_usage as record_hook_usage
+                record_hook_usage(hook, topic, "english", db.get_meta, db.set_meta, video_id)
 
         if seo.get("ab_winner"):
             try:

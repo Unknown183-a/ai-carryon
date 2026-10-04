@@ -45,10 +45,14 @@ def _duration(path):
         return float(out.stdout.strip())
 
 
-def _build_background(ffmpeg, clip_paths, total):
+def _build_background(ffmpeg, clip_paths, total, hook=None):
     n = len(clip_paths)
-    per_clip = total / n
-    segs = []
+    # Hook Engine: the hook opens the video (it covers the bhajan lead-in and the
+    # first words) and replaces the first seconds of B-roll; total is unchanged.
+    from agents.hook_render import prepare_hook_segment
+    hook_seg, _hook_dur, per_clip = prepare_hook_segment(
+        ffmpeg, hook, total, n, SHORTS_WIDTH, SHORTS_HEIGHT, out_path="output/bhakti_hook_seg.mp4")
+    segs = [hook_seg] if hook_seg else []
     for i, clip in enumerate(clip_paths):
         seg = f"output/bhakti_seg_{i}.mp4"
         r = subprocess.run([
@@ -83,7 +87,7 @@ def _build_background(ffmpeg, clip_paths, total):
 
 def create_narrated_music_video(music_path, audio_path="output/voice.mp3",
                                 ass_path="output/captions.ass",
-                                music_volume=MUSIC_VOLUME):
+                                music_volume=MUSIC_VOLUME, hook=None):
     """Render voiceover + ducked bhajan over Pexels clips. Returns the path
     to output/final_video.mp4."""
     if not music_path or not os.path.exists(music_path):
@@ -102,7 +106,7 @@ def create_narrated_music_video(music_path, audio_path="output/voice.mp3",
     total = LEAD_IN + voice_len + TAIL
     print(f"[narrated_video] voice {voice_len:.1f}s -> total {total:.1f}s, {len(clips)} clips")
 
-    bg = _build_background(ffmpeg, clips, total)
+    bg = _build_background(ffmpeg, clips, total, hook=hook)
 
     lead_ms = int(LEAD_IN * 1000)
     fade_out_start = max(total - TAIL - 0.5, 0)

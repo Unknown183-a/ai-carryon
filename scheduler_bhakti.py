@@ -178,6 +178,21 @@ def generate_and_upload_bhakti(force=False):
         from agents_bhakti.thumbnail_agent import generate_thumbnail
         thumbnail = generate_thumbnail(seo["title"], topic)
 
+        # Hook Engine: reverent, topic-relevant opening clip (bhakti profile only allows
+        # emotional/mystery/curiosity hooks and blocks dramatic/violent/deity imagery).
+        # Never blocks the run: no suitable hook -> hook=None -> renders as before.
+        hook = None
+        try:
+            log("Hook clip select ho raha hai...")
+            from agents.hook_engine import select_hook
+            from agents_bhakti.model_invoke_agent_bhakti import safe_invoke as _hook_invoke
+            hook = select_hook(topic, script, "bhakti", invoke=_hook_invoke,
+                               meta_get=db.get_meta, meta_set=db.set_meta)
+            log(f"Hook: {hook['clip_id']} ({hook['duration']}s, relevance {hook['relevance']:.2f})"
+                if hook else "Hook: koi suitable nahi - normal opening")
+        except Exception as he:
+            log(f"Hook engine skip: {he}")
+
         log("Pexels devotional video clips fetch ho rahe hain...")
         from agents_bhakti.image_agent import generate_background_clips, generate_backgrounds
         image_paths, errors = generate_background_clips(topic, script, num_clips=4)
@@ -205,7 +220,8 @@ def generate_and_upload_bhakti(force=False):
         if BHAKTI_MODE == "music_only":
             log("Video ban raha hai (music-only, no narration)...")
             from agents_bhakti.silent_video_agent import create_silent_music_video
-            video = create_silent_music_video(music_path=music["path"])
+            video = create_silent_music_video(music_path=music["path"],
+                                              hook=hook if use_pexels else None)
         else:
             log("Hindi bhakti awaaz generate ho rahi hai...")
             from agents_bhakti.voice_agent import generate_voice
@@ -218,7 +234,8 @@ def generate_and_upload_bhakti(force=False):
             log("Video ban raha hai (voiceover + bhajan background)...")
             if use_pexels:
                 from agents_bhakti.narrated_video_agent import create_narrated_music_video
-                video = create_narrated_music_video(music_path=music["path"], audio_path=voice)
+                video = create_narrated_music_video(music_path=music["path"], audio_path=voice,
+                                                    hook=hook)
             else:
                 from agents.video_agent import create_video
                 video = create_video(use_pexels_clips=False, music_path=music["path"])
@@ -232,6 +249,10 @@ def generate_and_upload_bhakti(force=False):
             hashtags=seo["hashtags"],
             thumbnail_path=thumbnail
         )
+
+        if hook and use_pexels:
+            from agents.hook_engine import record_usage as record_hook_usage
+            record_hook_usage(hook, topic, "bhakti", db.get_meta, db.set_meta, video_id)
 
         mark_posted_today(topic)
         try:

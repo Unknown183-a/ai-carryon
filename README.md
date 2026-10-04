@@ -169,6 +169,24 @@ All five pipelines deploy the same way: push to `main`, and the scheduled workfl
 - **Sarvam text limits**: long scripts come back as multiple audio chunks, so always concatenate every returned segment.
 - **Flow/Veo clips**: an optional manual mode for cinematic clips exists in the English and Hindi agents (`flow_prompt_agent.py`), but the automated pipelines use Pexels or Twitch footage. Real brand names in clip prompts can trigger Flow's policy filter.
 
+## Hook Engine
+
+Every Short can open on a topic-relevant visual hook (1-3s), chosen before the normal B-roll.
+
+```
+script -> story analysis + hook intent -> 3-5 queries -> Pexels (10-20 candidates)
+       -> score (relevance 40 / visual 25 / curiosity 20 / emotion 10 / continuity 5)
+       -> relevance >= 70% gate -> duplicate check -> best hook -> render first
+```
+
+- Code: `agents/hook_engine.py` (shared core + per-channel profiles), `agents/hook_render.py` (renderer helper), `agents_gaming/gameplay_hook.py`. Pexels search goes through the existing client: `agents/video_clip_agent.py::search_hook_videos()`.
+- The hook **replaces** the first seconds of B-roll; total length, voice and caption timing are unchanged.
+- English, Hindi, Cricket, Bhakti use Pexels. Bhakti is restricted to reverent hook types and blocks dramatic/violent/deity terms. Gaming cuts a cold open from the real gameplay peak (vision-analysed, intensity >= 6 only).
+- Relevance is judged from the Pexels clip **title** (no tags/description exist), blended 75/25 with a keyword-overlap check. No suitable hook -> the video renders exactly as before.
+- Duplicates: per-channel history in the DB meta table (`hook_history:<channel>`), 14-day cooldown, recorded only after a successful upload. Selections are logged as `HOOK_LOG {...}` lines.
+- Env: `HOOK_ENGINE=0` (off everywhere), `HOOK_ENGINE_<CHANNEL>=0`, `HOOK_MIN_RELEVANCE`, `HOOK_REUSE_COOLDOWN_DAYS`, `GAMING_HOOK_MIN_INTENSITY`.
+- Tests: `python -m unittest tests.test_hook_engine -v`
+
 ## Comment Reply Agent
 
 One shared engine (`agents/comment_engine.py`) with thin per-channel wrappers
