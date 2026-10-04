@@ -36,6 +36,9 @@ jobs:
           TWITCH_TRACKED_GAMES: ${{ secrets.TWITCH_TRACKED_GAMES }}
           YOUTUBE_GAMING_CLIENT_SECRETS_B64: ${{ secrets.YOUTUBE_GAMING_CLIENT_SECRETS_B64 }}
           YOUTUBE_GAMING_TOKEN_B64: ${{ secrets.YOUTUBE_GAMING_TOKEN_B64 }}
+          PYTHONUNBUFFERED: "1"
+          GEMINI_TIMEOUT_SECONDS: "40"
+          GROQ_MAX_CALLS_PER_RUN: "14"
         run: python scheduler_gaming.py
 
       - name: Upload run log (for debugging)
