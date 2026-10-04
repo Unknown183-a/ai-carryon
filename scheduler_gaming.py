@@ -259,15 +259,36 @@ def _run_gaming_cycle_inner():
         print("Downloading Twitch clip footage...")
         clip_paths = get_gaming_background_clip(clip)
 
+    # Hook Engine (gaming): cold-open on the real gameplay's peak moment. Only when the
+    # vision tier located it with high intensity; otherwise None -> renders as before.
+    # (named visual_hook: `hook` above is the TEXT hook that feeds remember_script().)
+    visual_hook = None
+    if moment:
+        try:
+            from agents_gaming.gameplay_hook import select_gameplay_hook
+            visual_hook = select_gameplay_hook(clip_paths[0], moment, clip)
+        except Exception as e:
+            print(f"Hook engine skipped: {e}")
+
     # NOTE: the shared renderer currently drops the clip's own audio (-an) and
     # sizes the video to the voiceover. Preserving game audio is Gaming V2 Sprint 2.
+    # `hook` is only passed when there is one, so a no-hook run makes exactly the
+    # same call as before this feature existed.
     video_path = _create_video_from_pexels_clips(
         clip_paths, "output/voice.mp3", "output/captions.srt",
-        music_path=None,
+        music_path=None, **({"hook": visual_hook} if visual_hook else {}),
     )
 
     video_id, video_url = upload_video(video_path, title, description, hashtags)
     print(f"Uploaded: {video_url}")
+
+    if visual_hook:
+        try:
+            from agents.hook_engine import record_usage as record_hook_usage
+            record_hook_usage(visual_hook, clip.get("title", ""), "gaming", gaming_db.get_meta,
+                              gaming_db.set_meta, video_id)   # gameplay hooks: log only
+        except Exception as e:
+            print(f"Hook logging skipped: {e}")
 
     gaming_db.mark_posted(clip["id"], clip.get("title", ""), clip.get("broadcaster_name", ""))
     if GAMING_V2_ENABLED:

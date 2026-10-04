@@ -101,3 +101,86 @@ def generate_background_clips(topic, script, num_clips=4):
             print(f"Clip {i+1} failed: {e}")
 
     return clip_paths, errors
+
+
+# ─────────────────────────────────────────────
+# Hook search (Hook Engine) — same Pexels client, second use case.
+#
+#   Pexels API
+#     ├── normal clips : search_pexels_video() / download_video_clip()  (above)
+#     └── hook clips   : search_hook_videos()  / download_video_file()  (below)
+#
+# No second API client: both paths use PEXELS_API_KEY and the same
+# https://api.pexels.com/videos/search endpoint. See agents/hook_engine.py.
+# ─────────────────────────────────────────────
+PEXELS_VIDEO_SEARCH_URL = "https://api.pexels.com/videos/search"
+
+
+def search_videos(query, per_page=10, orientation="portrait", size=None):
+    """Search Pexels videos and return NORMALIZED candidates (never raises):
+    [{"id", "width", "height", "duration", "url", "files", "query"}].
+    Same shape as agents_hindi.video_clip_agent.search_candidates()."""
+    key = os.getenv("PEXELS_API_KEY", "")
+    if not key:
+        return []
+    params = {"query": query, "per_page": per_page}
+    if orientation:
+        params["orientation"] = orientation
+    if size:
+        params["size"] = size
+    try:
+        r = requests.get(PEXELS_VIDEO_SEARCH_URL, headers={"Authorization": key},
+                         params=params, timeout=30)
+        r.raise_for_status()
+        videos = r.json().get("videos", [])
+    except Exception as e:
+        print(f"  Pexels search failed for '{query}': {e}")
+        return []
+    return [{
+        "id": v.get("id"),
+        "width": v.get("width") or 0,
+        "height": v.get("height") or 0,
+        "duration": v.get("duration") or 0,
+        "url": v.get("url", ""),
+        "files": v.get("video_files", []),
+        "query": query,
+    } for v in videos if v.get("id")]
+
+
+def search_hook_videos(queries, orientation="portrait", duration_min=1, duration_max=10,
+                       per_query=6, max_total=20, exclude_ids=None):
+    """Hook-specific search over several queries (spec: 3-5 queries, ~10-20
+    candidates). Duplicates across queries are dropped (first query wins) and
+    the duration window is applied client-side, because the Pexels videos
+    endpoint has no duration filter. Returns a list of normalized candidates."""
+    exclude = {str(x) for x in (exclude_ids or [])}
+    seen, out = set(), []
+    for q in queries or []:
+        for c in search_videos(q, per_page=per_query, orientation=orientation):
+            cid = str(c["id"])
+            if cid in seen or cid in exclude:
+                continue
+            d = c.get("duration") or 0
+            if duration_min is not None and d < duration_min:
+                continue
+            if duration_max is not None and d > duration_max:
+                continue
+            seen.add(cid)
+            out.append(c)
+            if len(out) >= max_total:
+                return out
+    return out
+
+
+def download_video_file(candidate, output_path):
+    """Download a normalized candidate's best mp4 encode. Raises on failure."""
+    link = _pick_best_video_file(candidate.get("files") or [])
+    if not link:
+        raise RuntimeError("no downloadable file for candidate")
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    resp = requests.get(link, timeout=90, stream=True)
+    resp.raise_for_status()
+    with open(output_path, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=1024 * 1024):
+            f.write(chunk)
+    return output_path

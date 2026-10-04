@@ -211,6 +211,20 @@ def generate_and_upload_hindi(force=False):
         from agents.thumbnail_generator import generate_thumbnail
         thumbnail = generate_thumbnail(seo["title"], topic)
 
+        # Hook Engine: topic-relevant opening clip, chosen BEFORE the normal clips.
+        # Never blocks the run: no suitable hook -> hook=None -> renders as before.
+        hook = None
+        try:
+            log("Hook clip select ho raha hai...")
+            from agents.hook_engine import select_hook
+            from agents_hindi.model_invoke_agent_hindi import safe_invoke as _hook_invoke
+            hook = select_hook(topic, script, "hindi", invoke=_hook_invoke,
+                               meta_get=db.get_meta, meta_set=db.set_meta)
+            log(f"Hook: {hook['clip_id']} ({hook['duration']}s, relevance {hook['relevance']:.2f})"
+                if hook else "Hook: koi suitable nahi - normal opening")
+        except Exception as he:
+            log(f"Hook engine skip: {he}")
+
         log("Pexels video clips fetch ho rahe hain...")
         from agents_hindi.video_clip_agent import generate_background_clips
         from agents.image_agent import generate_backgrounds
@@ -235,7 +249,7 @@ def generate_and_upload_hindi(force=False):
 
         log("Video ban raha hai...")
         from agents.video_agent import create_video
-        video = create_video(use_pexels_clips=use_pexels)
+        video = create_video(use_pexels_clips=use_pexels, hook=hook if use_pexels else None)
 
         log("YouTube Hindi channel par upload ho raha hai...")
         from agents_hindi.upload_agent import upload_video
@@ -246,6 +260,10 @@ def generate_and_upload_hindi(force=False):
             hashtags=seo["hashtags"],
             thumbnail_path=thumbnail
         )
+
+        if hook and use_pexels:
+            from agents.hook_engine import record_usage as record_hook_usage
+            record_hook_usage(hook, topic, "hindi", db.get_meta, db.set_meta, video_id)
 
         mark_posted_today(topic)
         try:

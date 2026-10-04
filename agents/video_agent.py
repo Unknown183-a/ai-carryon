@@ -339,7 +339,7 @@ def extract_frames_from_clip(clip_path, target_fps=24):
     return duration
 
 
-def create_video(manim_path=None, use_flow_clips=False, use_pexels_clips=False, music_path=None):
+def create_video(manim_path=None, use_flow_clips=False, use_pexels_clips=False, music_path=None, hook=None):
     audio_path = "output/voice.mp3"
     srt_path = "output/captions.srt"
     if music_path is None:
@@ -355,7 +355,7 @@ def create_video(manim_path=None, use_flow_clips=False, use_pexels_clips=False, 
     pexels_clips = get_pexels_clips() if use_pexels_clips else []
     if pexels_clips:
         print(f"Using {len(pexels_clips)} Pexels clips as background")
-        return _create_video_from_pexels_clips(pexels_clips, audio_path, srt_path, music_path)
+        return _create_video_from_pexels_clips(pexels_clips, audio_path, srt_path, music_path, hook=hook)
 
     duration = get_audio_duration(audio_path)
     print(f"Duration: {round(duration, 1)}s")
@@ -553,7 +553,7 @@ def _caption_force_style():
     )
 
 
-def _create_video_from_pexels_clips(clip_paths, audio_path, srt_path, music_path=None):
+def _create_video_from_pexels_clips(clip_paths, audio_path, srt_path, music_path=None, hook=None):
     """
     Stitch topic-relevant Pexels stock clips as silent B-roll, scaled/cropped
     to fill the Shorts frame, trimmed/looped to match the TTS voiceover's
@@ -567,10 +567,16 @@ def _create_video_from_pexels_clips(clip_paths, audio_path, srt_path, music_path
 
     audio_duration = get_audio_duration(audio_path)
     n = len(clip_paths)
-    per_clip = audio_duration / n
-    print(f"Target duration: {audio_duration:.1f}s across {n} Pexels clips (~{per_clip:.1f}s each)")
+    # Hook Engine: an optional hook opens the video and REPLACES the first
+    # seconds of B-roll (total length / voice / captions timing are unchanged).
+    # With hook=None this is exactly the old audio_duration / n.
+    from agents.hook_render import prepare_hook_segment
+    hook_seg, hook_dur, per_clip = prepare_hook_segment(
+        ffmpeg, hook, audio_duration, n, SHORTS_WIDTH, SHORTS_HEIGHT)
+    print(f"Target duration: {audio_duration:.1f}s across {n} Pexels clips (~{per_clip:.1f}s each"
+          + (f", after a {hook_dur:.1f}s hook)" if hook_seg else ")"))
 
-    segment_paths = []
+    segment_paths = [hook_seg] if hook_seg else []
     for i, clip_path in enumerate(clip_paths):
         seg_path = f"output/pexels_seg_{i}.mp4"
         cmd = [

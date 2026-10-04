@@ -38,7 +38,7 @@ def _loop_trim_fade_music(ffmpeg, music_path, duration, out_path):
         raise RuntimeError(f"Music loop/trim failed: {result.stderr[-400:]}")
 
 
-def create_silent_music_video(music_path, duration=None):
+def create_silent_music_video(music_path, duration=None, hook=None):
     if not music_path or not os.path.exists(music_path):
         raise RuntimeError(
             "create_silent_music_video requires a valid music_path — none was provided"
@@ -52,13 +52,18 @@ def create_silent_music_video(music_path, duration=None):
     os.makedirs("output", exist_ok=True)
     duration = duration or DEFAULT_DURATION
     n = len(clip_paths)
-    per_clip = duration / n
+    # Hook Engine: optional hook opens the video and replaces the first seconds
+    # of B-roll; total duration is unchanged. hook=None -> duration / n as before.
+    from agents.hook_render import prepare_hook_segment
+    hook_seg, _hook_dur, per_clip = prepare_hook_segment(
+        ffmpeg, hook, duration, n, SHORTS_WIDTH, SHORTS_HEIGHT,
+        out_path="output/bhakti_hook_seg.mp4")
     print(
         f"[silent_video] Target duration: {duration:.1f}s across {n} Pexels clips "
         f"(~{per_clip:.1f}s each), music-only audio"
     )
 
-    segment_paths = []
+    segment_paths = [hook_seg] if hook_seg else []
     for i, clip_path in enumerate(clip_paths):
         seg_path = f"output/pexels_seg_{i}.mp4"
         cmd = [
