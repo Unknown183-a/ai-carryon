@@ -12,10 +12,10 @@ Two layers:
   2. LLM judge: scores the five dimensions plus pacing / payoff / repetition
      / AI-pattern notes.
 
-If the judge call itself fails (provider outage), the LLM layer is skipped
-and flagged `judge_skipped` — the deterministic layer still applies. Low
-*scores* fail closed; infrastructure *errors* fail open so an outage doesn't
-silently stop the channel.
+If the judge call itself fails (provider outage, unparsable reply) the script
+is flagged `unjudged` and does NOT pass (fail closed) — an unreviewed script
+is never published; the scheduler just skips this cycle and the next cron run
+tries again. GAMING_ALLOW_UNJUDGED=1 restores the old fail-open behaviour.
 """
 import difflib
 import os
@@ -34,15 +34,26 @@ SIMILARITY_LIMIT = 0.6
 # same script could pass or fail depending on call order. Pin the judge to
 # Gemini (set GAMING_JUDGE_PROVIDER=router to use the normal router again).
 JUDGE_PROVIDER = os.getenv("GAMING_JUDGE_PROVIDER", "gemini").lower()
+# The router's shared Gemini timeout (15s) is too short for a thinking model
+# reading a long judging prompt: three timeouts in a row trip the circuit
+# breaker and kill Gemini for the whole run. The judge gets its own budget.
+JUDGE_TIMEOUT_SECONDS = int(os.getenv("GAMING_JUDGE_TIMEOUT_SECONDS", "45"))
+# If the judge can't produce scores (outage / unparsable reply) the script is
+# UNJUDGED. Default: do not publish it. Set GAMING_ALLOW_UNJUDGED=1 to opt out.
+ALLOW_UNJUDGED = os.getenv("GAMING_ALLOW_UNJUDGED", "0") == "1"
+JUDGE_PARSE_RETRIES = 1
 
 
 def _invoke_judge(prompt):
-    from agents.model_invoke_agent_english import _provider_dead, _try_gemini, safe_invoke
-    if JUDGE_PROVIDER == "gemini" and not _provider_dead("gemini"):
-        resp = _try_gemini(prompt)
+    import agents.model_invoke_agent_english as llm
+    if JUDGE_PROVIDER == "gemini" and not llm._provider_dead("gemini"):
+        print("[gaming judge] Trying Gemini")
+        resp, err = llm._run_with_timeout(lambda: llm._get_gemini().invoke(prompt), JUDGE_TIMEOUT_SECONDS)
+        llm._record_outcome("gemini", resp is not None)
         if resp is not None:
-            return resp
-    return safe_invoke(prompt)
+            return llm._normalize_response(resp)
+        print(f"[gaming judge] Gemini failed: {err} — falling back to the router")
+    return llm.safe_invoke(prompt)
 
 
 def _similarity(script, recent_scripts):
@@ -89,10 +100,14 @@ def evaluate_script(script, moment, hook=None, summary="", recent_scripts=None):
     judge_skipped = False
 
     try:
-        raw = _invoke_judge(_judge_prompt(script, moment, hook, summary)).content
-        data = extract_json(raw) or {}
-        for k in SCORE_KEYS:
-            scores[k] = clamp(data.get(k), 1, 10, default=None)
+        data = {}
+        for _ in range(1 + JUDGE_PARSE_RETRIES):          # retry only an unparsable reply
+            raw = _invoke_judge(_judge_prompt(script, moment, hook, summary)).content
+            data = extract_json(raw) or {}
+            for k in SCORE_KEYS:
+                scores[k] = clamp(data.get(k), 1, 10, default=None)
+            if any(v is not None for v in scores.values()):
+                break
         if all(v is None for v in scores.values()):
             judge_skipped = True
         issues = [str(i) for i in data.get("issues", [])] if isinstance(data.get("issues"), list) else []
@@ -118,6 +133,10 @@ def evaluate_script(script, moment, hook=None, summary="", recent_scripts=None):
     # Unscored dimensions (judge skipped) pass; scored ones must be > MIN_SCORE.
     failing = [k for k, v in scores.items() if v is not None and not v > MIN_SCORE]
     passed = not failing
+    if judge_skipped and not ALLOW_UNJUDGED:
+        # Never publish a script nobody reviewed just because the reviewer was down.
+        passed = False
+        issues.append("quality judge unavailable — script was not reviewed")
     feedback = fix or ("; ".join(issues) if issues else "")
     if failing and not feedback:
         feedback = "raise: " + ", ".join(failing)
@@ -129,4 +148,5 @@ def evaluate_script(script, moment, hook=None, summary="", recent_scripts=None):
         "issues": issues,
         "feedback": feedback,
         "judge_skipped": judge_skipped,
+        "unjudged": judge_skipped,
     }

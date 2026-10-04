@@ -35,7 +35,8 @@ def _fake_llm(monkeypatch, replies):
     monkeypatch.setattr(llm, "safe_invoke", fake)
     monkeypatch.setattr(script_agent, "safe_invoke", fake)   # legacy script_agent binds the name at import
     monkeypatch.setattr(llm, "_provider_dead", lambda name: False)
-    monkeypatch.setattr(llm, "_try_gemini", lambda prompt: fake(prompt))   # judge is pinned to Gemini
+    monkeypatch.setattr(llm, "_try_gemini", lambda prompt: fake(prompt))
+    monkeypatch.setattr(llm, "_get_gemini", lambda *a, **k: SimpleNamespace(invoke=lambda prompt: fake(prompt)))  # pinned judge
     return calls
 
 
@@ -261,12 +262,24 @@ def test_quality_caps_invented_numbers_and_ai_phrases_and_duplicates(monkeypatch
     assert "originality" in r["failing"]
 
 
-def test_quality_judge_outage_fails_open_but_deterministic_checks_still_apply(monkeypatch):
+def test_quality_judge_outage_fails_closed_unless_opted_out(monkeypatch):
     _fake_llm(monkeypatch, [RuntimeError("down")])
-    ok = script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)
-    assert ok["passed"] is True and ok["judge_skipped"] is True
+    r = script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)
+    assert r["passed"] is False and r["unjudged"] is True and r["judge_skipped"] is True
+    assert "not reviewed" in r["feedback"]
+    monkeypatch.setattr(script_quality_agent, "ALLOW_UNJUDGED", True)             # explicit opt-out
+    assert script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)["passed"] is True
     bad = script_quality_agent.evaluate_script("He got 9 kills.", MOMENT, None, SUMMARY)
-    assert bad["passed"] is False
+    assert bad["passed"] is False                                                  # deterministic checks still apply
+
+
+def test_quality_unparsable_judge_reply_is_retried_once_then_unjudged(monkeypatch):
+    calls = _fake_llm(monkeypatch, ["total nonsense", _judge()])
+    assert script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)["passed"] is True
+    assert len(calls) == 2
+    calls = _fake_llm(monkeypatch, ["nonsense", "still nonsense"])
+    r = script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)
+    assert r["unjudged"] is True and r["passed"] is False and len(calls) == 2
 
 
 # ── script_agent.create_gaming_script_v2 (orchestration) ────────────────────
@@ -353,7 +366,7 @@ def sched(monkeypatch, tmp_path):
     return s
 
 
-def _wire(monkeypatch, s, clips, quality_pass=True):
+def _wire(monkeypatch, s, clips, quality_pass=True, unjudged=False, non_gameplay=()):
     import agents_gaming.trending_agent as ta
     import agents_gaming.video_clip_agent as vca
     monkeypatch.setattr(ta, "FOLLOWED_STREAMERS", [])
@@ -364,11 +377,13 @@ def _wire(monkeypatch, s, clips, quality_pass=True):
     def fake_analyze(c, p):
         seen.append(c["id"])
         boost = 10 if c["id"] == "best" else 3
-        return {**MOMENT, "intensity": boost, "clutch_score": boost, "source": "vision"}
+        return {**MOMENT, "intensity": boost, "clutch_score": boost, "source": "vision",
+                "is_gameplay": c["id"] not in non_gameplay}
     monkeypatch.setattr(moment_analyzer, "analyze_moment", fake_analyze)
     monkeypatch.setattr(script_agent, "create_gaming_script_v2",
                         lambda clip, m, sm, st, db=None: {"script": "S " * 40, "hook": {"type": "SHOCK", "text": "h"},
-                                                          "passed": quality_pass, "quality": None})
+                                                          "passed": quality_pass and not unjudged, "quality": None,
+                                                          "unjudged": unjudged})
     return seen
 
 
@@ -537,16 +552,21 @@ def test_hook_agent_excludes_avoided_hooks(monkeypatch):
     assert best["type"] == "STORY"
 
 
-def test_judge_is_pinned_to_gemini_and_falls_back(monkeypatch):
-    seen = []
+def test_judge_is_pinned_to_gemini_with_its_own_timeout_and_falls_back(monkeypatch):
+    seen, timeouts = [], []
     monkeypatch.setattr(llm, "_provider_dead", lambda n: False)
-    monkeypatch.setattr(llm, "_try_gemini", lambda p: (seen.append("gemini"), SimpleNamespace(content="g"))[1])
+    monkeypatch.setattr(llm, "_record_outcome", lambda *a: None)
+    monkeypatch.setattr(llm, "_get_gemini", lambda *a, **k: SimpleNamespace(
+        invoke=lambda p: (seen.append("gemini"), SimpleNamespace(content="g"))[1]))
     monkeypatch.setattr(llm, "safe_invoke", lambda p, *a, **k: (seen.append("router"), SimpleNamespace(content="r"))[1])
+    real_run = llm._run_with_timeout
+    monkeypatch.setattr(llm, "_run_with_timeout", lambda fn, t: (timeouts.append(t), real_run(fn, t))[1])
     assert script_quality_agent._invoke_judge("x").content == "g" and seen == ["gemini"]
+    assert timeouts == [script_quality_agent.JUDGE_TIMEOUT_SECONDS] and timeouts[0] > 15   # not the router's 15s
 
     seen.clear()
-    monkeypatch.setattr(llm, "_try_gemini", lambda p: (seen.append("gemini"), None)[1])      # Gemini fails
-    assert script_quality_agent._invoke_judge("x").content == "r" and seen == ["gemini", "router"]
+    monkeypatch.setattr(llm, "_run_with_timeout", lambda fn, t: (None, "timed out"))        # Gemini fails
+    assert script_quality_agent._invoke_judge("x").content == "r" and seen == ["router"]
 
     seen.clear()
     monkeypatch.setattr(llm, "_provider_dead", lambda n: True)                                 # Gemini circuit open
@@ -591,3 +611,62 @@ def test_scheduler_skips_non_english_when_enough_english(sched, monkeypatch):
     monkeypatch.setattr(sched, "CLIP_LANGUAGES", ["en"])
     res = sched._select_and_script_v2(clips, set())
     assert res["status"] == "ok" and all(i.startswith("en") for i in seen) and res["clip"]["id"].startswith("en")
+
+
+# ── Sprint 1.2: fixes from the second live run ──────────────────────────────
+
+def test_orchestrator_stops_immediately_when_unjudged(monkeypatch):
+    state = {"hooks": 0, "judge": 0}
+
+    def route(prompt):
+        if "first 2 seconds" in prompt:
+            state["hooks"] += 1
+            return HOOKS_JSON
+        if "strict editor" in prompt:
+            state["judge"] += 1
+            raise RuntimeError("judge down")
+        return GOOD
+
+    _fake_llm(monkeypatch, [route])
+    out = script_agent.create_gaming_script_v2({"duration": 25}, MOMENT, SUMMARY, {}, db=FakeDB())
+    assert out["passed"] is False and out["unjudged"] is True and out["attempts"] == 1
+    assert state["hooks"] == 1                                  # no pointless hook regeneration / retries
+
+
+def test_scheduler_judge_outage_skips_cycle_without_burning_the_clip(sched, monkeypatch):
+    clips = [_clip(f"c{i}", 1000 - i, 3) for i in range(5)]
+    _wire(monkeypatch, sched, clips, unjudged=True)
+    res = sched._select_and_script_v2(clips, set())
+    assert res == {"status": "judge_unavailable"}
+    assert sched._load_rejected() == set()                      # clip is NOT marked rejected
+
+
+def test_full_cycle_does_not_upload_when_judge_unavailable(sched, monkeypatch):
+    record = {}
+    _fake_modules(monkeypatch, record)
+    monkeypatch.setattr(sched, "gaming_db", _CycleDB())
+    import agents_gaming.trending_agent as ta
+    clips = [_clip(f"c{i}", 5000 - 100 * i, 3) for i in range(5)]
+    monkeypatch.setattr(ta, "get_all_topics", lambda: clips)
+    monkeypatch.setattr(ta, "FOLLOWED_STREAMERS", [])
+    _wire(monkeypatch, sched, clips, unjudged=True)
+    res = sched._run_gaming_cycle_inner()
+    assert res["status"] == "judge_unavailable" and "voice" not in record and "render" not in record
+
+
+def test_non_gameplay_clips_are_dropped_and_remembered(sched, monkeypatch):
+    filler = [_clip(f"low{i}", 100 * (i + 1), 6, title="boring") for i in range(9)]
+    clips = [_clip("irl", 90000, 6), _clip("game1", 80000, 6), _clip("game2", 70000, 6)] + filler
+    seen = _wire(monkeypatch, sched, clips, non_gameplay={"irl"})
+    res = sched._select_and_script_v2(clips, set())
+    assert res["status"] == "ok" and res["clip"]["id"] != "irl"
+    assert "irl" in seen and "irl" in sched._load_rejected()
+
+
+def test_normalize_moment_is_gameplay_parsing():
+    base = {"moment_type": "FAIL", "what_happened": "x"}
+    assert moment_analyzer.normalize_moment({**base, "is_gameplay": False}, {})["is_gameplay"] is False
+    assert moment_analyzer.normalize_moment({**base, "is_gameplay": "false"}, {})["is_gameplay"] is False
+    assert moment_analyzer.normalize_moment({**base, "is_gameplay": "true"}, {})["is_gameplay"] is True
+    assert moment_analyzer.normalize_moment(base, {})["is_gameplay"] is True            # missing -> assume gameplay
+    assert moment_analyzer.heuristic_moment({"title": "x"})["is_gameplay"] is True

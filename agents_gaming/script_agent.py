@@ -134,6 +134,10 @@ def create_gaming_script_v2(clip, moment, summary, structured, db=None):
         if local_issues:  # a draft that still tripped a local guard can't pass
             quality["passed"] = False
             quality["issues"] = quality["issues"] + local_issues
+        if quality.get("unjudged") and not quality["passed"]:
+            print("Quality judge unavailable — not publishing an unreviewed script this cycle")
+            return {"script": script, "hook": hook, "quality": quality, "attempts": attempt,
+                    "passed": False, "fallback": False, "unjudged": True}
         s = quality["scores"]
         print(f"Script attempt {attempt}: passed={quality['passed']} scores={s} issues={quality['issues']}")
         cand = {"script": script, "hook": hook, "quality": quality, "attempts": attempt,

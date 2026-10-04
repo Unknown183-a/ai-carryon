@@ -96,6 +96,12 @@ def _select_and_script_v2(candidates, posted):
         m = moments[c["id"]]
         print(f"Analysed '{c.get('title')}': {m['moment_type']} intensity={m['intensity']} "
               f"[{m['source']}] (metadata score {c['_score']})")
+        if m.get("is_gameplay") is False:
+            # Category says "game" but the footage is IRL / webcam / lobby — not a gaming Short.
+            print(f"Clip {c['id']} is not gameplay footage — skipping and remembering it")
+            paths.pop(c["id"], None)
+            moments.pop(c["id"], None)
+            _add_rejected(c["id"])
     if not paths:
         return {"status": "no_new_clip", "reason": "no clip could be downloaded"}
 
@@ -111,6 +117,9 @@ def _select_and_script_v2(candidates, posted):
         summary, structured = get_summary_for_clip(clip)
         structured["game"] = structured.get("game") or moment.get("game", "")
         result = create_gaming_script_v2(clip, moment, summary, structured, db=gaming_db)
+        if result and result.get("unjudged"):
+            # Reviewer outage, not a bad clip: don't burn the clip, don't try others.
+            return {"status": "judge_unavailable"}
         if result and result["passed"]:
             return {"status": "ok", "clip": clip, "moment": moment, "summary": summary,
                     "structured": structured, "script": result["script"], "hook": result["hook"],

@@ -73,6 +73,7 @@ def extract_frames(video_path, n=FRAME_COUNT, out_dir=None, width=640):
 
 _SCHEMA = """{
   "game": "<game name>",
+  "is_gameplay": <true if the frames show actual video-game footage; false for IRL/webcam-only/just-chatting/menu/lobby footage>,
   "moment_type": "<one of: %s>",
   "what_happened": "<1-2 plain sentences, only what is visible/stated>",
   "setup": "<what led into it>",
@@ -150,6 +151,7 @@ def heuristic_moment(clip):
     dur = float(clip.get("duration") or 20)
     return {
         "game": clip.get("_source_game", "") or "",
+        "is_gameplay": True,   # can't tell from a title; only vision can say otherwise
         "moment_type": mtype,
         "what_happened": clip.get("title", "").strip(),
         "setup": "",
@@ -160,6 +162,18 @@ def heuristic_moment(clip):
         "funny_score": 5 if mtype in ("FUNNY", "FAIL", "TROLL") else 2,
         "clutch_score": 5 if mtype in ("CLUTCH", "INSANE_PLAY") else 2,
     }
+
+
+def _as_bool(value, default=True):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("true", "yes", "1"):
+            return True
+        if v in ("false", "no", "0"):
+            return False
+    return default
 
 
 def normalize_moment(raw, clip, duration=None):
@@ -177,6 +191,7 @@ def normalize_moment(raw, clip, duration=None):
     key_ts = clamp(raw.get("key_timestamp"), 0, dur if dur else 600, default=(dur or 20) * 0.7)
     return {
         "game": str(raw.get("game") or clip.get("_source_game") or "").strip(),
+        "is_gameplay": _as_bool(raw.get("is_gameplay"), default=True),
         "moment_type": mtype,
         "what_happened": what,
         "setup": str(raw.get("setup", "")).strip(),
