@@ -29,6 +29,20 @@ from agents_gaming.v2_utils import (
 MIN_SCORE = float(os.getenv("GAMING_SCRIPT_MIN_SCORE", "7"))
 SCORE_KEYS = ("hook", "naturalness", "originality", "accuracy", "moment_relevance")
 SIMILARITY_LIMIT = 0.6
+# The judge must score on ONE scale. The router's Groq budget runs out mid-run
+# and silently hands later calls to Gemini, which scores far harsher — so the
+# same script could pass or fail depending on call order. Pin the judge to
+# Gemini (set GAMING_JUDGE_PROVIDER=router to use the normal router again).
+JUDGE_PROVIDER = os.getenv("GAMING_JUDGE_PROVIDER", "gemini").lower()
+
+
+def _invoke_judge(prompt):
+    from agents.model_invoke_agent_english import _provider_dead, _try_gemini, safe_invoke
+    if JUDGE_PROVIDER == "gemini" and not _provider_dead("gemini"):
+        resp = _try_gemini(prompt)
+        if resp is not None:
+            return resp
+    return safe_invoke(prompt)
 
 
 def _similarity(script, recent_scripts):
@@ -75,8 +89,7 @@ def evaluate_script(script, moment, hook=None, summary="", recent_scripts=None):
     judge_skipped = False
 
     try:
-        from agents.model_invoke_agent_english import safe_invoke
-        raw = safe_invoke(_judge_prompt(script, moment, hook, summary)).content
+        raw = _invoke_judge(_judge_prompt(script, moment, hook, summary)).content
         data = extract_json(raw) or {}
         for k in SCORE_KEYS:
             scores[k] = clamp(data.get(k), 1, 10, default=None)

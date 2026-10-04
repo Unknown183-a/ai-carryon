@@ -118,6 +118,7 @@ def create_gaming_script_v2(clip, moment, summary, structured, db=None):
         print(f"Hook [{hook['type']} {hook['score']}]: {hook['text']}")
 
     feedback, last = None, None
+    used_hooks = [hook["text"]] if hook else []
     for attempt in range(1, MAX_SCRIPT_ATTEMPTS + 1):
         try:
             script, local_issues = generate_commentary(
@@ -141,5 +142,14 @@ def create_gaming_script_v2(clip, moment, summary, structured, db=None):
             return cand
         last = cand
         feedback = quality["feedback"] or "; ".join(quality["issues"])
+        # The hook is generated once and forced in as line 1, so rewriting the
+        # body can never raise a failing hook score — redo the hook itself.
+        if attempt < MAX_SCRIPT_ATTEMPTS and "hook" in (quality.get("failing") or []):
+            new_hook = generate_hooks(moment, summary, recent_hook_types=recent_hooks,
+                                      feedback=feedback, avoid=used_hooks)
+            if new_hook:
+                hook = new_hook
+                used_hooks.append(hook["text"])
+                print(f"New hook [{hook['type']} {hook['score']}]: {hook['text']}")
 
     return last  # every attempt failed the bar -> passed=False (final draft, for logging)

@@ -22,6 +22,8 @@ GAMING_V2_ENABLED = os.getenv("GAMING_V2_ENABLED", "1") != "0"
 ANALYZE_TOP_K = int(os.getenv("GAMING_ANALYZE_TOP_K", "3"))     # clips downloaded + analysed per run
 MAX_CLIP_TRIES = int(os.getenv("GAMING_MAX_CLIP_TRIES", "2"))   # clips whose scripts we try before giving up
 REJECTED_KEY = "gaming_rejected_clips"
+# Comma-separated Twitch language codes to prefer (empty = no preference).
+CLIP_LANGUAGES = [l for l in os.getenv("GAMING_CLIP_LANGUAGES", "en").split(",") if l.strip()]
 
 # moment type -> existing seo_agent title pattern (full SEO upgrade is V2 Phase 14)
 SEO_PATTERN_BY_MOMENT = {
@@ -66,12 +68,13 @@ def _select_and_script_v2(candidates, posted):
     Returns {"status": "ok", ...} or a terminal status dict for the scheduler."""
     import shutil
     from agents_gaming.trending_agent import FOLLOWED_STREAMERS
-    from agents_gaming.clip_scorer import rank_clips_v2
+    from agents_gaming.clip_scorer import prefer_languages, rank_clips_v2
     from agents_gaming.moment_analyzer import analyze_moment
     from agents_gaming.video_clip_agent import download_twitch_clip
     from agents_gaming.research_agent import get_summary_for_clip
     from agents_gaming.script_agent import create_gaming_script_v2
 
+    candidates = prefer_languages(candidates, CLIP_LANGUAGES, min_keep=ANALYZE_TOP_K)
     rejected = _load_rejected()
     shortlist = rank_clips_v2(candidates, posted, rejected, followed=FOLLOWED_STREAMERS, limit=ANALYZE_TOP_K)
     if not shortlist:

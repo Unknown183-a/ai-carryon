@@ -34,6 +34,8 @@ def _fake_llm(monkeypatch, replies):
 
     monkeypatch.setattr(llm, "safe_invoke", fake)
     monkeypatch.setattr(script_agent, "safe_invoke", fake)   # legacy script_agent binds the name at import
+    monkeypatch.setattr(llm, "_provider_dead", lambda name: False)
+    monkeypatch.setattr(llm, "_try_gemini", lambda prompt: fake(prompt))   # judge is pinned to Gemini
     return calls
 
 
@@ -481,3 +483,111 @@ def test_full_cycle_legacy_flag_still_works(sched, monkeypatch):
     res = sched._run_gaming_cycle_inner()
     assert res["status"] == "uploaded" and record["seo_pattern"] is None
     assert record["render"] == ["assets/gaming_clips/c1.mp4"]
+
+
+# ── Sprint 1.1: fixes from the first live run ───────────────────────────────
+
+HOOKS_JSON = json.dumps({"hooks": [{"type": "SHOCK", "text": "He survived with 1 HP.", "score": 9}]})
+HOOKS2_JSON = json.dumps({"hooks": [{"type": "SHOCK", "text": "One HP left and three pushing him.", "score": 8}]})
+
+
+def test_failing_hook_triggers_hook_regeneration_with_feedback_and_avoid_list(monkeypatch):
+    state = {"hooks": 0, "judge": 0}
+    prompts = []
+
+    def route(prompt):
+        if "first 2 seconds" in prompt:
+            state["hooks"] += 1
+            prompts.append(prompt)
+            return HOOKS_JSON if state["hooks"] == 1 else HOOKS2_JSON
+        if "strict editor" in prompt:
+            state["judge"] += 1
+            return _judge(hook=3, fix="open on the 1 HP detail") if state["judge"] == 1 else _judge()
+        return GOOD
+
+    _fake_llm(monkeypatch, [route])
+    out = script_agent.create_gaming_script_v2({"duration": 25}, MOMENT, SUMMARY, {}, db=FakeDB())
+    assert out["passed"] and state["hooks"] == 2
+    assert "open on the 1 HP detail" in prompts[1] and "He survived with 1 HP." in prompts[1]
+    assert out["hook"]["text"] == "One HP left and three pushing him."
+
+
+def test_non_hook_failure_does_not_regenerate_hook(monkeypatch):
+    state = {"hooks": 0, "judge": 0}
+
+    def route(prompt):
+        if "first 2 seconds" in prompt:
+            state["hooks"] += 1
+            return HOOKS_JSON
+        if "strict editor" in prompt:
+            state["judge"] += 1
+            return _judge(naturalness=4) if state["judge"] == 1 else _judge()
+        return GOOD
+
+    _fake_llm(monkeypatch, [route])
+    out = script_agent.create_gaming_script_v2({"duration": 25}, MOMENT, SUMMARY, {}, db=FakeDB())
+    assert out["passed"] and state["hooks"] == 1
+
+
+def test_hook_agent_excludes_avoided_hooks(monkeypatch):
+    hooks = {"hooks": [{"type": "SHOCK", "text": "He survived with 1 HP.", "score": 9},
+                       {"type": "STORY", "text": "Three players pushed him at 1 HP.", "score": 7}]}
+    _fake_llm(monkeypatch, [json.dumps(hooks)])
+    best = hook_agent.generate_hooks(MOMENT, SUMMARY, avoid=["he survived with 1 hp."])
+    assert best["type"] == "STORY"
+
+
+def test_judge_is_pinned_to_gemini_and_falls_back(monkeypatch):
+    seen = []
+    monkeypatch.setattr(llm, "_provider_dead", lambda n: False)
+    monkeypatch.setattr(llm, "_try_gemini", lambda p: (seen.append("gemini"), SimpleNamespace(content="g"))[1])
+    monkeypatch.setattr(llm, "safe_invoke", lambda p, *a, **k: (seen.append("router"), SimpleNamespace(content="r"))[1])
+    assert script_quality_agent._invoke_judge("x").content == "g" and seen == ["gemini"]
+
+    seen.clear()
+    monkeypatch.setattr(llm, "_try_gemini", lambda p: (seen.append("gemini"), None)[1])      # Gemini fails
+    assert script_quality_agent._invoke_judge("x").content == "r" and seen == ["gemini", "router"]
+
+    seen.clear()
+    monkeypatch.setattr(llm, "_provider_dead", lambda n: True)                                 # Gemini circuit open
+    assert script_quality_agent._invoke_judge("x").content == "r" and seen == ["router"]
+
+    seen.clear()
+    monkeypatch.setattr(llm, "_provider_dead", lambda n: False)
+    monkeypatch.setattr(script_quality_agent, "JUDGE_PROVIDER", "router")
+    script_quality_agent._invoke_judge("x")
+    assert seen == ["router"]
+
+
+def test_pauses_off_by_default_and_opt_in(monkeypatch):
+    moment = {**MOMENT}
+    off = commentary_agent._build_prompt(moment, None, SUMMARY, {}, "hype", 40, 60, None)
+    assert 'write "..."' not in off and "no dead air" in off
+    monkeypatch.setattr(commentary_agent, "PAUSES_ENABLED", True)
+    on = commentary_agent._build_prompt(moment, None, SUMMARY, {}, "hype", 40, 60, None)
+    assert 'write "..."' in on and "no dead air" not in on
+
+
+def test_hook_prompt_discourages_generic_questions_and_spoilers():
+    p = hook_agent._build_prompt(MOMENT, SUMMARY, feedback="too vague", avoid=["old hook"])
+    assert "at most ONE of the five may be a question" in p and "never repeat it in the hook" in p
+    assert "too vague" in p and "old hook" in p
+
+
+def test_prefer_languages():
+    en, ja, none_ = _clip("e", 1, 1), _clip("j", 1, 1), _clip("n", 1, 1)
+    en["language"], ja["language"] = "en", "ja"
+    pool = [en, ja, none_, dict(_clip("e2", 1, 1), language="EN")]
+    kept = clip_scorer.prefer_languages(pool, ["en"], min_keep=3)
+    assert {c["id"] for c in kept} == {"e", "n", "e2"}                        # untagged kept, case-insensitive
+    assert clip_scorer.prefer_languages(pool, ["en"], min_keep=4) is pool     # too few -> fall back to everything
+    assert clip_scorer.prefer_languages(pool, [], min_keep=1) is pool         # no preference
+
+
+def test_scheduler_skips_non_english_when_enough_english(sched, monkeypatch):
+    clips = [dict(_clip(f"en{i}", 1000 - i * 10, 3), language="en") for i in range(5)]
+    clips += [dict(_clip(f"ja{i}", 90000, 3), language="ja") for i in range(3)]      # far more views, wrong language
+    seen = _wire(monkeypatch, sched, clips)
+    monkeypatch.setattr(sched, "CLIP_LANGUAGES", ["en"])
+    res = sched._select_and_script_v2(clips, set())
+    assert res["status"] == "ok" and all(i.startswith("en") for i in seen) and res["clip"]["id"].startswith("en")

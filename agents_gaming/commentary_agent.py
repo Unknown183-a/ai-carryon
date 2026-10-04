@@ -16,6 +16,13 @@ from agents_gaming.v2_utils import (
     clean_script, repeated_ai_phrases, ungrounded_numbers, word_count,
 )
 
+import os
+
+# The shared renderer currently strips the clip's own audio, so a "..." pause
+# is silent dead air today. Pauses become useful in Sprint 2 (game audio kept
+# under the voiceover) — flip GAMING_COMMENTARY_PAUSES=1 then.
+PAUSES_ENABLED = os.getenv("GAMING_COMMENTARY_PAUSES", "0") == "1"
+
 WORDS_PER_SECOND = 2.4  # matches the pace the legacy 55-90 word / 20-35 s target implied
 
 STYLE_BY_MOMENT = {
@@ -69,6 +76,10 @@ def _build_prompt(moment, hook, summary, structured, style, lo, hi, feedback):
     broadcaster = (structured or {}).get("broadcaster", "")
     hook_line = (f'Open with this exact hook as the first line: "{hook["text"]}"'
                  if hook else "Open with a strong 2-second hook line (no greeting).")
+    pause_step = ('3. a beat of silence: write "..." on its own line where the viewer should just watch/listen to the clip\n'
+                  if PAUSES_ENABLED else "")
+    pause_rule = (' (the "..." pauses don\'t count)' if PAUSES_ENABLED
+                  else ' — continuous speech, no "..." and no dead air')
     fb = (f"\nA reviewer rejected the previous draft. Fix this: {feedback}\n" if feedback else "")
     return f"""You are a gaming creator recording the voiceover for a YouTube Short. The viewer
 is watching the real gameplay while you talk, so react to it — never narrate it play-by-play.
@@ -89,17 +100,18 @@ Style — {STYLE_GUIDE[style]}
 Structure (follow the order, keep it uneven like real speech):
 1. HOOK — {hook_line}
 2. SETUP — one or two short lines of context
-3. a beat of silence: write "..." on its own line where the viewer should just watch/listen to the clip
-4. REACTION — your honest reaction to the turn
+{pause_step}4. REACTION — your honest reaction to the turn
 5. PAYOFF — land the outcome in your own words
 6. optional tag line of 5 words or fewer ONLY if it feels natural (no "follow for more")
 {fb}
 Rules:
-- {lo}-{hi} words total (the "..." pauses don't count)
+- {lo}-{hi} words total{pause_rule}
 - Mention the streamer ({broadcaster or 'if known'}) and the game at most once each, naturally
 - Use ONLY facts and numbers from the data above; never invent kills, scores, ranks or names
 - Avoid these cliches entirely: "you won't believe", "nobody expected", "this insane moment",
-  "absolutely incredible", "let's take a look", "watch what happens", "crazy gaming moment"
+  "absolutely incredible", "let's take a look", "watch what happens", "crazy gaming moment",
+  "pure chaos", "losing his mind", "classic <name> energy", and any sign-off that just praises the clip
+- Never repeat a catchphrase or quote from the clip title more than once, and don't spoil it in line 1
 - Plain text only: no labels, no stage directions, no emojis, no hashtags
 
 Return ONLY the script, one thought per line."""

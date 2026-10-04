@@ -165,3 +165,16 @@ def rank_clips_v2(clips, already_posted_ids=(), rejected_ids=(), moments=None,
         scored.append(c)
     scored.sort(key=lambda c: c["_score"], reverse=True)
     return scored[:limit] if limit else scored
+
+
+def prefer_languages(clips, languages, min_keep=3):
+    """Keep clips whose Twitch `language` is wanted (clips with no language
+    tag are kept). The voiceover is English and can't hear the streamer, so a
+    clip in another language gets generic commentary. Falls back to the full
+    list when fewer than `min_keep` clips would remain, so a quiet hour never
+    stops the channel."""
+    langs = {l.strip().lower() for l in (languages or []) if l and l.strip()}
+    if not langs:
+        return clips
+    kept = [c for c in clips if not c.get("language") or str(c["language"]).lower() in langs]
+    return kept if len(kept) >= min_keep else clips
