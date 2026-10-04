@@ -16,6 +16,107 @@ from agents_gaming.database import db as gaming_db, db_init_error as gaming_db_i
 
 DAILY_UPLOAD_CAP = int(os.getenv("GAMING_DAILY_UPLOAD_CAP", "5"))
 
+# Gaming V2 (see AI_CarryON_Gaming_Pipeline_V2_Update.md). Set GAMING_V2_ENABLED=0
+# to run the legacy flow (most-viewed clip -> single-prompt script) unchanged.
+GAMING_V2_ENABLED = os.getenv("GAMING_V2_ENABLED", "1") != "0"
+ANALYZE_TOP_K = int(os.getenv("GAMING_ANALYZE_TOP_K", "3"))     # clips downloaded + analysed per run
+MAX_CLIP_TRIES = int(os.getenv("GAMING_MAX_CLIP_TRIES", "2"))   # clips whose scripts we try before giving up
+REJECTED_KEY = "gaming_rejected_clips"
+
+# moment type -> existing seo_agent title pattern (full SEO upgrade is V2 Phase 14)
+SEO_PATTERN_BY_MOMENT = {
+    "CLUTCH": "clutch", "INSANE_PLAY": "clutch",
+    "FAIL": "funny", "FUNNY": "funny", "TROLL": "funny",
+    "RECORD": "record",
+    "REACTION": "reaction", "RAGE": "reaction", "LUCK": "reaction",
+    "UNEXPECTED": "reaction", "DRAMA": "reaction",
+}
+
+
+def _load_rejected():
+    import json
+    try:
+        raw = gaming_db.get_meta(REJECTED_KEY)
+        return set(json.loads(raw)) if raw else set()
+    except Exception:
+        return set()
+
+
+def _add_rejected(clip_id):
+    """Remember clips whose scripts failed the quality bar so the next cycle
+    moves on instead of re-picking the same clip forever (bounded to 50)."""
+    import json
+    try:
+        ids = list(_load_rejected()) + [clip_id]
+        gaming_db.set_meta(REJECTED_KEY, json.dumps(ids[-50:]))
+    except Exception as e:
+        print(f"Could not record rejected clip: {e}")
+
+
+def _caption_text(script):
+    """Script minus the '...' pause markers — TTS uses them for pauses, but
+    they must not show up as caption words."""
+    import re
+    return re.sub(r"\.{2,}|\u2026", " ", script)
+
+
+def _select_and_script_v2(candidates, posted):
+    """V2 front half: score -> download+analyse top K -> re-score with real
+    moment quality -> hook/commentary/quality loop on the best clips.
+    Returns {"status": "ok", ...} or a terminal status dict for the scheduler."""
+    import shutil
+    from agents_gaming.trending_agent import FOLLOWED_STREAMERS
+    from agents_gaming.clip_scorer import rank_clips_v2
+    from agents_gaming.moment_analyzer import analyze_moment
+    from agents_gaming.video_clip_agent import download_twitch_clip
+    from agents_gaming.research_agent import get_summary_for_clip
+    from agents_gaming.script_agent import create_gaming_script_v2
+
+    rejected = _load_rejected()
+    shortlist = rank_clips_v2(candidates, posted, rejected, followed=FOLLOWED_STREAMERS, limit=ANALYZE_TOP_K)
+    if not shortlist:
+        print("All candidate clips already posted or rejected this cycle.")
+        return {"status": "no_new_clip"}
+
+    folder = "assets/gaming_clips"
+    shutil.rmtree(folder, ignore_errors=True)
+    os.makedirs(folder, exist_ok=True)
+
+    moments, paths = {}, {}
+    for c in shortlist:
+        try:
+            paths[c["id"]] = download_twitch_clip(c, os.path.join(folder, f"{c['id']}.mp4"))
+        except Exception as e:
+            print(f"Clip {c.get('id')} download failed, skipping: {e}")
+            continue
+        moments[c["id"]] = analyze_moment(c, paths[c["id"]])
+        m = moments[c["id"]]
+        print(f"Analysed '{c.get('title')}': {m['moment_type']} intensity={m['intensity']} "
+              f"[{m['source']}] (metadata score {c['_score']})")
+    if not paths:
+        return {"status": "no_new_clip", "reason": "no clip could be downloaded"}
+
+    # Re-score against the FULL pool (percentiles stay meaningful), now with
+    # real moment quality for the analysed clips; keep only clips we hold footage for.
+    full = rank_clips_v2(candidates, posted, rejected, moments=moments, followed=FOLLOWED_STREAMERS)
+    ranked = [c for c in full if c["id"] in paths]
+
+    for clip in ranked[:MAX_CLIP_TRIES]:
+        moment = moments[clip["id"]]
+        print(f"Trying clip '{clip.get('title')}' by {clip.get('broadcaster_name')} "
+              f"(V2 score {clip['_score']}, parts {clip['_score_parts']})")
+        summary, structured = get_summary_for_clip(clip)
+        structured["game"] = structured.get("game") or moment.get("game", "")
+        result = create_gaming_script_v2(clip, moment, summary, structured, db=gaming_db)
+        if result and result["passed"]:
+            return {"status": "ok", "clip": clip, "moment": moment, "summary": summary,
+                    "structured": structured, "script": result["script"], "hook": result["hook"],
+                    "clip_path": paths[clip["id"]]}
+        print(f"Clip {clip.get('id')} rejected: script never cleared the quality bar")
+        _add_rejected(clip["id"])
+
+    return {"status": "quality_rejected"}
+
 
 def run_gaming_cycle():
     import traceback
@@ -91,6 +192,9 @@ def _run_gaming_cycle_inner():
     if gaming_db is None:
         return {"status": "error", "error": f"Gaming DB unavailable: {gaming_db_init_error}"}
 
+    from agents.model_invoke_agent_english import reset_groq_budget
+    reset_groq_budget()
+
     _maybe_track_views()
 
     upload_ok, upload_reason = should_upload_now_gaming()
@@ -110,37 +214,53 @@ def _run_gaming_cycle_inner():
               "TWITCH_TRACKED_GAMES and Twitch app credentials).")
         return {"status": "no_candidates"}
 
-    clip = find_best_unposted_clip(candidates, posted)
-    if not clip:
-        print("All candidate clips already posted this cycle.")
-        return {"status": "no_new_clip"}
+    moment, hook, clip_paths = None, None, None
+    if GAMING_V2_ENABLED:
+        sel = _select_and_script_v2(candidates, posted)
+        if sel["status"] != "ok":
+            return sel
+        clip, moment, hook = sel["clip"], sel["moment"], sel["hook"]
+        structured, script = sel["structured"], sel["script"]
+        clip_paths = [sel["clip_path"]]
+        print(f"Selected clip: '{clip.get('title')}' by {clip.get('broadcaster_name')} "
+              f"-> {moment['moment_type']} (V2 score {clip['_score']})")
+    else:
+        clip = find_best_unposted_clip(candidates, posted)
+        if not clip:
+            print("All candidate clips already posted this cycle.")
+            return {"status": "no_new_clip"}
+        print(f"Selected clip: '{clip.get('title')}' by {clip.get('broadcaster_name')} "
+              f"({clip.get('view_count', 0):,} views)")
+        summary, structured = get_summary_for_clip(clip)
+        script = create_gaming_script(summary, structured)
 
-    print(f"Selected clip: '{clip.get('title')}' by {clip.get('broadcaster_name')} "
-          f"({clip.get('view_count', 0):,} views)")
-
-    summary, structured = get_summary_for_clip(clip)
-
-    script = create_gaming_script(summary, structured)
     print(f"Script ({len(script.split())} words): {script[:80]}...")
 
-    title, description, hashtags = generate_seo(structured, script)
+    seo_pattern = SEO_PATTERN_BY_MOMENT.get(moment["moment_type"]) if moment else None
+    title, description, hashtags = generate_seo(structured, _caption_text(script), use_pattern=seo_pattern)
     print(f"Title: {title}")
 
     generate_voice(script, output_path="output/voice.mp3")
-    create_srt(script, audio_path="output/voice.mp3")
+    create_srt(_caption_text(script), audio_path="output/voice.mp3")
 
-    print("Downloading Twitch clip footage...")
-    clip_paths = get_gaming_background_clip(clip)
+    if clip_paths is None:
+        print("Downloading Twitch clip footage...")
+        clip_paths = get_gaming_background_clip(clip)
 
+    # NOTE: the shared renderer currently drops the clip's own audio (-an) and
+    # sizes the video to the voiceover. Preserving game audio is Gaming V2 Sprint 2.
     video_path = _create_video_from_pexels_clips(
         clip_paths, "output/voice.mp3", "output/captions.srt",
-        music_path=None,  # the clip has its own game audio under the voiceover
+        music_path=None,
     )
 
     video_id, video_url = upload_video(video_path, title, description, hashtags)
     print(f"Uploaded: {video_url}")
 
     gaming_db.mark_posted(clip["id"], clip.get("title", ""), clip.get("broadcaster_name", ""))
+    if GAMING_V2_ENABLED:
+        from agents_gaming.script_agent import remember_script
+        remember_script(gaming_db, script, (hook or {}).get("type"))
     gaming_db.upsert_video(
         video_id=video_id,
         title=title,
