@@ -714,3 +714,28 @@ def test_full_cycle_gameplay_hook_reaches_renderer_and_keeps_text_hook_memory(sc
     # selection was logged against the uploaded video
     log = json.loads(db.meta["hook_history:gaming"])["log"]
     assert log[-1]["video_id"] == "vid123" and log[-1]["hook_provider"] == "gameplay"
+
+
+def test_loop_continues_past_non_gameplay_clips_until_enough_usable_ones(sched, monkeypatch):
+    filler = [_clip(f"low{i}", 100 * (i + 1), 6, title="boring") for i in range(9)]
+    clips = [_clip("irl1", 90000, 6), _clip("irl2", 85000, 6), _clip("g1", 80000, 6),
+             _clip("g2", 75000, 6), _clip("g3", 70000, 6)] + filler
+    seen = _wire(monkeypatch, sched, clips, non_gameplay={"irl1", "irl2"})
+    monkeypatch.setattr(sched, "ANALYZE_TOP_K", 2)
+    monkeypatch.setattr(sched, "MAX_ANALYZED", 5)
+    res = sched._select_and_script_v2(clips, set())
+    assert res["status"] == "ok" and res["clip"]["id"] in {"g1", "g2"}
+    assert seen == ["irl1", "irl2", "g1", "g2"]                 # kept looking, stopped at 2 usable (g3 untouched)
+    assert sched._load_rejected() == {"irl1", "irl2"}
+
+
+def test_analysis_loop_respects_the_cap_and_reports_why_nothing_was_usable(sched, monkeypatch, capsys):
+    clips = [_clip(f"irl{i}", 90000 - i * 100, 6) for i in range(8)]
+    seen = _wire(monkeypatch, sched, clips, non_gameplay={c["id"] for c in clips})
+    monkeypatch.setattr(sched, "ANALYZE_TOP_K", 2)
+    monkeypatch.setattr(sched, "MAX_ANALYZED", 3)
+    res = sched._select_and_script_v2(clips, set())
+    assert res == {"status": "no_new_clip", "reason": "every analysed clip was non-gameplay footage"}
+    assert len(seen) == 3                                        # hard cap on vision calls
+    out = capsys.readouterr().out
+    assert "is not gameplay footage (game=" in out and "what=" in out    # the log says WHY, so it can be judged

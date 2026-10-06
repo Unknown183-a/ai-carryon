@@ -21,6 +21,9 @@ DAILY_UPLOAD_CAP = int(os.getenv("GAMING_DAILY_UPLOAD_CAP", "5"))
 GAMING_V2_ENABLED = os.getenv("GAMING_V2_ENABLED", "1") != "0"
 ANALYZE_TOP_K = int(os.getenv("GAMING_ANALYZE_TOP_K", "3"))     # clips downloaded + analysed per run
 MAX_CLIP_TRIES = int(os.getenv("GAMING_MAX_CLIP_TRIES", "2"))   # clips whose scripts we try before giving up
+# Upper bound on clips downloaded + vision-analysed per run while looking for ANALYZE_TOP_K usable
+# (real gameplay) ones. Each analysed clip is one Gemini vision call, so this also caps the quota spend.
+MAX_ANALYZED = int(os.getenv("GAMING_MAX_ANALYZED", "5"))
 REJECTED_KEY = "gaming_rejected_clips"
 # Gaming V2 Sprint 2. "v2" = keep the clip's own audio, short voice-overlay lines placed around the
 # payoff, ducking, punch-in/freeze edits, safe-zone captions (agents_gaming/producer.py).
@@ -83,7 +86,8 @@ def _select_and_script_v2(candidates, posted):
 
     candidates = prefer_languages(candidates, CLIP_LANGUAGES, min_keep=ANALYZE_TOP_K)
     rejected = _load_rejected()
-    shortlist = rank_clips_v2(candidates, posted, rejected, followed=FOLLOWED_STREAMERS, limit=ANALYZE_TOP_K)
+    shortlist = rank_clips_v2(candidates, posted, rejected, followed=FOLLOWED_STREAMERS,
+                              limit=max(MAX_ANALYZED, ANALYZE_TOP_K))
     if not shortlist:
         print("All candidate clips already posted or rejected this cycle.")
         return {"status": "no_new_clip"}
@@ -93,7 +97,10 @@ def _select_and_script_v2(candidates, posted):
     os.makedirs(folder, exist_ok=True)
 
     moments, paths, transcripts = {}, {}, {}
+    usable, non_gameplay = 0, 0
     for c in shortlist:
+        if usable >= ANALYZE_TOP_K:
+            break      # enough real-gameplay clips; don't spend more downloads / vision calls
         try:
             paths[c["id"]] = download_twitch_clip(c, os.path.join(folder, f"{c['id']}.mp4"))
         except Exception as e:
@@ -115,12 +122,20 @@ def _select_and_script_v2(candidates, posted):
               f"[{m['source']}] (metadata score {c['_score']})")
         if m.get("is_gameplay") is False:
             # Category says "game" but the footage is IRL / webcam / lobby — not a gaming Short.
-            print(f"Clip {c['id']} is not gameplay footage — skipping and remembering it")
+            print(f"Clip {c['id']} is not gameplay footage (game='{m.get('game', '')}', "
+                  f"what='{str(m.get('what_happened', ''))[:100]}') — skipping and remembering it")
             paths.pop(c["id"], None)
             moments.pop(c["id"], None)
+            transcripts.pop(c["id"], None)
             _add_rejected(c["id"])
+            non_gameplay += 1
+        else:
+            usable += 1
     if not paths:
-        return {"status": "no_new_clip", "reason": "no clip could be downloaded"}
+        reason = ("every analysed clip was non-gameplay footage" if non_gameplay
+                  else "no clip could be downloaded")
+        print(f"No usable clip this cycle: {reason}")
+        return {"status": "no_new_clip", "reason": reason}
 
     # Re-score against the FULL pool (percentiles stay meaningful), now with
     # real moment quality for the analysed clips; keep only clips we hold footage for.
