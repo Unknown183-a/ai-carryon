@@ -1,7 +1,7 @@
 # scheduler_gaming.py
 """
-Gaming pipeline: Twitch clip -> script -> SEO -> voice -> real clip footage
--> captions -> upload. Deduplicates against gaming_posted_clips in the DB.
+Gaming pipeline: Twitch clip -> transcript -> moment analysis -> script -> SEO ->
+voice lines + edit plan -> render (game audio kept) -> upload. Deduplicates against gaming_posted_clips in the DB.
 
 Run locally: python scheduler_gaming.py
 Deployed:    .github/workflows/gaming-scheduler.yml (cron, no server needed
@@ -22,6 +22,11 @@ GAMING_V2_ENABLED = os.getenv("GAMING_V2_ENABLED", "1") != "0"
 ANALYZE_TOP_K = int(os.getenv("GAMING_ANALYZE_TOP_K", "3"))     # clips downloaded + analysed per run
 MAX_CLIP_TRIES = int(os.getenv("GAMING_MAX_CLIP_TRIES", "2"))   # clips whose scripts we try before giving up
 REJECTED_KEY = "gaming_rejected_clips"
+# Gaming V2 Sprint 2. "v2" = keep the clip's own audio, short voice-overlay lines placed around the
+# payoff, ducking, punch-in/freeze edits, safe-zone captions (agents_gaming/producer.py).
+# "legacy" = the old flow: one long voiceover over silent footage via the shared renderer.
+AUDIO_MODE = os.getenv("GAMING_AUDIO_MODE", "v2").lower()
+NARRATION_MODE = "short" if AUDIO_MODE == "v2" else "full"
 # Comma-separated Twitch language codes to prefer (empty = no preference).
 CLIP_LANGUAGES = [l for l in os.getenv("GAMING_CLIP_LANGUAGES", "en").split(",") if l.strip()]
 
@@ -70,6 +75,8 @@ def _select_and_script_v2(candidates, posted):
     from agents_gaming.trending_agent import FOLLOWED_STREAMERS
     from agents_gaming.clip_scorer import prefer_languages, rank_clips_v2
     from agents_gaming.moment_analyzer import analyze_moment
+    from agents_gaming.audio_peak import refine_key_timestamp
+    from agents_gaming.transcript_agent import transcribe_clip
     from agents_gaming.video_clip_agent import download_twitch_clip
     from agents_gaming.research_agent import get_summary_for_clip
     from agents_gaming.script_agent import create_gaming_script_v2
@@ -85,15 +92,25 @@ def _select_and_script_v2(candidates, posted):
     shutil.rmtree(folder, ignore_errors=True)
     os.makedirs(folder, exist_ok=True)
 
-    moments, paths = {}, {}
+    moments, paths, transcripts = {}, {}, {}
     for c in shortlist:
         try:
             paths[c["id"]] = download_twitch_clip(c, os.path.join(folder, f"{c['id']}.mp4"))
         except Exception as e:
             print(f"Clip {c.get('id')} download failed, skipping: {e}")
             continue
-        moments[c["id"]] = analyze_moment(c, paths[c["id"]])
+        tr = transcribe_clip(paths[c["id"]]) if AUDIO_MODE == "v2" else None
+        if tr:
+            transcripts[c["id"]] = tr
+        moments[c["id"]] = analyze_moment({**c, "_transcript_text": tr["text"]} if tr else c, paths[c["id"]])
         m = moments[c["id"]]
+        if m.get("source") == "vision":
+            # The vision tier only sees 5 frames, so its payoff time can be off by a second or more.
+            # Snap it to the loudest burst nearby (the payoff is nearly always the loudest moment).
+            new_key, changed = refine_key_timestamp(paths[c["id"]], m.get("key_timestamp"))
+            if changed:
+                print(f"Payoff time refined by audio peak: {m.get('key_timestamp')}s -> {new_key}s")
+                m["key_timestamp"], m["key_refined"] = new_key, True
         print(f"Analysed '{c.get('title')}': {m['moment_type']} intensity={m['intensity']} "
               f"[{m['source']}] (metadata score {c['_score']})")
         if m.get("is_gameplay") is False:
@@ -116,14 +133,17 @@ def _select_and_script_v2(candidates, posted):
               f"(V2 score {clip['_score']}, parts {clip['_score_parts']})")
         summary, structured = get_summary_for_clip(clip)
         structured["game"] = structured.get("game") or moment.get("game", "")
-        result = create_gaming_script_v2(clip, moment, summary, structured, db=gaming_db)
+        tr = transcripts.get(clip["id"])
+        if tr:
+            summary += f"\nStreamer speech (auto-transcript, may contain errors): {tr['text']}"
+        result = create_gaming_script_v2(clip, moment, summary, structured, db=gaming_db, mode=NARRATION_MODE)
         if result and result.get("unjudged"):
             # Reviewer outage, not a bad clip: don't burn the clip, don't try others.
             return {"status": "judge_unavailable"}
         if result and result["passed"]:
             return {"status": "ok", "clip": clip, "moment": moment, "summary": summary,
                     "structured": structured, "script": result["script"], "hook": result["hook"],
-                    "clip_path": paths[clip["id"]]}
+                    "clip_path": paths[clip["id"]], "transcript": tr}
         print(f"Clip {clip.get('id')} rejected: script never cleared the quality bar")
         _add_rejected(clip["id"])
 
@@ -226,7 +246,7 @@ def _run_gaming_cycle_inner():
               "TWITCH_TRACKED_GAMES and Twitch app credentials).")
         return {"status": "no_candidates"}
 
-    moment, hook, clip_paths = None, None, None
+    moment, hook, clip_paths, transcript = None, None, None, None
     if GAMING_V2_ENABLED:
         sel = _select_and_script_v2(candidates, posted)
         if sel["status"] != "ok":
@@ -234,6 +254,7 @@ def _run_gaming_cycle_inner():
         clip, moment, hook = sel["clip"], sel["moment"], sel["hook"]
         structured, script = sel["structured"], sel["script"]
         clip_paths = [sel["clip_path"]]
+        transcript = sel.get("transcript")
         print(f"Selected clip: '{clip.get('title')}' by {clip.get('broadcaster_name')} "
               f"-> {moment['moment_type']} (V2 score {clip['_score']})")
     else:
@@ -252,8 +273,10 @@ def _run_gaming_cycle_inner():
     title, description, hashtags = generate_seo(structured, _caption_text(script), use_pattern=seo_pattern)
     print(f"Title: {title}")
 
-    generate_voice(script, output_path="output/voice.mp3")
-    create_srt(_caption_text(script), audio_path="output/voice.mp3")
+    use_v2_audio = GAMING_V2_ENABLED and AUDIO_MODE == "v2"
+    if not use_v2_audio:
+        generate_voice(script, output_path="output/voice.mp3")
+        create_srt(_caption_text(script), audio_path="output/voice.mp3")
 
     if clip_paths is None:
         print("Downloading Twitch clip footage...")
@@ -270,14 +293,24 @@ def _run_gaming_cycle_inner():
         except Exception as e:
             print(f"Hook engine skipped: {e}")
 
-    # NOTE: the shared renderer currently drops the clip's own audio (-an) and
-    # sizes the video to the voiceover. Preserving game audio is Gaming V2 Sprint 2.
-    # `hook` is only passed when there is one, so a no-hook run makes exactly the
-    # same call as before this feature existed.
-    video_path = _create_video_from_pexels_clips(
-        clip_paths, "output/voice.mp3", "output/captions.srt",
-        music_path=None, **({"hook": visual_hook} if visual_hook else {}),
-    )
+    if use_v2_audio:
+        # Sprint 2: game audio kept + ducked, short voice lines around the payoff, punch-in/freeze,
+        # safe-zone captions. A failed render means NO upload (never publish a degraded video);
+        # GAMING_AUDIO_MODE=legacy switches to the old renderer.
+        try:
+            from agents_gaming.producer import produce_video
+            video_path = produce_video(clip_paths[0], script, hook, moment, transcript, cold_open=visual_hook)
+        except Exception as e:
+            print(f"Gaming render failed — not uploading: {e}")
+            return {"status": "render_failed", "error": str(e)}
+    else:
+        # Legacy: the shared renderer drops the clip's own audio (-an) and sizes the video to the
+        # voiceover. `hook` is only passed when there is one, so a no-hook run makes exactly the
+        # same call as before the Hook Engine existed.
+        video_path = _create_video_from_pexels_clips(
+            clip_paths, "output/voice.mp3", "output/captions.srt",
+            music_path=None, **({"hook": visual_hook} if visual_hook else {}),
+        )
 
     video_id, video_url = upload_video(video_path, title, description, hashtags)
     print(f"Uploaded: {video_url}")

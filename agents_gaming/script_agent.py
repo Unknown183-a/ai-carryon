@@ -96,7 +96,7 @@ def remember_script(db, script, hook_type=None):
         print(f"Could not store recent script memory: {e}")
 
 
-def create_gaming_script_v2(clip, moment, summary, structured, db=None):
+def create_gaming_script_v2(clip, moment, summary, structured, db=None, mode="full"):
     """V2 script pipeline for one analysed clip.
 
     Returns a dict:
@@ -123,14 +123,14 @@ def create_gaming_script_v2(clip, moment, summary, structured, db=None):
         try:
             script, local_issues = generate_commentary(
                 moment, hook, summary, structured, duration=duration,
-                recent_scripts=recent_scripts, feedback=feedback,
+                recent_scripts=recent_scripts, feedback=feedback, mode=mode,
             )
         except Exception as e:
             print(f"Commentary generation failed ({e}) — falling back to legacy script")
             return {"script": create_gaming_script(summary, structured), "hook": hook,
                     "quality": None, "attempts": attempt, "passed": True, "fallback": True}
 
-        quality = evaluate_script(script, moment, hook, summary, recent_scripts)
+        quality = evaluate_script(script, moment, hook, summary, recent_scripts, mode=mode)
         if local_issues:  # a draft that still tripped a local guard can't pass
             quality["passed"] = False
             quality["issues"] = quality["issues"] + local_issues
