@@ -363,6 +363,9 @@ def sched(monkeypatch, tmp_path):
     monkeypatch.setenv("DATABASE_URL", "")
     import scheduler_gaming as s
     monkeypatch.setattr(s, "gaming_db", FakeDB())
+    # Existing tests exercise the legacy renderer path; Sprint 2 tests opt in to "v2" explicitly.
+    monkeypatch.setattr(s, "AUDIO_MODE", "legacy")
+    monkeypatch.setattr(s, "NARRATION_MODE", "full")
     return s
 
 
@@ -381,7 +384,7 @@ def _wire(monkeypatch, s, clips, quality_pass=True, unjudged=False, non_gameplay
                 "is_gameplay": c["id"] not in non_gameplay}
     monkeypatch.setattr(moment_analyzer, "analyze_moment", fake_analyze)
     monkeypatch.setattr(script_agent, "create_gaming_script_v2",
-                        lambda clip, m, sm, st, db=None: {"script": "S " * 40, "hook": {"type": "SHOCK", "text": "h"},
+                        lambda clip, m, sm, st, db=None, **kw: {"script": "S " * 40, "hook": {"type": "SHOCK", "text": "h"},
                                                           "passed": quality_pass and not unjudged, "quality": None,
                                                           "unjudged": unjudged})
     return seen
@@ -460,7 +463,7 @@ def test_full_cycle_v2_wiring(sched, monkeypatch):
     monkeypatch.setattr(ta, "FOLLOWED_STREAMERS", [])
     _wire(monkeypatch, sched, clips)
     monkeypatch.setattr(script_agent, "create_gaming_script_v2",
-                        lambda clip, m, sm, st, db=None: {"script": "He had 1 HP.\n...\nand won", "passed": True,
+                        lambda clip, m, sm, st, db=None, **kw: {"script": "He had 1 HP.\n...\nand won", "passed": True,
                                                           "hook": {"type": "SHOCK", "text": "He had 1 HP."}, "quality": None})
     res = sched._run_gaming_cycle_inner()
     assert res["status"] == "uploaded" and res["video_url"].endswith("vid123")
@@ -697,7 +700,7 @@ def test_full_cycle_gameplay_hook_reaches_renderer_and_keeps_text_hook_memory(sc
     monkeypatch.setattr(ta, "FOLLOWED_STREAMERS", [])
     _wire(monkeypatch, sched, clips)                       # "best" is analysed at intensity 10
     monkeypatch.setattr(script_agent, "create_gaming_script_v2",
-                        lambda clip, mo, sm, st, db=None: {"script": "He had 1 HP.\n...\nand won", "passed": True,
+                        lambda clip, mo, sm, st, db=None, **kw: {"script": "He had 1 HP.\n...\nand won", "passed": True,
                                                            "hook": {"type": "SHOCK", "text": "He had 1 HP."},
                                                            "quality": None})
     res = sched._run_gaming_cycle_inner()

@@ -63,7 +63,11 @@ def _similarity(script, recent_scripts):
     return best
 
 
-def _judge_prompt(script, moment, hook, summary):
+def _judge_prompt(script, moment, hook, summary, mode="full"):
+    overlay = ("\nNOTE: this is a SHORT overlay (a hook plus one or two lines) that plays over the clip's own "
+               "game/streamer audio, not a full voiceover. Do NOT penalise brevity or silence; DO penalise filler, "
+               "cliches, repeating what the streamer already says, and any invented detail.\n"
+               if mode == "short" else "")
     return f"""You are a strict editor for a gaming YouTube Shorts channel. Judge this voiceover
 script, which plays over real gameplay.
 
@@ -73,7 +77,7 @@ What happened: {moment.get('what_happened', '')}
 Setup: {moment.get('setup', '')} | Payoff: {moment.get('payoff', '')}
 Clip data:
 {summary}
-
+{overlay}
 Script:
 \"\"\"
 {script}
@@ -92,7 +96,7 @@ Reply with ONLY this JSON:
   "issues": ["..."], "fix": "one sentence telling the writer what to change"}}"""
 
 
-def evaluate_script(script, moment, hook=None, summary="", recent_scripts=None):
+def evaluate_script(script, moment, hook=None, summary="", recent_scripts=None, mode="full"):
     """Returns {'passed': bool, 'scores': {...}, 'issues': [...], 'feedback': str,
     'judge_skipped': bool}."""
     scores = {k: None for k in SCORE_KEYS}
@@ -102,7 +106,7 @@ def evaluate_script(script, moment, hook=None, summary="", recent_scripts=None):
     try:
         data = {}
         for _ in range(1 + JUDGE_PARSE_RETRIES):          # retry only an unparsable reply
-            raw = _invoke_judge(_judge_prompt(script, moment, hook, summary)).content
+            raw = _invoke_judge(_judge_prompt(script, moment, hook, summary, mode)).content
             data = extract_json(raw) or {}
             for k in SCORE_KEYS:
                 scores[k] = clamp(data.get(k), 1, 10, default=None)

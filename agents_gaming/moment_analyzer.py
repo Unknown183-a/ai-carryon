@@ -87,12 +87,16 @@ _SCHEMA = """{
 
 
 def _metadata_block(clip):
-    return (
+    block = (
         f"Clip title: {clip.get('title', '')}\n"
         f"Streamer: {clip.get('broadcaster_name', '')}\n"
         f"Game (if known): {clip.get('_source_game', '') or 'unknown — read it from the frames'}\n"
         f"Clip length: {clip.get('duration', '?')}s"
     )
+    if clip.get("_transcript_text"):
+        # Sprint 2: what is actually SAID in the clip (auto-transcript, may contain errors).
+        block += f"\nStreamer speech (auto-transcribed, may contain errors): {clip['_transcript_text']}"
+    return block
 
 
 def _vision_call(frames, clip):
