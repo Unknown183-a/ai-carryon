@@ -28,6 +28,20 @@ from agents_gaming.v2_utils import (
 # Spec Phase 5: every score must be > 7. Env-tunable (e.g. 6.5 while tuning).
 MIN_SCORE = float(os.getenv("GAMING_SCRIPT_MIN_SCORE", "7"))
 SCORE_KEYS = ("hook", "naturalness", "originality", "accuracy", "moment_relevance")
+# Pass rule. "balanced" (default): the things that make a Short WRONG or unwatchable are hard
+# gates (hook, accuracy, moment relevance); naturalness / originality only need a basic floor,
+# and the average must be decent. "strict" = the old rule (every score > MIN_SCORE).
+RULE = os.getenv("GAMING_SCRIPT_RULE", "balanced").lower()
+HARD_MIN = {"hook": float(os.getenv("GAMING_HOOK_MIN", "6")),
+            "accuracy": float(os.getenv("GAMING_ACCURACY_MIN", "7")),
+            "moment_relevance": float(os.getenv("GAMING_RELEVANCE_MIN", "7"))}
+SOFT_FLOOR = float(os.getenv("GAMING_SOFT_FLOOR", "4"))      # naturalness / originality must be > this
+AVG_MIN = float(os.getenv("GAMING_SCRIPT_AVG_MIN", "6"))
+
+
+def average_score(scores):
+    vals = [v for v in (scores or {}).values() if v is not None]
+    return sum(vals) / len(vals) if vals else 0.0
 SIMILARITY_LIMIT = 0.6
 # The judge must score on ONE scale. The router's Groq budget runs out mid-run
 # and silently hands later calls to Gemini, which scores far harsher — so the
@@ -125,17 +139,36 @@ def evaluate_script(script, moment, hook=None, summary="", recent_scripts=None, 
     if bad_nums:
         scores["accuracy"] = min(scores["accuracy"] if scores["accuracy"] is not None else 10, 4)
         issues.append("states numbers not in the clip data: " + ", ".join(bad_nums))
+    capped = set()
+    if bad_nums:
+        capped.add("accuracy")
     rep = repeated_ai_phrases(script, recent_scripts)
     if rep:
+        capped.add("naturalness")
         scores["naturalness"] = min(scores["naturalness"] if scores["naturalness"] is not None else 10, 5)
         issues.append("overused AI-sounding phrases: " + ", ".join(rep))
     sim = _similarity(script, recent_scripts)
     if sim >= SIMILARITY_LIMIT:
+        capped.add("originality")
         scores["originality"] = min(scores["originality"] if scores["originality"] is not None else 10, 4)
         issues.append(f"too similar to a recent script ({sim:.0%})")
 
     # Unscored dimensions (judge skipped) pass; scored ones must be > MIN_SCORE.
-    failing = [k for k, v in scores.items() if v is not None and not v > MIN_SCORE]
+    if RULE == "strict":
+        failing = [k for k, v in scores.items() if v is not None and not v > MIN_SCORE]
+    else:
+        failing = []
+        for k, v in scores.items():
+            if v is None:
+                continue
+            below = (v < HARD_MIN[k]) if k in HARD_MIN else (not v > SOFT_FLOOR)
+            # A deterministic problem (invented number, overused AI phrase, copy of a recent
+            # script) is never excused by the average.
+            if below or k in capped:
+                failing.append(k)
+        if (not failing and any(v is not None for v in scores.values())
+                and average_score(scores) < AVG_MIN):
+            failing = [k for k, v in scores.items() if v is not None and v < AVG_MIN] or ["average"]
     passed = not failing
     if judge_skipped and not ALLOW_UNJUDGED:
         # Never publish a script nobody reviewed just because the reviewer was down.

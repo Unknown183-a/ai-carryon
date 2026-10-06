@@ -68,11 +68,15 @@ Return ONLY the script text, nothing else."""
 
 # ── Gaming V2 (Phases 3-5): hook -> commentary -> quality gate ──────────────
 
+import os
 import json
 
 RECENT_SCRIPTS_KEY = "gaming_recent_scripts"
 RECENT_HOOKS_KEY = "gaming_recent_hook_types"
 MAX_SCRIPT_ATTEMPTS = 3
+# After attempt 2, stop if even the best draft averages below this: the clip is a lost cause
+# and every further attempt just burns Groq / Gemini calls.
+EARLY_STOP_AVG = float(os.getenv("GAMING_EARLY_STOP_AVG", "5"))
 
 
 def _load_recent(db, key, limit):
@@ -107,7 +111,7 @@ def create_gaming_script_v2(clip, moment, summary, structured, db=None, mode="fu
     """
     from agents_gaming.hook_agent import generate_hooks
     from agents_gaming.commentary_agent import generate_commentary
-    from agents_gaming.script_quality_agent import evaluate_script
+    from agents_gaming.script_quality_agent import evaluate_script, average_score
 
     recent_scripts = _load_recent(db, RECENT_SCRIPTS_KEY, 5) if db else []
     recent_hooks = _load_recent(db, RECENT_HOOKS_KEY, 3) if db else []
@@ -134,7 +138,7 @@ def create_gaming_script_v2(clip, moment, summary, structured, db=None, mode="fu
         if hook:
             print(f"Hook [{hook['type']} {hook['score']}]: {hook['text']}")
 
-    feedback, last = saved.get("feedback"), None
+    feedback, last, best = saved.get("feedback"), None, None
     used_hooks = list(saved.get("used_hooks") or ([hook["text"]] if hook else []))
     first_attempt = int(saved.get("attempt") or 1)
     for attempt in range(first_attempt, MAX_SCRIPT_ATTEMPTS + 1):
@@ -168,6 +172,12 @@ def create_gaming_script_v2(clip, moment, summary, structured, db=None, mode="fu
         if quality["passed"]:
             return cand
         last = cand
+        if best is None or average_score(quality["scores"]) > average_score(best["quality"]["scores"]):
+            best = cand                      # keep the strongest draft, not just the latest
+        if attempt >= 2 and average_score(best["quality"]["scores"]) < EARLY_STOP_AVG:
+            print(f"Best draft averages {average_score(best['quality']['scores']):.1f} "
+                  f"(< {EARLY_STOP_AVG}) — stopping early to save LLM calls")
+            return best
         feedback = quality["feedback"] or "; ".join(quality["issues"])
         _save(attempt=attempt + 1, draft=None, feedback=feedback, hook=hook, used_hooks=used_hooks)
         # The hook is generated once and forced in as line 1, so rewriting the
@@ -181,4 +191,6 @@ def create_gaming_script_v2(clip, moment, summary, structured, db=None, mode="fu
                 _save(hook=hook, used_hooks=used_hooks)
                 print(f"New hook [{hook['type']} {hook['score']}]: {hook['text']}")
 
-    return last  # every attempt failed the bar -> passed=False (final draft, for logging)
+    final = dict(best or last)          # every attempt failed the bar -> passed=False (best draft, for logging)
+    final["attempts"] = MAX_SCRIPT_ATTEMPTS
+    return final

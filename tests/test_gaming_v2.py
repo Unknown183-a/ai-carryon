@@ -246,9 +246,26 @@ def _judge(**scores):
 def test_quality_passes_only_when_all_above_threshold(monkeypatch):
     _fake_llm(monkeypatch, [_judge()])
     assert script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)["passed"] is True
-    _fake_llm(monkeypatch, [_judge(hook=7, fix="open harder")])      # exactly 7 is NOT > 7
+    _fake_llm(monkeypatch, [_judge(hook=5, fix="open harder")])      # hook has a hard floor of 6
     r = script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)
     assert r["passed"] is False and r["failing"] == ["hook"] and r["feedback"] == "open harder"
+
+
+def test_balanced_rule_lets_a_good_but_not_perfect_script_pass(monkeypatch):
+    _fake_llm(monkeypatch, [_judge(hook=6, naturalness=5, originality=5)])
+    assert script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)["passed"] is True
+    _fake_llm(monkeypatch, [_judge(accuracy=6)])                      # accuracy is a hard gate (7)
+    assert script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)["failing"] == ["accuracy"]
+    _fake_llm(monkeypatch, [_judge(naturalness=4)])                   # floor: must be > 4
+    assert script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)["failing"] == ["naturalness"]
+    _fake_llm(monkeypatch, [_judge(hook=6, naturalness=5, originality=5, accuracy=7, moment_relevance=5)])
+    assert script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)["passed"] is False
+
+
+def test_strict_rule_still_available(monkeypatch):
+    monkeypatch.setattr(script_quality_agent, "RULE", "strict")
+    _fake_llm(monkeypatch, [_judge(hook=7)])
+    assert script_quality_agent.evaluate_script(GOOD, MOMENT, None, SUMMARY)["passed"] is False
 
 
 def test_quality_caps_invented_numbers_and_ai_phrases_and_duplicates(monkeypatch):
@@ -739,3 +756,21 @@ def test_analysis_loop_respects_the_cap_and_reports_why_nothing_was_usable(sched
     assert len(seen) == 3                                        # hard cap on vision calls
     out = capsys.readouterr().out
     assert "is not gameplay footage (game=" in out and "what=" in out    # the log says WHY, so it can be judged
+
+
+def test_best_attempt_is_returned_and_early_stop(monkeypatch):
+    hooks = json.dumps({"hooks": [{"type": "SHOCK", "text": "He survived with 1 HP.", "score": 9}]})
+    seq = iter([_judge(hook=5, originality=5), _judge(hook=3, naturalness=3, originality=2, accuracy=9),
+                _judge(hook=5, originality=5)])
+
+    def route(prompt):
+        if "first 2 seconds" in prompt:
+            return hooks
+        if "strict editor" in prompt:
+            return next(seq)
+        return GOOD
+
+    _fake_llm(monkeypatch, [route])
+    out = script_agent.create_gaming_script_v2({"duration": 25}, MOMENT, SUMMARY, {}, db=FakeDB())
+    assert out["passed"] is False
+    assert out["attempts"] == 1 or out["quality"]["scores"]["hook"] == 5   # the better draft, not the last
