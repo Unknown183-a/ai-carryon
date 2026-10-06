@@ -108,7 +108,7 @@ def run_generation_pipeline(topic_override=None):
     try:
         from agents.checkpoint import (
             save_checkpoint, is_stage_done, get_stage_data,
-            clear_checkpoint, list_checkpoints,
+            clear_checkpoint, list_checkpoints, note_resume,
         )
         from agents.research_agent import research
         from agents.script_agent import create_script
@@ -126,6 +126,7 @@ def run_generation_pipeline(topic_override=None):
         if pending:
             cp = pending[0]
             topic = cp["topic"]
+            note_resume(topic)
             log(f"Resuming incomplete generation for topic: {topic} (last stage: {cp.get('last_stage')})")
         elif topic_override:
             topic = topic_override
@@ -196,11 +197,13 @@ def run_generation_pipeline(topic_override=None):
             log(f"Hook engine skipped: {hook_err}")
             hook = None
 
+        images_regenerated = False
         if is_stage_done(topic, "images") and get_stage_data(topic, "images") and all(os.path.exists(p) for p in get_stage_data(topic, "images")):
             image_paths = get_stage_data(topic, "images")
             log("Resuming: images already done")
             use_pexels = bool(image_paths) and image_paths[0].endswith(".mp4")
         else:
+            images_regenerated = True
             log("Fetching dynamic Pexels video clips...")
             image_paths, image_errors = generate_background_clips(topic, script, num_clips=4)
             if len(image_paths) < 2:
@@ -214,22 +217,28 @@ def run_generation_pipeline(topic_override=None):
                 return
             save_checkpoint(topic, "images", image_paths)
 
-        if is_stage_done(topic, "voice") and get_stage_data(topic, "voice") and os.path.exists(get_stage_data(topic, "voice")):
+        # Files live on local disk, which may be wiped between runs. If a file is gone,
+        # that step AND every step after it (which read it) must be made again.
+        media_redone = images_regenerated or not (image_paths and all(os.path.exists(p) for p in image_paths))
+
+        if (not media_redone) and is_stage_done(topic, "voice") and get_stage_data(topic, "voice") and os.path.exists(get_stage_data(topic, "voice")):
             voice_file = get_stage_data(topic, "voice")
             log("Resuming: voice already done")
         else:
+            media_redone = True
             log("Generating voiceover...")
             voice_file = generate_voice(script)
             save_checkpoint(topic, "voice", voice_file)
 
-        if not is_stage_done(topic, "captions"):
+        if (not media_redone) and is_stage_done(topic, "captions") and os.path.exists("output/captions.srt"):
+            log("Resuming: captions already done")
+        else:
+            media_redone = True
             log("Generating captions...")
             create_srt(script, voice_file)
             save_checkpoint(topic, "captions", True)
-        else:
-            log("Resuming: captions already done")
 
-        if is_stage_done(topic, "video") and get_stage_data(topic, "video") and os.path.exists(get_stage_data(topic, "video")):
+        if (not media_redone) and is_stage_done(topic, "video") and get_stage_data(topic, "video") and os.path.exists(get_stage_data(topic, "video")):
             video_file = get_stage_data(topic, "video")
             log("Resuming: video already rendered")
         else:

@@ -94,9 +94,14 @@ def should_generate_now():
 
 def generate_and_upload_hindi(force=False):
     from agents.database import db
+    from agents.run_state import RunState
+
+    state = RunState.open("hindi", db.get_meta, db.set_meta, log=log)
 
     if force:
         log("Schedule check: BYPASSED (FORCE_GENERATE)")
+    elif state.resumed:
+        log("Schedule check: BYPASSED (finishing a run that stopped earlier)")
     else:
         should_run, reason = should_generate_now()
         log(f"Schedule check: {reason}")
@@ -111,155 +116,206 @@ def generate_and_upload_hindi(force=False):
     log("=== Hindi video generation shuru hua ===")
 
     try:
-        log("Hindi trending topic dhundh raha hai...")
-        from agents_hindi.spy_agent import get_best_hindi_topic, get_hindi_trending_topics
-        from agents_hindi.trending_agent import get_trending_topic
         from agents_hindi.categories import pick_category, classify_topic, looks_hindi, has_unsupported_script
 
-        # V2: channel only makes experiment videos in science / ai / tech / gadgets.
-        category = pick_category(last_category=db.get_meta("last_category_hindi"))
-        log(f"Category chosen: {category}")
-
-        best = get_best_hindi_topic(category=category)
-
-        if best:
-            topic = best['topic']
-            category = best.get('category', category)
-            log(f"Spy agent se topic mila [{category}]: {topic} ({best['views']:,} views)")
+        if state.resumed:
+            topic, category = state.ctx["topic"], state.ctx["category"]
+            log(f"Resuming topic [{category}]: {topic}")
         else:
-            log("24 ghante mein koi video nahi mili, trending agent use kar raha hai...")
-            topic = get_trending_topic(region_code="IN", category=category)
-            category = classify_topic(topic) or category
-            log(f"Trending topic [{category}]: {topic}")
+            log("Hindi trending topic dhundh raha hai...")
+            from agents_hindi.spy_agent import get_best_hindi_topic, get_hindi_trending_topics
+            from agents_hindi.trending_agent import get_trending_topic
 
-        if has_unsupported_script(topic):
-            log(f"Topic Hindi/English script mein nahi hai ({topic[:40]}...) — LLM se naya topic bana raha hai")
-            from agents_hindi.trending_agent import _fallback_topic
-            topic = _fallback_topic(category=category)
-            category = classify_topic(topic) or category
-            log(f"Naya topic [{category}]: {topic}")
+            # V2: channel only makes experiment videos in science / ai / tech / gadgets.
+            category = pick_category(last_category=db.get_meta("last_category_hindi"))
+            log(f"Category chosen: {category}")
 
-        posted_today = get_posted_today()
-        if topic in posted_today:
-            log(f"Ye topic aaj already post ho chuka hai: {topic}")
-            all_topics = get_hindi_trending_topics()
-            for t in all_topics:
-                if t['topic'] not in posted_today:
-                    topic = t['topic']
-                    category = t.get('category', category)
-                    log(f"Alternative topic [{category}]: {topic}")
-                    break
+            best = get_best_hindi_topic(category=category)
 
-        log("Saturation check ho raha hai...")
-        try:
+            if best:
+                topic = best['topic']
+                category = best.get('category', category)
+                log(f"Spy agent se topic mila [{category}]: {topic} ({best['views']:,} views)")
+            else:
+                log("24 ghante mein koi video nahi mili, trending agent use kar raha hai...")
+                topic = get_trending_topic(region_code="IN", category=category)
+                category = classify_topic(topic) or category
+                log(f"Trending topic [{category}]: {topic}")
+
+            if has_unsupported_script(topic):
+                log(f"Topic Hindi/English script mein nahi hai ({topic[:40]}...) — LLM se naya topic bana raha hai")
+                from agents_hindi.trending_agent import _fallback_topic
+                topic = _fallback_topic(category=category)
+                category = classify_topic(topic) or category
+                log(f"Naya topic [{category}]: {topic}")
+
+            posted_today = get_posted_today()
+            if topic in posted_today:
+                log(f"Ye topic aaj already post ho chuka hai: {topic}")
+                all_topics = get_hindi_trending_topics()
+                for t in all_topics:
+                    if t['topic'] not in posted_today:
+                        topic = t['topic']
+                        category = t.get('category', category)
+                        log(f"Alternative topic [{category}]: {topic}")
+                        break
+
+            state.begin({"topic": topic, "category": category})
+
+        def _saturation():
             from agents_hindi.saturation_agent import check_saturation_hindi
-            saturation = check_saturation_hindi(topic)
-            log(f"Saturation: score={saturation['opportunity_score']} — {saturation['reason']}")
-        except Exception as se:
-            log(f"Saturation check skip: {se}")
+            s = check_saturation_hindi(topic)
+            log(f"Saturation: score={s['opportunity_score']} — {s['reason']}")
+            return True
+
+        def _comparison():
+            from agents_hindi.comparison_agent import compare_topic_hindi
+            c = compare_topic_hindi(topic)
+            ins = c.get("insights", {})
+            if ins and not ins.get("error"):
+                log(f"Comparison: avg views={ins.get('competitor_avg_views', 0):,}")
+                return ins
+            return {}
+
+        if not state.has("saturation"):
+            log("Saturation check ho raha hai...")
+            try:
+                state.step("saturation", _saturation)
+            except Exception as se:
+                log(f"Saturation check skip: {se}")
 
         log("Competitor comparison ho raha hai...")
         try:
-            from agents_hindi.comparison_agent import compare_topic_hindi
-            comparison = compare_topic_hindi(topic)
-            comparison_insights = comparison.get("insights", {})
-            if comparison_insights and not comparison_insights.get("error"):
-                log(f"Comparison: avg views={comparison_insights.get('competitor_avg_views', 0):,}")
-            else:
-                comparison_insights = {}
+            comparison_insights = state.step("comparison", _comparison)
         except Exception as ce:
             log(f"Comparison skip: {ce}")
             comparison_insights = {}
 
-        log("Research ho raha hai...")
         from agents.research_agent import research
-        research_data = research(topic)
+        research_data = state.step("research", lambda: research(topic))
 
-        log("Hindi script ban rahi hai...")
-        from agents_hindi.script_agent import create_script
-        script = create_script(research_data, topic=topic,
-                               comparison_insights=comparison_insights)
+        def _write_script():
+            log("Hindi script ban rahi hai...")
+            from agents_hindi.script_agent import create_script
+            s = create_script(research_data, topic=topic, comparison_insights=comparison_insights)
+            if not looks_hindi(s):
+                log("Script Hindi nahi lag rahi — ek baar dobara try kar raha hai...")
+                s = create_script(research_data, topic=topic, comparison_insights=comparison_insights)
+            return s
+
+        script = state.step("script", _write_script)
         if not looks_hindi(script):
-            log("Script Hindi nahi lag rahi — ek baar dobara try kar raha hai...")
-            script = create_script(research_data, topic=topic,
-                                   comparison_insights=comparison_insights)
-            if not looks_hindi(script):
-                log("Script dobara bhi Hindi nahi — is run ko skip kar raha hai (kuch upload nahi hoga)")
-                return
+            log("Script dobara bhi Hindi nahi — is run ko skip kar raha hai (kuch upload nahi hoga)")
+            state.clear()          # a bad topic must not be resumed again and again
+            return
+
+        def _ab_title():
+            from agents_hindi.ab_title_agent import get_best_title_hindi
+            r = get_best_title_hindi(topic, script)
+            log(f"A/B winner: {r['winner']['title']} (score: {r['winner']['score']}/10)")
+            return r["winner"]["title"]
 
         log("A/B title testing ho raha hai...")
-        ab_winner_title = None
         try:
-            from agents_hindi.ab_title_agent import get_best_title_hindi
-            ab_result = get_best_title_hindi(topic, script)
-            ab_winner_title = ab_result["winner"]["title"]
-            log(f"A/B winner: {ab_winner_title} (score: {ab_result['winner']['score']}/10)")
+            ab_winner_title = state.step("ab_title", _ab_title)
         except Exception as ae:
             log(f"A/B title test skip: {ae}")
+            ab_winner_title = None
+
+        def _seo():
+            from agents_hindi.seo_agent import generate_seo
+            s = generate_seo(topic, script, comparison_insights=comparison_insights)
+            if ab_winner_title:
+                s["title"] = ab_winner_title
+            return s
 
         log("Hindi SEO generate ho raha hai...")
-        from agents_hindi.seo_agent import generate_seo
-        seo = generate_seo(topic, script, comparison_insights=comparison_insights)
-        if ab_winner_title:
-            seo["title"] = ab_winner_title
+        seo = state.step("seo", _seo)
         if not looks_hindi(f"{seo['title']} {seo.get('description', '')}"):
             log("Title/description Hindi nahi lag rahe — is run ko skip kar raha hai (kuch upload nahi hoga)")
+            state.clear()
             return
         log(f"Title: {seo['title']}")
 
+        def _thumb():
+            from agents.thumbnail_generator import generate_thumbnail
+            return generate_thumbnail(seo["title"], topic)
+
         log("Thumbnail ban raha hai...")
-        from agents.thumbnail_generator import generate_thumbnail
-        thumbnail = generate_thumbnail(seo["title"], topic)
+        thumbnail = state.step("thumbnail", _thumb, validate=os.path.exists)
 
         # Hook Engine: topic-relevant opening clip, chosen BEFORE the normal clips.
         # Never blocks the run: no suitable hook -> hook=None -> renders as before.
+        def _hook():
+            from agents.hook_engine import select_hook
+            from agents_hindi.model_invoke_agent_hindi import safe_invoke as _hook_invoke
+            return select_hook(topic, script, "hindi", invoke=_hook_invoke,
+                               meta_get=db.get_meta, meta_set=db.set_meta)
+
         hook = None
         try:
             log("Hook clip select ho raha hai...")
-            from agents.hook_engine import select_hook
-            from agents_hindi.model_invoke_agent_hindi import safe_invoke as _hook_invoke
-            hook = select_hook(topic, script, "hindi", invoke=_hook_invoke,
-                               meta_get=db.get_meta, meta_set=db.set_meta)
+            hook = state.step("hook", _hook,
+                              validate=lambda h: h is None or os.path.exists(h.get("path", "")))
             log(f"Hook: {hook['clip_id']} ({hook['duration']}s, relevance {hook['relevance']:.2f})"
                 if hook else "Hook: koi suitable nahi - normal opening")
         except Exception as he:
             log(f"Hook engine skip: {he}")
 
-        log("Pexels video clips fetch ho rahe hain...")
-        from agents_hindi.video_clip_agent import generate_background_clips
-        from agents.image_agent import generate_backgrounds
-        image_paths, errors = generate_background_clips(topic, script, num_clips=4)
-        if len(image_paths) < 2:
-            log(f"Bahut kam Pexels clips mile ({errors}) — static images par fallback ho raha hai...")
-            image_paths, errors = generate_backgrounds(topic, script, num_images=4)
-            use_pexels = False
-        else:
-            use_pexels = True
+        def _images():
+            log("Pexels video clips fetch ho rahe hain...")
+            from agents_hindi.video_clip_agent import generate_background_clips
+            from agents.image_agent import generate_backgrounds
+            paths, errors = generate_background_clips(topic, script, num_clips=4)
+            if len(paths) < 2:
+                log(f"Bahut kam Pexels clips mile ({errors}) — static images par fallback ho raha hai...")
+                paths, errors = generate_backgrounds(topic, script, num_images=4)
+                return [paths, False, errors]
+            return [paths, True, errors]
+
+        image_paths, use_pexels, errors = state.step(
+            "images", _images,
+            validate=lambda v: bool(v[0]) and all(os.path.exists(p) for p in v[0]))
         if not image_paths:
             log(f"Images nahi bani: {errors}")
+            state.forget("images")
             return
 
-        log("Hindi awaaz generate ho rahi hai...")
-        from agents_hindi.voice_agent import generate_voice
-        voice = generate_voice(script)
+        def _voice():
+            log("Hindi awaaz generate ho rahi hai...")
+            from agents_hindi.voice_agent import generate_voice
+            return generate_voice(script)
 
-        log("Captions ban rahe hain...")
-        from agents.caption_agent import create_srt
-        create_srt(script, voice)
+        voice = state.step("voice", _voice, validate=os.path.exists, after=["images"])
 
-        log("Video ban raha hai...")
-        from agents.video_agent import create_video
-        video = create_video(use_pexels_clips=use_pexels, hook=hook if use_pexels else None)
+        def _captions():
+            log("Captions ban rahe hain...")
+            from agents.caption_agent import create_srt
+            create_srt(script, voice)
+            return "output/captions.srt"
 
-        log("YouTube Hindi channel par upload ho raha hai...")
-        from agents_hindi.upload_agent import upload_video
-        video_id, video_url = upload_video(
-            video_path=video,
-            title=seo["title"],
-            description=seo["description"],
-            hashtags=seo["hashtags"],
-            thumbnail_path=thumbnail
-        )
+        state.step("captions", _captions, validate=os.path.exists, after=["voice"])
+
+        def _video():
+            log("Video ban raha hai...")
+            from agents.video_agent import create_video
+            return create_video(use_pexels_clips=use_pexels, hook=hook if use_pexels else None)
+
+        video = state.step("video", _video, validate=os.path.exists, after=["images", "voice", "captions"])
+
+        def _upload():
+            log("YouTube Hindi channel par upload ho raha hai...")
+            from agents_hindi.upload_agent import upload_video
+            return list(upload_video(
+                video_path=video,
+                title=seo["title"],
+                description=seo["description"],
+                hashtags=seo["hashtags"],
+                thumbnail_path=thumbnail
+            ))
+
+        # Never uploads twice: once this step is saved, a resumed run skips it.
+        video_id, video_url = state.step("upload", _upload)
 
         if hook and use_pexels:
             from agents.hook_engine import record_usage as record_hook_usage
@@ -277,6 +333,7 @@ def generate_and_upload_hindi(force=False):
         except Exception:
             pass
         log(f"SUCCESS: Upload ho gaya! {video_url}")
+        state.clear()
 
         from agents.cleanup_agent import cleanup_after_upload
         cleanup_after_upload(video, log_fn=log)

@@ -96,7 +96,7 @@ def remember_script(db, script, hook_type=None):
         print(f"Could not store recent script memory: {e}")
 
 
-def create_gaming_script_v2(clip, moment, summary, structured, db=None, mode="full"):
+def create_gaming_script_v2(clip, moment, summary, structured, db=None, mode="full", state=None):
     """V2 script pipeline for one analysed clip.
 
     Returns a dict:
@@ -113,18 +113,41 @@ def create_gaming_script_v2(clip, moment, summary, structured, db=None, mode="fu
     recent_hooks = _load_recent(db, RECENT_HOOKS_KEY, 3) if db else []
     duration = clip.get("duration")
 
-    hook = generate_hooks(moment, summary, recent_hook_types=recent_hooks)
-    if hook:
-        print(f"Hook [{hook['type']} {hook['score']}]: {hook['text']}")
+    # Resume support: progress for this clip is saved after every step, so a run
+    # that stopped (rate limit, judge outage) continues from the same hook / draft /
+    # attempt number instead of paying for them again.
+    pkey = f"script:{clip.get('id')}"
+    saved = (state.get(pkey) if state is not None else None) or {}
 
-    feedback, last = None, None
-    used_hooks = [hook["text"]] if hook else []
-    for attempt in range(1, MAX_SCRIPT_ATTEMPTS + 1):
+    def _save(**kw):
+        if state is not None:
+            saved.update(kw)
+            state.set(pkey, dict(saved))
+
+    if saved.get("hook_done"):
+        hook = saved.get("hook")
+        print(f"Resuming saved hook: {hook['text'] if hook else None}")
+    else:
+        hook = generate_hooks(moment, summary, recent_hook_types=recent_hooks)
+        _save(hook=hook, hook_done=True, attempt=1, feedback=None,
+              used_hooks=[hook["text"]] if hook else [], draft=None)
+        if hook:
+            print(f"Hook [{hook['type']} {hook['score']}]: {hook['text']}")
+
+    feedback, last = saved.get("feedback"), None
+    used_hooks = list(saved.get("used_hooks") or ([hook["text"]] if hook else []))
+    first_attempt = int(saved.get("attempt") or 1)
+    for attempt in range(first_attempt, MAX_SCRIPT_ATTEMPTS + 1):
         try:
-            script, local_issues = generate_commentary(
-                moment, hook, summary, structured, duration=duration,
-                recent_scripts=recent_scripts, feedback=feedback, mode=mode,
-            )
+            if saved.get("draft") and saved.get("attempt") == attempt:
+                script, local_issues = saved["draft"]["script"], saved["draft"]["local_issues"]
+                print(f"Resuming saved draft for attempt {attempt} — judging it without rewriting")
+            else:
+                script, local_issues = generate_commentary(
+                    moment, hook, summary, structured, duration=duration,
+                    recent_scripts=recent_scripts, feedback=feedback, mode=mode,
+                )
+                _save(attempt=attempt, draft={"script": script, "local_issues": list(local_issues or [])})
         except Exception as e:
             print(f"Commentary generation failed ({e}) — falling back to legacy script")
             return {"script": create_gaming_script(summary, structured), "hook": hook,
@@ -146,6 +169,7 @@ def create_gaming_script_v2(clip, moment, summary, structured, db=None, mode="fu
             return cand
         last = cand
         feedback = quality["feedback"] or "; ".join(quality["issues"])
+        _save(attempt=attempt + 1, draft=None, feedback=feedback, hook=hook, used_hooks=used_hooks)
         # The hook is generated once and forced in as line 1, so rewriting the
         # body can never raise a failing hook score — redo the hook itself.
         if attempt < MAX_SCRIPT_ATTEMPTS and "hook" in (quality.get("failing") or []):
@@ -154,6 +178,7 @@ def create_gaming_script_v2(clip, moment, summary, structured, db=None, mode="fu
             if new_hook:
                 hook = new_hook
                 used_hooks.append(hook["text"])
+                _save(hook=hook, used_hooks=used_hooks)
                 print(f"New hook [{hook['type']} {hook['score']}]: {hook['text']}")
 
     return last  # every attempt failed the bar -> passed=False (final draft, for logging)

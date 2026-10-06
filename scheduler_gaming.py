@@ -70,7 +70,20 @@ def _caption_text(script):
     return re.sub(r"\.{2,}|\u2026", " ", script)
 
 
-def _select_and_script_v2(candidates, posted):
+def _analyse_with_refine(c, tr, clip_path, analyze_moment, refine_key_timestamp):
+    """Moment analysis + audio-peak refinement as ONE saveable step."""
+    m = analyze_moment({**c, "_transcript_text": tr["text"]} if tr else c, clip_path)
+    if m.get("source") == "vision":
+        # The vision tier only sees 5 frames, so its payoff time can be off by a second or more.
+        # Snap it to the loudest burst nearby (the payoff is nearly always the loudest moment).
+        new_key, changed = refine_key_timestamp(clip_path, m.get("key_timestamp"))
+        if changed:
+            print(f"Payoff time refined by audio peak: {m.get('key_timestamp')}s -> {new_key}s")
+            m["key_timestamp"], m["key_refined"] = new_key, True
+    return m
+
+
+def _select_and_script_v2(candidates, posted, state=None):
     """V2 front half: score -> download+analyse top K -> re-score with real
     moment quality -> hook/commentary/quality loop on the best clips.
     Returns {"status": "ok", ...} or a terminal status dict for the scheduler."""
@@ -106,18 +119,16 @@ def _select_and_script_v2(candidates, posted):
         except Exception as e:
             print(f"Clip {c.get('id')} download failed, skipping: {e}")
             continue
-        tr = transcribe_clip(paths[c["id"]]) if AUDIO_MODE == "v2" else None
+        _cp = paths[c["id"]]
+        _step = (lambda name, fn: state.step(name, fn)) if state is not None else (lambda name, fn: fn())
+        # Saved per clip: a stopped run does not pay for the transcript / vision call again.
+        tr = _step(f"transcript:{c['id']}", lambda: transcribe_clip(_cp)) if AUDIO_MODE == "v2" else None
         if tr:
             transcripts[c["id"]] = tr
-        moments[c["id"]] = analyze_moment({**c, "_transcript_text": tr["text"]} if tr else c, paths[c["id"]])
+        moments[c["id"]] = _step(
+            f"moment:{c['id']}",
+            lambda: _analyse_with_refine(c, tr, _cp, analyze_moment, refine_key_timestamp))
         m = moments[c["id"]]
-        if m.get("source") == "vision":
-            # The vision tier only sees 5 frames, so its payoff time can be off by a second or more.
-            # Snap it to the loudest burst nearby (the payoff is nearly always the loudest moment).
-            new_key, changed = refine_key_timestamp(paths[c["id"]], m.get("key_timestamp"))
-            if changed:
-                print(f"Payoff time refined by audio peak: {m.get('key_timestamp')}s -> {new_key}s")
-                m["key_timestamp"], m["key_refined"] = new_key, True
         print(f"Analysed '{c.get('title')}': {m['moment_type']} intensity={m['intensity']} "
               f"[{m['source']}] (metadata score {c['_score']})")
         if m.get("is_gameplay") is False:
@@ -146,12 +157,16 @@ def _select_and_script_v2(candidates, posted):
         moment = moments[clip["id"]]
         print(f"Trying clip '{clip.get('title')}' by {clip.get('broadcaster_name')} "
               f"(V2 score {clip['_score']}, parts {clip['_score_parts']})")
-        summary, structured = get_summary_for_clip(clip)
+        if state is not None:
+            summary, structured = state.step(f"summary:{clip['id']}", lambda: list(get_summary_for_clip(clip)))
+        else:
+            summary, structured = get_summary_for_clip(clip)
         structured["game"] = structured.get("game") or moment.get("game", "")
         tr = transcripts.get(clip["id"])
         if tr:
             summary += f"\nStreamer speech (auto-transcript, may contain errors): {tr['text']}"
-        result = create_gaming_script_v2(clip, moment, summary, structured, db=gaming_db, mode=NARRATION_MODE)
+        result = create_gaming_script_v2(clip, moment, summary, structured, db=gaming_db,
+                                         mode=NARRATION_MODE, state=state)
         if result and result.get("unjudged"):
             # Reviewer outage, not a bad clip: don't burn the clip, don't try others.
             return {"status": "judge_unavailable"}
@@ -244,10 +259,16 @@ def _run_gaming_cycle_inner():
 
     _maybe_track_views()
 
-    upload_ok, upload_reason = should_upload_now_gaming()
-    print(f"Adaptive scheduler: {upload_reason}")
-    if not upload_ok:
-        return {"status": "skipped_scheduler", "reason": upload_reason}
+    from agents.run_state import RunState
+    state = RunState.open("gaming", gaming_db.get_meta, gaming_db.set_meta)
+
+    if state.resumed:
+        print("Adaptive scheduler: BYPASSED (finishing a run that stopped earlier)")
+    else:
+        upload_ok, upload_reason = should_upload_now_gaming()
+        print(f"Adaptive scheduler: {upload_reason}")
+        if not upload_ok:
+            return {"status": "skipped_scheduler", "reason": upload_reason}
 
     uploads_today = _check_daily_cap()
     if uploads_today >= DAILY_UPLOAD_CAP:
@@ -255,24 +276,49 @@ def _run_gaming_cycle_inner():
         return {"status": "daily_cap_reached", "uploads_today": uploads_today}
 
     posted = gaming_db.get_all_posted_clip_ids()
-    candidates = get_all_topics()
-    if not candidates:
-        print("No candidate clips found this cycle (check TWITCH_FOLLOWED_STREAMERS / "
-              "TWITCH_TRACKED_GAMES and Twitch app credentials).")
-        return {"status": "no_candidates"}
-
     moment, hook, clip_paths, transcript = None, None, None, None
-    if GAMING_V2_ENABLED:
-        sel = _select_and_script_v2(candidates, posted)
+
+    saved_sel = state.get("selected") if (GAMING_V2_ENABLED and state.resumed) else None
+    if saved_sel:
+        # The stopped run had already finished the clip + script. Only the footage
+        # (disk was wiped) has to be downloaded again; no LLM call is repeated.
+        from agents_gaming.video_clip_agent import download_twitch_clip
+        clip, moment, hook = saved_sel["clip"], saved_sel["moment"], saved_sel["hook"]
+        structured, script = saved_sel["structured"], saved_sel["script"]
+        transcript = saved_sel.get("transcript")
+        folder = "assets/gaming_clips"
+        os.makedirs(folder, exist_ok=True)
+        clip_path = os.path.join(folder, f"{clip['id']}.mp4")
+        if not os.path.exists(clip_path):
+            clip_path = download_twitch_clip(clip, clip_path)
+        clip_paths = [clip_path]
+        print(f"Resuming clip '{clip.get('title')}' with the saved script — skipping scoring and script writing")
+    elif GAMING_V2_ENABLED:
+        candidates = get_all_topics()
+        if not candidates:
+            print("No candidate clips found this cycle (check TWITCH_FOLLOWED_STREAMERS / "
+                  "TWITCH_TRACKED_GAMES and Twitch app credentials).")
+            state.clear()
+            return {"status": "no_candidates"}
+        if not state.resumed:
+            state.begin({})
+        sel = _select_and_script_v2(candidates, posted, state=state)
         if sel["status"] != "ok":
+            if sel["status"] != "judge_unavailable":
+                state.clear()      # nothing worth resuming; judge outage keeps its saved work
             return sel
         clip, moment, hook = sel["clip"], sel["moment"], sel["hook"]
         structured, script = sel["structured"], sel["script"]
         clip_paths = [sel["clip_path"]]
         transcript = sel.get("transcript")
+        state.set("selected", {"clip": clip, "moment": moment, "hook": hook, "structured": structured,
+                               "script": script, "transcript": transcript})
         print(f"Selected clip: '{clip.get('title')}' by {clip.get('broadcaster_name')} "
               f"-> {moment['moment_type']} (V2 score {clip['_score']})")
     else:
+        candidates = get_all_topics()
+        if not candidates:
+            return {"status": "no_candidates"}
         clip = find_best_unposted_clip(candidates, posted)
         if not clip:
             print("All candidate clips already posted this cycle.")
@@ -285,7 +331,8 @@ def _run_gaming_cycle_inner():
     print(f"Script ({len(script.split())} words): {script[:80]}...")
 
     seo_pattern = SEO_PATTERN_BY_MOMENT.get(moment["moment_type"]) if moment else None
-    title, description, hashtags = generate_seo(structured, _caption_text(script), use_pattern=seo_pattern)
+    title, description, hashtags = state.step(
+        "seo", lambda: list(generate_seo(structured, _caption_text(script), use_pattern=seo_pattern)))
     print(f"Title: {title}")
 
     use_v2_audio = GAMING_V2_ENABLED and AUDIO_MODE == "v2"
@@ -314,7 +361,10 @@ def _run_gaming_cycle_inner():
         # GAMING_AUDIO_MODE=legacy switches to the old renderer.
         try:
             from agents_gaming.producer import produce_video
-            video_path = produce_video(clip_paths[0], script, hook, moment, transcript, cold_open=visual_hook)
+            video_path = state.step(
+                "video",
+                lambda: produce_video(clip_paths[0], script, hook, moment, transcript, cold_open=visual_hook),
+                validate=os.path.exists)
         except Exception as e:
             print(f"Gaming render failed — not uploading: {e}")
             return {"status": "render_failed", "error": str(e)}
@@ -327,7 +377,9 @@ def _run_gaming_cycle_inner():
             music_path=None, **({"hook": visual_hook} if visual_hook else {}),
         )
 
-    video_id, video_url = upload_video(video_path, title, description, hashtags)
+    # Never uploads twice: once this step is saved, a resumed run skips it.
+    video_id, video_url = state.step(
+        "upload", lambda: list(upload_video(video_path, title, description, hashtags)))
     print(f"Uploaded: {video_url}")
 
     if visual_hook:
@@ -350,6 +402,7 @@ def _run_gaming_cycle_inner():
     )
     _increment_daily_cap()
     mark_upload_done_gaming()
+    state.clear()
 
     return {"status": "uploaded", "video_url": video_url, "title": title}
 
