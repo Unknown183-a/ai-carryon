@@ -1,0 +1,626 @@
+[
+  {
+    "winner": {
+      "title": "Claude AI beats ChatGPT in new benchmark \ud83e\udd16",
+      "pattern": "contrarian",
+      "score": 5
+    },
+    "variations": [
+      {
+        "title": "Claude AI beats ChatGPT in new benchmark \ud83e\udd16",
+        "pattern": "contrarian",
+        "score": 5
+      },
+      {
+        "title": "Claude AI beats ChatGPT in new benchmark \ud83e\udd16",
+        "pattern": "warning",
+        "score": 5
+      },
+      {
+        "title": "Claude AI beats ChatGPT in new benchmark \ud83e\udd16",
+        "pattern": "personal",
+        "score": 5
+      }
+    ],
+    "topic": "Claude AI beats ChatGPT in new benchmark",
+    "generated_at": "2026-06-29T18:41:13Z"
+  },
+  {
+    "winner": {
+      "title": "Claude AI beats ChatGPT in new benchmark \ud83e\udd16",
+      "pattern": "warning",
+      "score": 5
+    },
+    "variations": [
+      {
+        "title": "Claude AI beats ChatGPT in new benchmark \ud83e\udd16",
+        "pattern": "warning",
+        "score": 5
+      },
+      {
+        "title": "Claude AI beats ChatGPT in new benchmark \ud83e\udd16",
+        "pattern": "number",
+        "score": 5
+      },
+      {
+        "title": "Claude AI beats ChatGPT in new benchmark \ud83e\udd16",
+        "pattern": "question",
+        "score": 5
+      }
+    ],
+    "topic": "Claude AI beats ChatGPT in new benchmark",
+    "generated_at": "2026-06-29T18:42:40Z"
+  },
+  {
+    "winner": {
+      "title": "Claude AI won't dethrone ChatGPT \ud83d\udca1",
+      "pattern": "contrarian",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Claude AI won't dethrone ChatGPT \ud83d\udca1",
+        "pattern": "contrarian",
+        "score": 8
+      },
+      {
+        "title": "5 Ways Claude AI Tops ChatGPT \ud83e\udd16",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "They Don't Want You to Know: Claude Beats GPT \ud83e\udd16",
+        "pattern": "revelation",
+        "score": 8
+      }
+    ],
+    "topic": "Claude AI beats ChatGPT in new benchmark",
+    "generated_at": "2026-06-29T18:44:23Z"
+  },
+  {
+    "winner": {
+      "title": "Your Neophone Looks Like This \ud83d\udcf1",
+      "pattern": "personal",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Your Neophone Looks Like This \ud83d\udcf1",
+        "pattern": "personal",
+        "score": 8
+      },
+      {
+        "title": "Act Now: Neophone Revealed \ud83d\udcf1",
+        "pattern": "urgency",
+        "score": 8
+      },
+      {
+        "title": "They Don't Show Neophone \ud83d\udcde",
+        "pattern": "revelation",
+        "score": 7
+      }
+    ],
+    "topic": "what a neophone looks like",
+    "generated_at": "2026-06-30T05:47:01Z"
+  },
+  {
+    "winner": {
+      "title": "They Don't Want You to Know: F-35s No Radar \ud83d\udea8",
+      "pattern": "revelation",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "They Don't Want You to Know: F-35s No Radar \ud83d\udea8",
+        "pattern": "revelation",
+        "score": 8
+      },
+      {
+        "title": "Stop Believing F-35s Need Radar \ud83d\ude80",
+        "pattern": "contrarian",
+        "score": 8
+      },
+      {
+        "title": "Your F-35 Has No Radar \ud83d\udea8",
+        "pattern": "personal",
+        "score": 8
+      }
+    ],
+    "topic": "F-35s Delivered with NO RADAR",
+    "generated_at": "2026-07-02T07:38:42Z"
+  },
+  {
+    "winner": {
+      "title": "Your Smart Home Is Changing \ud83c\udfe0",
+      "pattern": "personal",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Your Smart Home Is Changing \ud83c\udfe0",
+        "pattern": "personal",
+        "score": 8
+      },
+      {
+        "title": "Nobody Told You Smart Appliances \ud83e\udd16",
+        "pattern": "revelation",
+        "score": 8
+      },
+      {
+        "title": "Did You Know Smart Home? \ud83c\udfe0",
+        "pattern": "curiosity",
+        "score": 7
+      }
+    ],
+    "topic": "Smart Appliances!, Tools Items, New Gadgets, Versatile Utensils, #shorts #gadgets",
+    "generated_at": "2026-07-04T19:25:11Z"
+  },
+  {
+    "winner": {
+      "title": "5 Smart Home Gadgets \ud83c\udfe0",
+      "pattern": "number",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "5 Smart Home Gadgets \ud83c\udfe0",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Warning: Smart Appliances \ud83d\udea8",
+        "pattern": "warning",
+        "score": 8
+      },
+      {
+        "title": "Did You Know Smart Appliances \ud83e\udd2f",
+        "pattern": "curiosity",
+        "score": 8
+      }
+    ],
+    "topic": "Smart Appliances!, Tools Items, New Gadgets, Versatile Utensils, #shorts #gadgets",
+    "generated_at": "2026-07-05T07:01:51Z"
+  },
+  {
+    "winner": {
+      "title": "Can Smart Homes Fail? \ud83c\udfe0",
+      "pattern": "question",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Can Smart Homes Fail? \ud83c\udfe0",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Stop Wasting $ on Smart Homes \ud83d\udca1",
+        "pattern": "urgency",
+        "score": 8
+      },
+      {
+        "title": "Did I Waste $52k on Smart Home \ud83e\udd2f",
+        "pattern": "curiosity",
+        "score": 8
+      }
+    ],
+    "topic": "How I wasted $52,000 in my Dream Smart Home",
+    "generated_at": "2026-07-08T09:55:52Z"
+  },
+  {
+    "winner": {
+      "title": "Can Xbox 360 Games be Saved? \ud83e\udd14",
+      "pattern": "question",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Can Xbox 360 Games be Saved? \ud83e\udd14",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "5 Ways to Archive Xbox 360 \ud83d\udcc0",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Did You Know Xbox 360 Games Vanish? \ud83c\udfae",
+        "pattern": "curiosity",
+        "score": 8
+      }
+    ],
+    "topic": "Archiving Xbox 360 titles. #xbox #xbox360 #howto #diy",
+    "generated_at": "2026-07-08T18:40:38Z"
+  },
+  {
+    "winner": {
+      "title": "5 Ventajas del Aire acondicionado U \ud83c\udfe0",
+      "pattern": "number",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "5 Ventajas del Aire acondicionado U \ud83c\udfe0",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Nobody Knew U-Shaped AC \ud83e\udd2f",
+        "pattern": "revelation",
+        "score": 8
+      },
+      {
+        "title": "U-Shaped AC Is Overrated \ud83d\udca1",
+        "pattern": "contrarian",
+        "score": 8
+      }
+    ],
+    "topic": "Aire acondicionado inteligente inversor de ventana en forma de U",
+    "generated_at": "2026-07-09T13:00:48Z"
+  },
+  {
+    "winner": {
+      "title": "Warning: Drones Now Fly 10hrs \ud83d\udea8",
+      "pattern": "warning",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Warning: Drones Now Fly 10hrs \ud83d\udea8",
+        "pattern": "warning",
+        "score": 8
+      },
+      {
+        "title": "Your Drone Flies 10hrs Straight \ud83d\udca8",
+        "pattern": "personal",
+        "score": 8
+      },
+      {
+        "title": "Did You Know Drones Now Fly 10hrs? \ud83d\ude81",
+        "pattern": "curiosity",
+        "score": 8
+      }
+    ],
+    "topic": "New drone technology can fly for 10 hours straight",
+    "generated_at": "2026-07-10T03:58:38Z"
+  },
+  {
+    "winner": {
+      "title": "Did You Know AI Passed Med Exam? \ud83d\udcbb",
+      "pattern": "curiosity",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Did You Know AI Passed Med Exam? \ud83d\udcbb",
+        "pattern": "curiosity",
+        "score": 8
+      },
+      {
+        "title": "5 Ways AI Passed Med Exam \ud83c\udfc6",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "They Don't Know AI Passed Med Exam \ud83e\udd16",
+        "pattern": "revelation",
+        "score": 8
+      }
+    ],
+    "topic": "This AI model just passed a real medical exam",
+    "generated_at": "2026-07-10T04:23:19Z"
+  },
+  {
+    "winner": {
+      "title": "Did Apple Vision Pro Capture The Unexplainable? \ud83e\udd2f",
+      "pattern": "curiosity",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Did Apple Vision Pro Capture The Unexplainable? \ud83e\udd2f",
+        "pattern": "curiosity",
+        "score": 8
+      },
+      {
+        "title": "They Don't Know Apple Vision Pro \ud83e\udd16",
+        "pattern": "revelation",
+        "score": 8
+      },
+      {
+        "title": "Apple Vision Pro Captures Unexplainable \ud83d\ude80",
+        "pattern": "urgency",
+        "score": 8
+      }
+    ],
+    "topic": "Danny Goler - Apple Vision Pro May Have Captured Something We CAN'T Explain | SRS #320",
+    "generated_at": "2026-07-12T09:55:12Z"
+  },
+  {
+    "winner": {
+      "title": "5 Ways Gmail Secures \ud83d\udcf1",
+      "pattern": "number",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "5 Ways Gmail Secures \ud83d\udcf1",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Can Gmail Adapt? \ud83d\udcf1",
+        "pattern": "question",
+        "score": 6
+      },
+      {
+        "title": "They Don't Know Gmail \ud83d\udd12",
+        "pattern": "revelation",
+        "score": 6
+      }
+    ],
+    "topic": "How Gmail be anytime you log in from a new device",
+    "generated_at": "2026-07-13T12:03:06Z"
+  },
+  {
+    "winner": {
+      "title": "5 Things SPARKX i7 \ud83d\udda8\ufe0f",
+      "pattern": "number",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "5 Things SPARKX i7 \ud83d\udda8\ufe0f",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Did You Know SPARKX i7 Prints Anything? \ud83e\udd16",
+        "pattern": "curiosity",
+        "score": 8
+      },
+      {
+        "title": "Can SPARKX i7 Print Anything? \ud83e\udd16",
+        "pattern": "question",
+        "score": 8
+      }
+    ],
+    "topic": "This Creality 3D Printer Prints Almost Anything (SPARKX i7)",
+    "generated_at": "2026-07-14T16:48:39Z"
+  },
+  {
+    "winner": {
+      "title": "Can Disc Go Digital? \ud83d\udcbb",
+      "pattern": "question",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Can Disc Go Digital? \ud83d\udcbb",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Your Xbox Disc Goes Digital Now \ud83d\udcc0",
+        "pattern": "personal",
+        "score": 8
+      },
+      {
+        "title": "Warning: Disc to Digital \ud83d\udea8",
+        "pattern": "warning",
+        "score": 8
+      }
+    ],
+    "topic": "XBOX DISC TO DIGITAL EXPLAINED #shorts",
+    "generated_at": "2026-07-15T14:06:19Z"
+  },
+  {
+    "winner": {
+      "title": "Your Amazon Searches Just Got Fixed \ud83d\ude80",
+      "pattern": "personal",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Your Amazon Searches Just Got Fixed \ud83d\ude80",
+        "pattern": "personal",
+        "score": 8
+      },
+      {
+        "title": "Stop Believing Amazon Search Is Broken \ud83d\udecd\ufe0f",
+        "pattern": "contrarian",
+        "score": 8
+      },
+      {
+        "title": "1 Fix For Amazon Search \ud83d\udecd\ufe0f",
+        "pattern": "number",
+        "score": 8
+      }
+    ],
+    "topic": "Someone Built A Button To Fix Amazon Search",
+    "generated_at": "2026-07-15T14:12:36Z"
+  },
+  {
+    "winner": {
+      "title": "Stop Using 4090 GPU Now \u26a1",
+      "pattern": "urgency",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Stop Using 4090 GPU Now \u26a1",
+        "pattern": "urgency",
+        "score": 8
+      },
+      {
+        "title": "Warning: 4090 Overclock \ud83d\udea8",
+        "pattern": "warning",
+        "score": 8
+      },
+      {
+        "title": "Everyone's Wrong About 4090 Ease \ud83d\udca1",
+        "pattern": "contrarian",
+        "score": 8
+      }
+    ],
+    "topic": "This 4090 GPU is cake?!",
+    "generated_at": "2026-07-15T14:19:44Z"
+  },
+  {
+    "winner": {
+      "title": "Flock Sends Drones Now \u26a1\ufe0f",
+      "pattern": "urgency",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Flock Sends Drones Now \u26a1\ufe0f",
+        "pattern": "urgency",
+        "score": 8
+      },
+      {
+        "title": "Did You Know Flock Sends Drones? \ud83d\ude81",
+        "pattern": "curiosity",
+        "score": 8
+      },
+      {
+        "title": "5 Drone Alerts \ud83d\ude81",
+        "pattern": "number",
+        "score": 8
+      }
+    ],
+    "topic": "Flock camera will send a drone to your address",
+    "generated_at": "2026-07-16T20:36:34Z"
+  },
+  {
+    "winner": {
+      "title": "Will Flock Send Drones? \ud83d\ude81",
+      "pattern": "question",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Will Flock Send Drones? \ud83d\ude81",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "5 Ways Flock Cameras Deploy Drones \ud83d\ude81",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Act Now: Flock Drones \ud83d\ude81",
+        "pattern": "urgency",
+        "score": 8
+      }
+    ],
+    "topic": "Flock camera will send a drone to your address",
+    "generated_at": "2026-07-16T20:52:53Z"
+  },
+  {
+    "winner": {
+      "title": "Stop Believing PS5 Emu \ud83d\udca1",
+      "pattern": "contrarian",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Stop Believing PS5 Emu \ud83d\udca1",
+        "pattern": "contrarian",
+        "score": 8
+      },
+      {
+        "title": "Did You Know PS5 Emulators \ud83e\udd2f",
+        "pattern": "curiosity",
+        "score": 8
+      },
+      {
+        "title": "Will PS5 Emulators Work? \ud83e\udd14",
+        "pattern": "question",
+        "score": 8
+      }
+    ],
+    "topic": "PS5 EMULATORS IN DEVELOPMENT #shorts",
+    "generated_at": "2026-07-17T17:42:31Z"
+  },
+  {
+    "winner": {
+      "title": "Did Flips Break \ud83e\udd2f",
+      "pattern": "curiosity",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Did Flips Break \ud83e\udd2f",
+        "pattern": "curiosity",
+        "score": 8
+      },
+      {
+        "title": "Everyone's Wrong About Flip Phones \ud83d\udca1",
+        "pattern": "contrarian",
+        "score": 8
+      },
+      {
+        "title": "Your Flip Phone Is Breaking \ud83d\udcf1",
+        "pattern": "personal",
+        "score": 7
+      }
+    ],
+    "topic": "FLIPS & FOLDS SUCK!!! #smartphone #brokenfix #retrogaming #problemfix #screenbreak",
+    "generated_at": "2026-07-17T18:36:40Z"
+  },
+  {
+    "winner": {
+      "title": "Will Phones Evolve? \ud83d\udcf1",
+      "pattern": "question",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "Will Phones Evolve? \ud83d\udcf1",
+        "pattern": "question",
+        "score": 8
+      },
+      {
+        "title": "Stop Using Old Phones Now \ud83d\udcf1",
+        "pattern": "urgency",
+        "score": 8
+      },
+      {
+        "title": "They Don't Want You to Know: Phone Evolution \ud83d\udcf1",
+        "pattern": "revelation",
+        "score": 8
+      }
+    ],
+    "topic": "Phones In 2000 vs 2010 vs 2020 vs 2030.",
+    "generated_at": "2026-07-19T18:26:16Z"
+  },
+  {
+    "winner": {
+      "title": "5 Signal Issues \ud83d\udea8",
+      "pattern": "number",
+      "score": 8
+    },
+    "variations": [
+      {
+        "title": "5 Signal Issues \ud83d\udea8",
+        "pattern": "number",
+        "score": 8
+      },
+      {
+        "title": "Stop Blaming Noise \ud83d\ude80",
+        "pattern": "contrarian",
+        "score": 8
+      },
+      {
+        "title": "Can PLC Fix Signal Issues? \ud83d\udcbb",
+        "pattern": "question",
+        "score": 8
+      }
+    ],
+    "topic": "Signal Issues #electrical #industrialelectrician #plc",
+    "generated_at": "2026-07-19T18:52:50Z"
+  }
+]
