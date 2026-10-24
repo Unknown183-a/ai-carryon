@@ -17,3 +17,5 @@ google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
 psycopg2-binary
+pydantic>=2.5,<3
+PyYAML>=6.0

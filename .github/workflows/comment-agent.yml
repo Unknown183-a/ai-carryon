@@ -1,0 +1,159 @@
+name: Comment Agent
+
+# Manual control panel for the comment agent. Runs where your secrets already live, so nothing
+# has to be set up locally. Open Actions -> "Comment Agent" -> Run workflow, pick a channel and an action:
+#
+#   run                 fetch new comments and write draft replies (posts nothing)
+#   drafts              list drafts waiting for you (ids + reply text appear in the log and run summary)
+#   approve / reject    mark a draft by id
+#   edit                replace a draft's text (needs draft_id + text), it is re-checked by the rules
+#   publish             post ONE approved draft (needs draft_id) - channel publishing must be enabled
+#   enable-publishing / disable-publishing   per-channel owner switch (default: off)
+#   pause / resume      stop or restart all activity for the channel
+#   metrics             draft counts, edit rate, feedback
+#   test                try one comment text on the channel voice (nothing is saved or posted)
+#   validate-personas   check all seven persona files
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Channel"
+        required: true
+        type: choice
+        options: [cricket, english, hindi, bhakti, gaming, finance, horror]
+      action:
+        description: "What to do"
+        required: true
+        default: run
+        type: choice
+        options:
+          - run
+          - drafts
+          - approve
+          - reject
+          - edit
+          - publish
+          - enable-publishing
+          - disable-publishing
+          - pause
+          - resume
+          - metrics
+          - test
+          - validate-personas
+      draft_id:
+        description: "Draft id (approve / reject / edit / publish)"
+        required: false
+        default: ""
+      text:
+        description: "Reply text (edit) or comment text (test)"
+        required: false
+        default: ""
+      title:
+        description: "Video title (test only, gives the checker something to compare against)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comment-agent-${{ inputs.channel }}
+  cancel-in-progress: false
+
+jobs:
+  comment-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements_cricket.txt
+
+      # Cricket/Horror use the Cricket LLM wrapper, so install both sets.
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements_cricket.txt
+
+      - name: Run comment agent
+        env:
+          # A person clicked Run, so the master switch is on for this run only. Scheduled runs still
+          # need the repo variable COMMENT_AGENT_ENABLED=true. Publishing still needs the channel's
+          # own opt-in AND an approved draft.
+          COMMENT_AGENT_ENABLED: "true"
+          COMMENT_AGENT_DEFAULT_MODE: ${{ vars.COMMENT_AGENT_DEFAULT_MODE || 'draft' }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # LLM keys: the channel's own key if you set one, else the shared key (same as the schedulers).
+          GROQ_API_KEY: >-
+            ${{ (inputs.channel == 'cricket' && secrets.GROQ_API_KEY_CRICKET)
+            || (inputs.channel == 'english' && secrets.GROQ_API_KEY_ENGLISH)
+            || (inputs.channel == 'hindi' && secrets.GROQ_API_KEY_HINDI)
+            || (inputs.channel == 'bhakti' && secrets.GROQ_API_KEY_BHAKTI)
+            || (inputs.channel == 'gaming' && secrets.GROQ_API_KEY_GAMING)
+            || (inputs.channel == 'finance' && secrets.GROQ_API_KEY_FINANCE)
+            || (inputs.channel == 'horror' && secrets.GROQ_API_KEY_HORROR)
+            || secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: >-
+            ${{ (inputs.channel == 'cricket' && secrets.GEMINI_API_KEY_CRICKET)
+            || (inputs.channel == 'english' && secrets.GEMINI_API_KEY_ENGLISH)
+            || (inputs.channel == 'hindi' && secrets.GEMINI_API_KEY_HINDI)
+            || (inputs.channel == 'bhakti' && secrets.GEMINI_API_KEY_BHAKTI)
+            || (inputs.channel == 'gaming' && secrets.GEMINI_API_KEY_GAMING)
+            || (inputs.channel == 'finance' && secrets.GEMINI_API_KEY_FINANCE)
+            || (inputs.channel == 'horror' && secrets.GEMINI_API_KEY_HORROR)
+            || secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY_SHARED: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY_SHARED: ${{ secrets.GEMINI_API_KEY }}
+          # YouTube tokens: ONLY the selected channel's token is put in the environment.
+          YOUTUBE_TOKEN_B64: ${{ inputs.channel == 'english' && secrets.YOUTUBE_TOKEN_B64 || '' }}
+          YOUTUBE_TOKEN_JSON: ${{ inputs.channel == 'hindi' && secrets.YOUTUBE_TOKEN_JSON || '' }}
+          HINDI_TOKEN_JSON: ${{ inputs.channel == 'hindi' && secrets.HINDI_TOKEN_JSON || '' }}
+          BHAKTI_TOKEN_JSON: ${{ inputs.channel == 'bhakti' && secrets.BHAKTI_TOKEN_JSON || '' }}
+          CRICKET_YOUTUBE_TOKEN_B64: ${{ inputs.channel == 'cricket' && secrets.CRICKET_YOUTUBE_TOKEN_B64 || '' }}
+          YOUTUBE_GAMING_TOKEN_B64: ${{ inputs.channel == 'gaming' && secrets.YOUTUBE_GAMING_TOKEN_B64 || '' }}
+          YOUTUBE_FINANCE_TOKEN_B64: ${{ inputs.channel == 'finance' && secrets.YOUTUBE_FINANCE_TOKEN_B64 || '' }}
+          FINANCE_TOKEN_JSON: ${{ inputs.channel == 'finance' && secrets.FINANCE_TOKEN_JSON || '' }}
+          YOUTUBE_HORROR_TOKEN_B64: ${{ inputs.channel == 'horror' && secrets.YOUTUBE_HORROR_TOKEN_B64 || '' }}
+          # Free-text inputs go through env vars (never pasted into the shell script) to avoid injection.
+          CHANNEL: ${{ inputs.channel }}
+          ACTION: ${{ inputs.action }}
+          DRAFT_ID: ${{ inputs.draft_id }}
+          TEXT: ${{ inputs.text }}
+          TITLE: ${{ inputs.title }}
+        run: |
+          set -o pipefail
+          need() { [ -n "$2" ] || { echo "::error::Action '$ACTION' needs the '$1' input"; exit 2; }; }
+          case "$ACTION" in
+            run)                python -m comment_engine run --channel "$CHANNEL" ;;
+            drafts)             python -m comment_engine drafts --channel "$CHANNEL" ;;
+            approve)            need draft_id "$DRAFT_ID"; python -m comment_engine approve --channel "$CHANNEL" --draft "$DRAFT_ID" ;;
+            reject)             need draft_id "$DRAFT_ID"; python -m comment_engine reject --channel "$CHANNEL" --draft "$DRAFT_ID" --reason "$TEXT" ;;
+            edit)               need draft_id "$DRAFT_ID"; need text "$TEXT"; python -m comment_engine edit --channel "$CHANNEL" --draft "$DRAFT_ID" --text "$TEXT" ;;
+            publish)            need draft_id "$DRAFT_ID"; python -m comment_engine publish --channel "$CHANNEL" --draft "$DRAFT_ID" ;;
+            enable-publishing)  python -m comment_engine publishing --channel "$CHANNEL" --on on ;;
+            disable-publishing) python -m comment_engine publishing --channel "$CHANNEL" --on off ;;
+            pause)              python -m comment_engine pause --channel "$CHANNEL" ;;
+            resume)             python -m comment_engine resume --channel "$CHANNEL" ;;
+            metrics)            python -m comment_engine metrics --channel "$CHANNEL" ;;
+            test)               need text "$TEXT"; python -m comment_engine test --channel "$CHANNEL" --text "$TEXT" --title "$TITLE" ;;
+            validate-personas)  python -m comment_engine validate-personas ;;
+            *) echo "::error::Unknown action '$ACTION'"; exit 2 ;;
+          esac 2>&1 | tee agent_output.txt
+
+      - name: Show result in the run summary
+        if: always()
+        run: |
+          {
+            echo "### Comment agent: \`$ACTION\` on \`$CHANNEL\`"
+            echo '```'
+            cat agent_output.txt 2>/dev/null || echo "(no output)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          ACTION: ${{ inputs.action }}
