@@ -318,6 +318,10 @@ sync (official YouTube API) -> classify -> generate (persona + video context + e
   (once per IST day in the 19:00-23:59 window; `COMMENT_FORCE=true` ignores it). Cricket runs from `--comments` / `/trigger-comments`.
   Only channels in `COMMENT_AGENT_CHANNELS` (default `cricket`) run on a schedule - enable the rest one at a time.
 
+**No local setup needed:** open **Actions -> Comment Agent -> Run workflow**, pick a channel and an action (`run`, `drafts`,
+`approve`, `edit`, `reject`, `publish`, `enable-publishing`, `pause`, `metrics`, `test`). It runs with the repo's secrets, shows the
+result in the run summary, and only the chosen channel's YouTube token is loaded. The commands below are the same actions for local use.
+
 Owner workflow (repo variables set `COMMENT_AGENT_ENABLED=true`, `COMMENT_AGENT_CHANNELS=cricket`):
 
 ```
