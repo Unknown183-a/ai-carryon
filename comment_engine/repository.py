@@ -49,6 +49,10 @@ CREATE TABLE IF NOT EXISTS comment_agent_events (
 );
 CREATE INDEX IF NOT EXISTS ix_comment_agent_events_scope
     ON comment_agent_events(tenant_id, channel_id, created_at);
+CREATE TABLE IF NOT EXISTS comment_agent_activity (
+    tenant_id TEXT NOT NULL, channel_id TEXT NOT NULL, comment_id TEXT NOT NULL, published_at TEXT,
+    PRIMARY KEY (tenant_id, channel_id, comment_id)
+);
 CREATE TABLE IF NOT EXISTS comment_agent_videos (
     tenant_id TEXT NOT NULL, channel_id TEXT NOT NULL, video_id TEXT NOT NULL,
     title TEXT, description TEXT, transcript TEXT, fetched_at TEXT,
@@ -287,6 +291,50 @@ class Repository:
         with self.db._conn() as c:
             return [dict(r) for r in c.execute(q + " ORDER BY created_at DESC LIMIT ?", (*p, int(limit))).fetchall()]
 
+    # -- viewer activity (when this channel's viewers comment) ------------
+    def record_activity(self, tenant_id, channel_id, items):
+        """Remember when viewers commented (every viewer comment seen, replied-to or not). Idempotent."""
+        with self.db._conn() as c:
+            for it in items:
+                if it.get("published_at"):
+                    c.execute("""INSERT INTO comment_agent_activity (tenant_id, channel_id, comment_id, published_at)
+                        VALUES (?,?,?,?) ON CONFLICT(tenant_id, channel_id, comment_id) DO NOTHING""",
+                              (tenant_id, channel_id, it["comment_id"], it["published_at"]))
+
+    def activity_hour_counts(self, tenant_id, channel_id, days=60):
+        """24 counts of viewer comments by UTC hour over the last `days` days."""
+        cutoff = _ago(days * 24 * 60)[:19]
+        with self.db._conn() as c:
+            rows = c.execute("SELECT published_at FROM comment_agent_activity WHERE tenant_id=? AND channel_id=? "
+                             "AND published_at >= ?", (tenant_id, channel_id, cutoff)).fetchall()
+        counts = [0] * 24
+        for r in rows:
+            try:
+                counts[int(str(r["published_at"])[11:13])] += 1
+            except (ValueError, IndexError):
+                continue
+        return counts
+
+    # -- once-a-day bookkeeping ------------------------------------------
+    def _meta_key(self, kind, tenant_id, channel_id):
+        return f"comment_agent_{kind}:{tenant_id}:{channel_id}"
+
+    def last_run_day(self, tenant_id, channel_id):
+        return self.db.get_meta(self._meta_key("last_run", tenant_id, channel_id))
+
+    def mark_run_done(self, tenant_id, channel_id, day):
+        self.db.set_meta(self._meta_key("last_run", tenant_id, channel_id), day)
+
+    def attempts_today(self, tenant_id, channel_id, day):
+        raw = self.db.get_meta(self._meta_key("attempts", tenant_id, channel_id)) or ""
+        d, _, n = raw.partition(":")
+        return int(n) if d == day and n.isdigit() else 0
+
+    def bump_attempt(self, tenant_id, channel_id, day):
+        n = self.attempts_today(tenant_id, channel_id, day) + 1
+        self.db.set_meta(self._meta_key("attempts", tenant_id, channel_id), f"{day}:{n}")
+        return n
+
     def event_exists(self, tenant_id, channel_id, comment_id, event_type):
         with self.db._conn() as c:
             r = c.execute("SELECT 1 AS x FROM comment_agent_events WHERE tenant_id=? AND channel_id=? AND "
@@ -329,6 +377,8 @@ class Repository:
                       "AND status IN ('published','skipped','blocked')", (tenant_id, channel_id, cutoff))
             c.execute("DELETE FROM comment_agent_events WHERE tenant_id=? AND channel_id=? AND created_at < ?",
                       (tenant_id, channel_id, cutoff))
+            c.execute("DELETE FROM comment_agent_activity WHERE tenant_id=? AND channel_id=? AND published_at < ?",
+                      (tenant_id, channel_id, cutoff[:19]))
 
 
 def _decode(d):

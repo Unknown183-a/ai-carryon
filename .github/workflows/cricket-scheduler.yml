@@ -7,10 +7,8 @@ on:
     # Matches are event-driven, so this is intentionally more frequent than
     # a fixed peak-hour approach.
     - cron: "0 * * * *"
-    # Separate, once-a-day run for comment replies, near 7PM IST. UTC 14:00
-    # is the nearest hourly-cron slot to 19:00 IST (= 19:30 IST exactly,
-    # since IST is UTC+5:30 and cron only fires on the UTC hour).
-    - cron: "0 14 * * *"
+    # Comment replies are NOT scheduled here: the "Comment Agent (auto)" workflow runs the daily
+    # comment cycle at this channel's own peak-viewer hour.
   workflow_dispatch:
     inputs:
       mode:
@@ -46,8 +44,6 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "flag=${{ github.event.inputs.mode == 'comments' && '--comments' || '' }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "0 14 * * *" ]; then
-            echo "flag=--comments" >> "$GITHUB_OUTPUT"
           else
             echo "flag=" >> "$GITHUB_OUTPUT"
           fi
@@ -73,9 +69,6 @@ jobs:
           CRICKET_EDGE_VOICE: ${{ vars.CRICKET_EDGE_VOICE }}
           CRICKET_EDGE_RATE: ${{ vars.CRICKET_EDGE_RATE }}
           CRICKET_EDGE_PITCH: ${{ vars.CRICKET_EDGE_PITCH }}
-          COMMENT_AGENT_ENABLED: ${{ vars.COMMENT_AGENT_ENABLED || 'false' }}
-          COMMENT_AGENT_CHANNELS: ${{ vars.COMMENT_AGENT_CHANNELS || 'cricket' }}
-          COMMENT_AGENT_DEFAULT_MODE: ${{ vars.COMMENT_AGENT_DEFAULT_MODE || 'draft' }}
         run: python scheduler_cricket.py ${{ steps.pick.outputs.flag }}
 
       - name: Upload run log (for debugging)

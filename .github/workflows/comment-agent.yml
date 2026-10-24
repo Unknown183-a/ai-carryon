@@ -12,6 +12,8 @@ name: Comment Agent
 #   pause / resume      stop or restart all activity for the channel
 #   metrics             draft counts, edit rate, feedback
 #   test                try one comment text on the channel voice (nothing is saved or posted)
+#   peak                show this channel's detected peak-viewer hour and whether it is due now
+#   auto-run            what the hourly "Comment Agent (auto)" workflow calls once a channel's peak hour arrives
 #   validate-personas   check all seven persona files
 
 on:
@@ -39,7 +41,9 @@ on:
           - pause
           - resume
           - metrics
+          - peak
           - test
+          - auto-run
           - validate-personas
       draft_id:
         description: "Draft id (approve / reject / edit / publish)"
@@ -52,6 +56,26 @@ on:
       title:
         description: "Video title (test only, gives the checker something to compare against)"
         required: false
+        default: ""
+  workflow_call:          # used by "Comment Agent (auto)"
+    inputs:
+      channel:
+        required: true
+        type: string
+      action:
+        required: true
+        type: string
+      draft_id:
+        required: false
+        type: string
+        default: ""
+      text:
+        required: false
+        type: string
+        default: ""
+      title:
+        required: false
+        type: string
         default: ""
 
 permissions:
@@ -140,6 +164,8 @@ jobs:
             pause)              python -m comment_engine pause --channel "$CHANNEL" ;;
             resume)             python -m comment_engine resume --channel "$CHANNEL" ;;
             metrics)            python -m comment_engine metrics --channel "$CHANNEL" ;;
+            peak)               python -m comment_engine peak --channel "$CHANNEL" ;;
+            auto-run)           python -m comment_engine auto-run --channel "$CHANNEL" ;;
             test)               need text "$TEXT"; python -m comment_engine test --channel "$CHANNEL" --text "$TEXT" --title "$TITLE" ;;
             validate-personas)  python -m comment_engine validate-personas ;;
             *) echo "::error::Unknown action '$ACTION'"; exit 2 ;;

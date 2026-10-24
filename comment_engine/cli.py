@@ -50,6 +50,25 @@ def cmd_test(a):
     print("validate:", res.model_dump_json())
 
 
+def cmd_plan(a):
+    """Which channels are due for their once-a-day cycle right now? Last stdout line is a JSON list."""
+    from .peak_hours import is_due
+    from .repository import Repository
+    s = load_settings()
+    due = []
+    if s.enabled:
+        repo = Repository()
+        for ch in s.channels:
+            ok, why, peak = is_due(repo, s, ch)
+            print(f"{ch:<8} {'DUE    ' if ok else 'not due'} {why}" + (f" | {peak.describe()}" if peak else ""))
+            if ok:
+                due.append(ch)
+    else:
+        print("comment agent disabled (set repo variable COMMENT_AGENT_ENABLED=true)")
+    print(json.dumps(due))
+    return 0
+
+
 def persona_examples(persona, text):
     return [{"comment": e.comment, "reply": e.reply} for e in persona.examples][:4]
 
@@ -58,7 +77,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="comment_engine")
     p.add_argument("command", choices=["run", "sync", "drafts", "approve", "reject", "edit", "publish", "feedback",
                                        "publishing", "pause", "resume", "persona", "metrics", "events", "test",
-                                       "validate-personas", "purge"])
+                                       "validate-personas", "purge", "peak", "plan", "auto-run"])
     p.add_argument("--channel", choices=PIPELINES)
     p.add_argument("--tenant", default="")
     p.add_argument("--draft")
@@ -76,6 +95,8 @@ def main(argv=None):
         for ch, per in PersonaRegistry().validate_all().items():
             print(f"{ch:<8} -> {per.persona_id} (v{per.version}, {per.language})")
         return 0
+    if a.command == "plan":
+        return cmd_plan(a)
     if not a.channel:
         p.error("--channel is required")
     if a.command == "test":
@@ -87,6 +108,13 @@ def main(argv=None):
     try:
         if a.command == "run":
             print(json.dumps(svc.run(), indent=2, default=str))
+        elif a.command == "peak":
+            due, why, peak = svc.due()
+            print(peak.describe())
+            print("hourly viewer comments (UTC 00-23):", svc.repo.activity_hour_counts(svc.tenant_id, svc.channel_id))
+            print(f"due now: {due} ({why})")
+        elif a.command == "auto-run":
+            print(json.dumps(svc.run_cycle(), indent=2, default=str))
         elif a.command == "sync":
             print("new comments:", svc.sync())
         elif a.command == "drafts":

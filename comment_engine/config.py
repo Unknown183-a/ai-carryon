@@ -25,6 +25,7 @@ PROMPT_VERSIONS = {
 MAX_ATTEMPTS = 3                 # retryable failures per comment before dead-letter (blocked)
 CLASSIFIER_MIN_CONFIDENCE = 0.35  # one weak signal only; the model's confidence is not calibrated
 STALE_PROCESSING_MINUTES = 30
+MAX_RUN_ATTEMPTS_PER_DAY = 3        # failed/aborted daily cycles retried at most this many times
 STALE_PUBLISHING_MINUTES = 10
 
 
@@ -68,8 +69,6 @@ class Settings:
     require_approval: bool = True
     semantic_check: bool = True
     tenant_id: str = "default"
-    window_start_hour_ist: int = 19
-    window_end_hour_ist: int = 23
     run_budget_seconds: int = 900
     publish_delay_seconds: float = 2.0
     max_reply_chars: int = 500
@@ -94,8 +93,6 @@ def load_settings(env=None) -> Settings:
         require_approval=_bool(e, "COMMENT_AGENT_REQUIRE_APPROVAL", True),
         semantic_check=_bool(e, "COMMENT_AGENT_SEMANTIC_CHECK", True),
         tenant_id=(e.get("COMMENT_AGENT_TENANT_ID") or "default").strip() or "default",
-        window_start_hour_ist=_int(e, "COMMENT_WINDOW_START_HOUR_IST", 19, 0),
-        window_end_hour_ist=_int(e, "COMMENT_WINDOW_END_HOUR_IST", 23, 0),
         run_budget_seconds=_int(e, "COMMENT_RUN_BUDGET_SECONDS", 900, 1),
         publish_delay_seconds=float(e.get("COMMENT_PUBLISH_DELAY_SECONDS") or 2),
         max_reply_chars=_int(e, "COMMENT_AGENT_MAX_REPLY_CHARS", 500, 20),
