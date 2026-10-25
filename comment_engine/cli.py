@@ -76,7 +76,7 @@ def persona_examples(persona, text):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="comment_engine")
     p.add_argument("command", choices=["run", "sync", "drafts", "approve", "reject", "edit", "publish", "feedback",
-                                       "publishing", "pause", "resume", "persona", "metrics", "events", "test",
+                                       "publishing", "auto-reply", "pause", "resume", "persona", "metrics", "events", "test",
                                        "validate-personas", "purge", "peak", "plan", "auto-run"])
     p.add_argument("--channel", choices=PIPELINES)
     p.add_argument("--tenant", default="")
@@ -133,6 +133,8 @@ def main(argv=None):
             svc.feedback(a.draft, a.label, actor="cli"); print("recorded")
         elif a.command == "publishing":
             svc.set_publishing(a.on == "on", actor="cli"); print("publishing", a.on)
+        elif a.command == "auto-reply":
+            svc.set_auto_reply(a.on == "on", actor="cli"); print("auto-reply", a.on)
         elif a.command in ("pause", "resume"):
             svc.set_paused(a.command == "pause", actor="cli"); print(a.command + "d")
         elif a.command == "persona":
@@ -145,6 +147,8 @@ def main(argv=None):
             per = svc.personas.load(svc.tenant_id, svc.channel_id)
             print(per.persona_id, "version", per.version, "| voice:", per.voice.model_dump_json())
         elif a.command == "metrics":
+            st = svc.repo.get_settings(svc.tenant_id, svc.channel_id)
+            print("settings:", {k: st[k] for k in ("publishing_enabled", "auto_publish", "paused")})
             print(json.dumps(svc.repo.metrics(svc.tenant_id, svc.channel_id), indent=2))
         elif a.command == "events":
             for e in svc.repo.list_events(svc.tenant_id, svc.channel_id, draft_id=a.draft)[:30]:

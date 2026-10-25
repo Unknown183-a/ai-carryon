@@ -9,6 +9,8 @@ name: Comment Agent
 #   edit                replace a draft's text (needs draft_id + text), it is re-checked by the rules
 #   publish             post ONE approved draft (needs draft_id) - channel publishing must be enabled
 #   enable-publishing / disable-publishing   per-channel owner switch (default: off)
+#   enable-auto-reply / disable-auto-reply   post replies that passed every check WITHOUT waiting for approval
+#                       (flagged drafts still wait for you; also turns publishing on). Default: off
 #   pause / resume      stop or restart all activity for the channel
 #   metrics             draft counts, edit rate, feedback
 #   test                try one comment text on the channel voice (nothing is saved or posted)
@@ -38,6 +40,8 @@ on:
           - publish
           - enable-publishing
           - disable-publishing
+          - enable-auto-reply
+          - disable-auto-reply
           - pause
           - resume
           - metrics
@@ -161,6 +165,8 @@ jobs:
             publish)            need draft_id "$DRAFT_ID"; python -m comment_engine publish --channel "$CHANNEL" --draft "$DRAFT_ID" ;;
             enable-publishing)  python -m comment_engine publishing --channel "$CHANNEL" --on on ;;
             disable-publishing) python -m comment_engine publishing --channel "$CHANNEL" --on off ;;
+            enable-auto-reply)  python -m comment_engine auto-reply --channel "$CHANNEL" --on on ;;
+            disable-auto-reply) python -m comment_engine auto-reply --channel "$CHANNEL" --on off ;;
             pause)              python -m comment_engine pause --channel "$CHANNEL" ;;
             resume)             python -m comment_engine resume --channel "$CHANNEL" ;;
             metrics)            python -m comment_engine metrics --channel "$CHANNEL" ;;

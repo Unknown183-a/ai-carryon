@@ -320,7 +320,8 @@ script -> story analysis + hook intent -> 3-5 queries -> Pexels (10-20 candidate
 
 One shared engine (`comment_engine/`) serves all seven channels (cricket, gaming, finance, horror, english, hindi,
 bhakti). Each channel has a validated persona in `comment_personas/<persona>.yaml`; the engine is built to
-**draft first, publish only after the owner approves**.
+**draft first**: by default nothing is posted until the owner approves it, and the owner can switch a channel to
+auto-reply (below).
 
 ```
 sync (official YouTube API) -> classify -> generate (persona + video context + examples)
@@ -328,7 +329,7 @@ sync (official YouTube API) -> classify -> generate (persona + video context + e
 ```
 
 - **Safe by default.** `COMMENT_AGENT_ENABLED` is off, mode is `draft`, and a channel can only publish if its owner turned
-  publishing on *and* approved that specific draft. Publishing re-validates, re-checks the thread, and reconciles with
+  publishing on *and* either approved that specific draft or switched the channel to auto-reply. Publishing re-validates, re-checks the thread, and reconciles with
   YouTube after a timeout so a reply is never posted twice. Kill switches: `COMMENT_AGENT_ENABLED=false`, per-channel `pause`.
 - **Untrusted input.** Comments/descriptions are data, never instructions; spam, links, threats, personal data and prompt
   injection are screened before any LLM call. Validator rules per domain: no guaranteed returns or personal investment advice
@@ -337,6 +338,12 @@ sync (official YouTube API) -> classify -> generate (persona + video context + e
   `topic_requests` with the commenter's `author_channel_id` (cricket: `cricket_match_requests`), exactly once per comment, even when
   the reply is skipped or held for review. The Brain's demand signal reads these rows.
 - **Isolation.** Every table and query is scoped by `(tenant_id, channel_id)`; each channel uses its own token.
+- **Auto-reply (per-channel owner switch, off by default).** Actions -> Comment Agent -> `enable-auto-reply` (and
+  `disable-auto-reply`). With it on, each daily cycle approves *by policy* and posts only drafts that passed every check
+  (the approval is recorded as `auto-policy` in the audit trail). Drafts that need review (sensitive topics, personal
+  finance advice, threats, devotional crises, failed checks) are never auto-posted and wait for you. Also: only comments from the last
+  7 days (`COMMENT_AGENT_AUTO_MAX_AGE_DAYS`), at most the persona's `max_replies_per_run` (20) per cycle, ~15 s between
+  replies (`COMMENT_PUBLISH_DELAY_SECONDS`), and the kill switch / channel `pause` stop it at once.
 - **Persona edits without code:** `python -m comment_engine persona --channel cricket --set voice.emoji_level=low`
   (allowed: language, humor/assertiveness/emoji/slang level, max sentences, publishing mode).
 - **Runs once a day, at each channel's peak-viewer hour (no fixed clock time).** The hourly workflow *Comment Agent (auto)*

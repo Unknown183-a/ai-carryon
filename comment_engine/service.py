@@ -7,7 +7,7 @@ Safety model
 - Timeouts/5xx on insert are AMBIGUOUS: we reconcile against YouTube before any retry.
 """
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .classifier import Classifier
 from .config import PIPELINES, STALE_PUBLISHING_MINUTES, Settings, load_settings
@@ -170,7 +170,10 @@ class CommentAgentService:
             stats["aborted"] = f"{e.kind}:{e.reason}"
             self.repo.record_event(self.tenant_id, self.channel_id, "run_aborted", detail=stats)
             return stats
-        if publish_approved and self.settings.default_mode == "publish_approved":
+        auto = self.repo.get_settings(self.tenant_id, self.channel_id)["auto_publish"]
+        if auto:
+            stats["auto_approved"] = self.auto_approve_eligible()
+        if publish_approved and (auto or self.settings.default_mode == "publish_approved"):
             stats["published"] = self.publish_approved()
         self.log(f"[comment-agent:{self.channel_id}] {stats}")
         return stats
@@ -246,6 +249,45 @@ class CommentAgentService:
         self.repo.update_settings(self.tenant_id, self.channel_id, publishing_enabled=bool(enabled))
         self.repo.record_event(self.tenant_id, self.channel_id, "publishing_enabled" if enabled else
                                "publishing_disabled", actor=actor)
+
+    def set_auto_reply(self, enabled, actor="owner"):
+        """Owner opt-in: replies that pass every check are approved by policy and posted without waiting."""
+        if enabled:
+            self.repo.update_settings(self.tenant_id, self.channel_id, publishing_enabled=True)
+        self.repo.set_auto_publish(self.tenant_id, self.channel_id, bool(enabled))
+        self.repo.record_event(self.tenant_id, self.channel_id, "auto_reply_enabled" if enabled
+                               else "auto_reply_disabled", actor=actor)
+
+    def auto_approve_eligible(self):
+        """Approve (as 'auto-policy') drafts that already passed every check. Never touches drafts that
+        need review, comments older than the age limit, or more than the per-run cap."""
+        st = self._check_active(for_publish=True)
+        if not (st["auto_publish"] and st["publishing_enabled"]):
+            return 0
+        persona = self.personas.load(self.tenant_id, self.channel_id)
+        if persona.publishing.mode == "draft_only":
+            return 0
+        cap = persona.publishing.max_replies_per_run
+        oldest = datetime.now(timezone.utc) - timedelta(days=self.settings.auto_max_age_days)
+        approved = 0
+        for d in self.repo.list_drafts(self.tenant_id, self.channel_id, ("pending_approval",), cap * 5):
+            if approved >= cap:
+                break
+            comment = self.repo.get_comment(self.tenant_id, self.channel_id, d["comment_id"])
+            try:
+                posted = datetime.fromisoformat((comment.published_at or "").replace("Z", "+00:00"))
+            except ValueError:
+                continue                                  # unknown age: leave it for the owner
+            if posted.tzinfo is None:
+                posted = posted.replace(tzinfo=timezone.utc)
+            if posted < oldest:
+                continue                                  # too old to answer on its own
+            try:
+                self.approve(d["draft_id"], actor="auto-policy")
+                approved += 1
+            except AgentError:
+                continue
+        return approved
 
     def set_paused(self, paused, actor="owner"):
         self.repo.update_settings(self.tenant_id, self.channel_id, paused=bool(paused))

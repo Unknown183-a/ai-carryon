@@ -90,20 +90,28 @@ class Repository:
         with self.db._conn() as c:
             r = c.execute("SELECT * FROM comment_agent_settings WHERE tenant_id=? AND channel_id=?",
                           (tenant_id, channel_id)).fetchone()
+        auto = self.get_auto_publish(tenant_id, channel_id)
         if not r:
             return {"persona_overrides": {}, "override_rev": 0, "faqs": [], "publishing_enabled": False,
-                    "paused": False, "last_sync_at": None}
+                    "paused": False, "last_sync_at": None, "auto_publish": auto}
         d = dict(r)
         return {"persona_overrides": json.loads(d["persona_overrides"] or "{}"),
                 "override_rev": d["override_rev"] or 0, "faqs": json.loads(d["faqs"] or "[]"),
                 "publishing_enabled": bool(d["publishing_enabled"]), "paused": bool(d["paused"]),
-                "last_sync_at": d["last_sync_at"]}
+                "last_sync_at": d["last_sync_at"], "auto_publish": auto}
+
+    def get_auto_publish(self, tenant_id, channel_id):
+        return self.db.get_meta(self._meta_key("auto_publish", tenant_id, channel_id)) == "1"
+
+    def set_auto_publish(self, tenant_id, channel_id, enabled):
+        self.db.set_meta(self._meta_key("auto_publish", tenant_id, channel_id), "1" if enabled else "0")
 
     def update_settings(self, tenant_id, channel_id, **changes):
         cur = self.get_settings(tenant_id, channel_id)
         if "persona_overrides" in changes:
             cur["override_rev"] += 1
         cur.update(changes)
+        cur.pop("auto_publish", None)
         with self.db._conn() as c:
             c.execute("""INSERT INTO comment_agent_settings
                 (tenant_id, channel_id, persona_overrides, override_rev, faqs, publishing_enabled, paused, last_sync_at, updated_at)
@@ -115,6 +123,7 @@ class Repository:
                       (tenant_id, channel_id, json.dumps(cur["persona_overrides"]), cur["override_rev"],
                        json.dumps(cur["faqs"]), int(cur["publishing_enabled"]), int(cur["paused"]),
                        cur["last_sync_at"], now()))
+        cur["auto_publish"] = self.get_auto_publish(tenant_id, channel_id)
         return cur
 
     # -- comments --------------------------------------------------------
