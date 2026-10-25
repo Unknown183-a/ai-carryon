@@ -224,6 +224,40 @@ class Database:
                     ON snapshots(timestamp);
                 CREATE INDEX IF NOT EXISTS idx_posted_topics_channel
                     ON posted_topics(channel, posted_at);
+
+                -- Brain decision log: one row per candidate per ranking, so what was OFFERED (not only what
+                -- was published) survives the throwaway CI engine. brain_scores is a JSON object keyed by brain_id.
+                CREATE TABLE IF NOT EXISTS topic_decisions (
+                    {id_col},
+                    run_id          TEXT NOT NULL,
+                    channel         TEXT NOT NULL,
+                    decided_at      TEXT NOT NULL,
+                    topic           TEXT NOT NULL,
+                    features        TEXT,
+                    brain_scores    TEXT,
+                    aggregate_score REAL,
+                    rank            INTEGER,
+                    source          TEXT,
+                    execution_id    TEXT,
+                    policy_version  TEXT,
+                    selected        INTEGER DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_topic_decisions_run
+                    ON topic_decisions(run_id);
+                CREATE INDEX IF NOT EXISTS idx_topic_decisions_channel
+                    ON topic_decisions(channel, decided_at);
+
+                -- Embedding cache, keyed like the spec says: text hash + model id/revision + preprocessing version.
+                CREATE TABLE IF NOT EXISTS text_embeddings (
+                    text_hash             TEXT NOT NULL,
+                    model_id              TEXT NOT NULL,
+                    revision              TEXT NOT NULL,
+                    preprocessing_version TEXT NOT NULL,
+                    dim                   INTEGER NOT NULL,
+                    vector                TEXT NOT NULL,
+                    created_at            TEXT NOT NULL,
+                    PRIMARY KEY (text_hash, model_id, revision, preprocessing_version)
+                );
             """)
         self._migrate_ab_title_tests_columns()
         self._migrate_topic_requests_columns()
@@ -739,6 +773,109 @@ class Database:
         except Exception as e:
             print(f"close_ab_test error: {e}")
 
+
+    # ── Brain decision log ────────────────────────────────────────────────
+
+    def log_topic_decision(self, run_id, channel, rows, decided_at=None):
+        """Store one ranking: `rows` is a list of dicts with topic, features (dict), brain_scores (dict),
+        aggregate_score, rank, source, execution_id, policy_version. Nothing is selected yet."""
+        if decided_at is None:
+            decided_at = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            for r in rows:
+                conn.execute("""
+                    INSERT INTO topic_decisions
+                    (run_id, channel, decided_at, topic, features, brain_scores, aggregate_score, rank,
+                     source, execution_id, policy_version, selected)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                """, (run_id, channel, decided_at, r["topic"], json.dumps(r.get("features") or {}),
+                      json.dumps(r.get("brain_scores") or {}), r.get("aggregate_score"), r.get("rank"),
+                      r.get("source"), r.get("execution_id"), r.get("policy_version")))
+
+    def mark_topic_selected(self, run_id, topic):
+        """Flag the candidate the pipeline actually used. Returns True if a row was found."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM topic_decisions WHERE run_id = ? AND topic = ? ORDER BY id DESC LIMIT 1",
+                (run_id, topic)).fetchone()
+            if not row:
+                return False
+            conn.execute("UPDATE topic_decisions SET selected = 1 WHERE id = ?", (row["id"],))
+            return True
+
+    def get_topic_decisions(self, channel=None, limit=5000):
+        with self._conn() as conn:
+            if channel:
+                rows = conn.execute(
+                    "SELECT * FROM topic_decisions WHERE channel = ? ORDER BY id DESC LIMIT ?",
+                    (channel, limit)).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM topic_decisions ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+            out = []
+            for r in rows:
+                d = dict(r)
+                d["features"] = json.loads(d.get("features") or "{}")
+                d["brain_scores"] = json.loads(d.get("brain_scores") or "{}")
+                out.append(d)
+            return out
+
+    # ── Embedding cache ───────────────────────────────────────────────────
+
+    _IN_CHUNK = 200   # stay far below SQLite's bound-parameter limit
+
+    def get_cached_embeddings(self, text_hashes, model_id, revision, preprocessing_version):
+        """{text_hash: vector} for the hashes already cached under exactly this model/revision/preprocessing."""
+        hashes = list(dict.fromkeys(text_hashes))
+        out = {}
+        with self._conn() as conn:
+            for i in range(0, len(hashes), self._IN_CHUNK):
+                chunk = hashes[i:i + self._IN_CHUNK]
+                marks = ",".join("?" * len(chunk))
+                rows = conn.execute(f"""
+                    SELECT text_hash, vector FROM text_embeddings
+                    WHERE model_id = ? AND revision = ? AND preprocessing_version = ?
+                      AND text_hash IN ({marks})
+                """, (model_id, revision, preprocessing_version, *chunk)).fetchall()
+                for r in rows:
+                    out[r["text_hash"]] = json.loads(r["vector"])
+        return out
+
+    def save_embeddings(self, items, model_id, revision, preprocessing_version):
+        """items: [(text_hash, vector)]. Existing rows are left alone (same key => same vector)."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            for text_hash, vec in items:
+                conn.execute("""
+                    INSERT INTO text_embeddings
+                    (text_hash, model_id, revision, preprocessing_version, dim, vector, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(text_hash, model_id, revision, preprocessing_version) DO NOTHING
+                """, (text_hash, model_id, revision, preprocessing_version, len(vec),
+                      json.dumps([round(float(x), 6) for x in vec]), now))
+
+    # ── History for semantic features ─────────────────────────────────────
+
+    def get_semantic_history_rows(self, channel):
+        """Raw rows the semantic feature builder turns into (topic text, published, views at 24h):
+        this channel's videos, the topic behind each video (from a linked A/B test when there is one),
+        any closed 24h view count, every snapshot, and the topics posted. No interpretation here."""
+        with self._conn() as conn:
+            videos = [dict(r) for r in conn.execute(
+                "SELECT video_id, title, published FROM videos WHERE channel = ?", (channel,)).fetchall()]
+            ab = [dict(r) for r in conn.execute("""
+                SELECT video_id, topic, actual_views_24h FROM ab_title_tests
+                WHERE channel = ? AND video_id IS NOT NULL
+                ORDER BY generated_at ASC
+            """, (channel,)).fetchall()]
+            snaps = [dict(r) for r in conn.execute("""
+                SELECT s.video_id, s.views, s.timestamp FROM snapshots s
+                JOIN videos v ON v.video_id = s.video_id
+                WHERE v.channel = ?
+            """, (channel,)).fetchall()]
+            posted = [dict(r) for r in conn.execute(
+                "SELECT topic, posted_at FROM posted_topics WHERE channel = ?", (channel,)).fetchall()]
+        return {"videos": videos, "ab_tests": ab, "snapshots": snaps, "posted": posted}
 
     # ── Comment replies (English / Hindi; partitioned by channel) ────────
     # Replaces output/comment_history*.json and output/topic_requests*.json,

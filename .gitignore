@@ -52,3 +52,6 @@ output/
 assets/horror_clips/
 *_token_b64.txt
 client_secret*.json
+
+# Cached model weights
+.cache/

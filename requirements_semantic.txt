@@ -1,0 +1,4 @@
+# Optional: frozen text encoder for the Brain semantic features (see agents/text_encoder.py).
+# Not part of requirements.txt on purpose: the schedulers do not need torch unless BRAIN_SEMANTIC_ENABLED is on.
+numpy
+sentence-transformers
