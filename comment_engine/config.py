@@ -66,11 +66,11 @@ class Settings:
     max_comments_per_run: int = 20
     max_regeneration_attempts: int = 1
     duplicate_window: int = 100
-    require_approval: bool = True
+    auto_max_age_days: int = 7            # auto-reply only to comments newer than this
     semantic_check: bool = True
     tenant_id: str = "default"
     run_budget_seconds: int = 900
-    publish_delay_seconds: float = 2.0
+    publish_delay_seconds: float = 15.0   # pause between posted replies
     max_reply_chars: int = 500
 
 
@@ -90,10 +90,10 @@ def load_settings(env=None) -> Settings:
         max_comments_per_run=_int(e, "COMMENT_AGENT_MAX_COMMENTS_PER_RUN", 20, 1),
         max_regeneration_attempts=_int(e, "COMMENT_AGENT_MAX_REGENERATION_ATTEMPTS", 1, 0),
         duplicate_window=_int(e, "COMMENT_AGENT_DUPLICATE_WINDOW", 100, 1),
-        require_approval=_bool(e, "COMMENT_AGENT_REQUIRE_APPROVAL", True),
+        auto_max_age_days=_int(e, "COMMENT_AGENT_AUTO_MAX_AGE_DAYS", 7, 1),
         semantic_check=_bool(e, "COMMENT_AGENT_SEMANTIC_CHECK", True),
         tenant_id=(e.get("COMMENT_AGENT_TENANT_ID") or "default").strip() or "default",
         run_budget_seconds=_int(e, "COMMENT_RUN_BUDGET_SECONDS", 900, 1),
-        publish_delay_seconds=float(e.get("COMMENT_PUBLISH_DELAY_SECONDS") or 2),
+        publish_delay_seconds=float(e.get("COMMENT_PUBLISH_DELAY_SECONDS") or 15),
         max_reply_chars=_int(e, "COMMENT_AGENT_MAX_REPLY_CHARS", 500, 20),
     )

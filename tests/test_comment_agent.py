@@ -55,7 +55,7 @@ class ConfigTests(unittest.TestCase):
     def test_defaults_are_safe(self):
         s = load_settings({})
         self.assertFalse(s.enabled)
-        self.assertTrue(s.require_approval)
+        self.assertEqual(s.auto_max_age_days, 7)
         self.assertEqual(s.default_mode, "draft")
 
     def test_bad_values_fail_closed(self):
