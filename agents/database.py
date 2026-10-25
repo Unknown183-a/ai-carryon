@@ -247,6 +247,22 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_topic_decisions_channel
                     ON topic_decisions(channel, decided_at);
 
+                -- One row per evaluation run per channel (tools/eval_semantic.py --save); the dashboard reads this.
+                CREATE TABLE IF NOT EXISTS semantic_eval_reports (
+                    {id_col},
+                    channel               TEXT NOT NULL,
+                    evaluated_at          TEXT NOT NULL,
+                    outcome_version       TEXT,
+                    model_id              TEXT,
+                    revision              TEXT,
+                    videos_with_outcome   INTEGER,
+                    videos_with_neighbours INTEGER,
+                    gate_passed           INTEGER DEFAULT 0,
+                    report                TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_semantic_eval_channel
+                    ON semantic_eval_reports(channel, evaluated_at);
+
                 -- Embedding cache, keyed like the spec says: text hash + model id/revision + preprocessing version.
                 CREATE TABLE IF NOT EXISTS text_embeddings (
                     text_hash             TEXT NOT NULL,
@@ -817,6 +833,41 @@ class Database:
                 d = dict(r)
                 d["features"] = json.loads(d.get("features") or "{}")
                 d["brain_scores"] = json.loads(d.get("brain_scores") or "{}")
+                out.append(d)
+            return out
+
+    # ── Semantic evaluation reports ───────────────────────────────────────
+
+    def save_semantic_eval(self, channel, report, evaluated_at=None):
+        """Store one evaluation report (the dict tools/eval_semantic.evaluate returns, optionally with model_id /
+        revision added by the caller). The full report is kept as JSON; a few columns are copied out for listing."""
+        if evaluated_at is None:
+            evaluated_at = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO semantic_eval_reports
+                (channel, evaluated_at, outcome_version, model_id, revision, videos_with_outcome,
+                 videos_with_neighbours, gate_passed, report)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (channel, evaluated_at, report.get("outcome"), report.get("model_id"), report.get("revision"),
+                  report.get("videos_with_outcome"), report.get("videos_with_neighbours"),
+                  1 if report.get("gate_passed") else 0, json.dumps(report)))
+
+    def get_semantic_eval_reports(self, channel=None, limit=500):
+        """Newest first. Each row is the stored report dict plus `channel` and `evaluated_at`."""
+        with self._conn() as conn:
+            if channel:
+                rows = conn.execute(
+                    "SELECT * FROM semantic_eval_reports WHERE channel = ? ORDER BY evaluated_at DESC, id DESC LIMIT ?",
+                    (channel, limit)).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM semantic_eval_reports ORDER BY evaluated_at DESC, id DESC LIMIT ?",
+                    (limit,)).fetchall()
+            out = []
+            for r in rows:
+                d = json.loads(r["report"] or "{}")
+                d["channel"], d["evaluated_at"] = r["channel"], r["evaluated_at"]
                 out.append(d)
             return out
 
