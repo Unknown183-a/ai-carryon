@@ -1,0 +1,42 @@
+name: Semantic Brain evaluation
+
+# Weekly, read-only check of whether the semantic neighbour signal predicts real 24h outcomes
+# (tools/eval_semantic.py). It reports; it never changes what the Brain does. Needs the repository
+# VARIABLES BRAIN_TEXT_MODEL_NAME and BRAIN_TEXT_MODEL_REVISION (an immutable commit hash of the model).
+on:
+  schedule:
+    - cron: "30 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    if: ${{ vars.BRAIN_TEXT_MODEL_NAME != '' && vars.BRAIN_TEXT_MODEL_REVISION != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [english, hindi, cricket, finance, gaming, horror, bhakti]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Cache model weights
+        uses: actions/cache@v4
+        with:
+          path: .cache/transformers
+          key: text-model-${{ vars.BRAIN_TEXT_MODEL_NAME }}-${{ vars.BRAIN_TEXT_MODEL_REVISION }}
+      - name: Install dependencies
+        run: pip install psycopg2-binary -r requirements_semantic.txt
+      - name: Evaluate ${{ matrix.channel }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRAIN_TEXT_MODEL_NAME: ${{ vars.BRAIN_TEXT_MODEL_NAME }}
+          BRAIN_TEXT_MODEL_REVISION: ${{ vars.BRAIN_TEXT_MODEL_REVISION }}
+          BRAIN_TEXT_CACHE_DIR: .cache/transformers
+        run: python -m tools.eval_semantic --channel ${{ matrix.channel }} --json report-${{ matrix.channel }}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: semantic-eval-${{ matrix.channel }}
+          path: report-${{ matrix.channel }}.json

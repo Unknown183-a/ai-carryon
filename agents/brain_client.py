@@ -30,8 +30,10 @@ import requests
 
 MAX_CANDIDATES = 200
 MAX_TITLE_CHARS = 300
-FEATURE_KEYS = ("unique_requesters", "similar_requests", "days_since_trend", "channel_baseline_ratio")
-_INT_KEYS = ("unique_requesters", "similar_requests")
+FEATURE_KEYS = ("unique_requesters", "similar_requests", "days_since_trend", "channel_baseline_ratio",
+                "neighbor_ratio", "neighbor_count", "max_similarity_recent")   # last three: semantic Brain
+_INT_KEYS = ("unique_requesters", "similar_requests", "neighbor_count")
+_UNIT_INTERVAL_KEYS = ("max_similarity_recent",)   # the engine rejects anything outside [0, 1]
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,29 @@ class BrainResult:
     brain_versions: list = field(default_factory=list)   # [{brain_id, brain_version_id, role, status}]
     topics_sent: int = 0
     duration_ms: int = 0
+    # Per-Brain detail the engine returned, keyed by topic (never by engine candidate id), so shadow Brains can be
+    # logged and compared. brain_scores: [{brain_id, brain_version_id, role, status, scores{topic: score},
+    # reasons{topic: [codes]}}]; aggregate: {topic: fused score}. Both empty when the engine gave no answer.
+    brain_scores: list = field(default_factory=list)
+    aggregate: dict = field(default_factory=dict)
+
+    def to_decision_rows(self, topics, features=None):
+        """One row per candidate for agents.database.log_topic_decision. `topics` are the candidates that were
+        offered (in the caller's order); `features` maps topic -> the cleaned features that were sent."""
+        position = {t: i + 1 for i, t in enumerate(self.ordered)} if self.applied else {}
+        rows = []
+        for t in topics:
+            per_brain = {}
+            for b in self.brain_scores:
+                if t in b.get("scores", {}):
+                    per_brain[b["brain_id"]] = {"role": b.get("role"), "version": b.get("brain_version_id"),
+                                                "status": b.get("status"), "score": b["scores"][t],
+                                                "reasons": b.get("reasons", {}).get(t, [])}
+            rows.append({"topic": t, "features": (features or {}).get(t) or {}, "brain_scores": per_brain,
+                         "aggregate_score": self.aggregate.get(t), "rank": position.get(t),
+                         "source": self.source, "execution_id": self.execution_id,
+                         "policy_version": self.policy_version})
+        return rows
 
     def to_log_dict(self):
         return {"source": self.source, "applied": self.applied, "reason": self.reason,
@@ -98,6 +123,8 @@ def clean_features(raw):
         if isinstance(v, bool) or not isinstance(v, (int, float)):
             continue
         if v != v or v in (float("inf"), float("-inf")) or v < 0:
+            continue
+        if key in _UNIT_INTERVAL_KEYS and v > 1:
             continue
         out[key] = int(v) if key in _INT_KEYS else float(v)
     return out
@@ -162,6 +189,12 @@ def _interpret(body, id_to_topic, sent):
                          "role": b.get("role"), "status": b.get("status")} for b in body.get("brains", [])],
         topics_sent=sent,
     )
+    try:   # detail for the decision log; a malformed extra must never turn a good ranking into a failure
+        meta["brain_scores"] = _brain_scores(body, id_to_topic)
+        meta["aggregate"] = {id_to_topic[r["candidate_id"]]: float(r.get("aggregate_score", 0.0))
+                             for r in body.get("ranked", []) if r.get("candidate_id") in id_to_topic}
+    except Exception:
+        pass
     if source == "baseline_fallback":
         return BrainResult(applied=False, reason="engine_baseline_fallback", **meta)
     ranked = [r for r in body.get("ranked", []) if r.get("candidate_id") in id_to_topic]
@@ -170,3 +203,17 @@ def _interpret(body, id_to_topic, sent):
     ids = [r["candidate_id"] for r in ranked]
     ids += [c for c in id_to_topic if c not in set(ids)]
     return BrainResult(applied=True, reason="ok", ordered=[id_to_topic[c] for c in ids], **meta)
+
+
+def _brain_scores(body, id_to_topic):
+    out = []
+    for b in body.get("brains", []):
+        scores, reasons = {}, {}
+        for r in b.get("recommendations", []) or []:
+            topic = id_to_topic.get(r.get("candidate_id"))
+            if topic is not None:
+                scores[topic] = float(r.get("score", 0.0))
+                reasons[topic] = list(r.get("reason_codes", []) or [])
+        out.append({"brain_id": b.get("brain_id"), "brain_version_id": b.get("brain_version_id"),
+                    "role": b.get("role"), "status": b.get("status"), "scores": scores, "reasons": reasons})
+    return out

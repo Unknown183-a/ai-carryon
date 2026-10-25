@@ -39,6 +39,21 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      # Optional semantic features for the Brain (how did the most similar past videos do?). Off unless the
+      # repository VARIABLE BRAIN_SEMANTIC_ENABLED is "true" AND BRAIN_TEXT_MODEL_NAME / BRAIN_TEXT_MODEL_REVISION
+      # (an immutable commit hash) are set. Needs BRAIN_ENABLED too. The model is cached between runs.
+      - name: Cache text-encoder weights (optional)
+        if: ${{ vars.BRAIN_ENABLED == 'true' && vars.BRAIN_SEMANTIC_ENABLED == 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: .cache/transformers
+          key: text-model-${{ vars.BRAIN_TEXT_MODEL_NAME }}-${{ vars.BRAIN_TEXT_MODEL_REVISION }}
+
+      - name: Install text encoder (optional)
+        if: ${{ vars.BRAIN_ENABLED == 'true' && vars.BRAIN_SEMANTIC_ENABLED == 'true' }}
+        continue-on-error: true
+        run: pip install -r requirements_semantic.txt
+
       # Optional Brain topic ranking. Off unless the repository VARIABLE BRAIN_ENABLED is "true"
       # (Settings > Secrets and variables > Actions > Variables). Starts the engine inside this job;
       # if it fails to start the pipeline just runs without the Brain.
@@ -48,6 +63,7 @@ jobs:
         uses: Amit-coder78/ai-carryon-brain-platform/.github/actions/ci-engine@main
         with:
           channel: english
+          semantic_role: ${{ vars.BRAIN_SEMANTIC_ROLE || 'shadow' }}
 
       - name: Run English scheduler
         env:
@@ -64,6 +80,10 @@ jobs:
           YOUTUBE_ANALYTICS_TOKEN_B64: ${{ secrets.YOUTUBE_ANALYTICS_TOKEN_B64 }}
           INSTAGRAM_USERNAME: ${{ secrets.INSTAGRAM_USERNAME }}
           INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
+          BRAIN_SEMANTIC_ENABLED: ${{ vars.BRAIN_SEMANTIC_ENABLED || 'false' }}
+          BRAIN_TEXT_MODEL_NAME: ${{ vars.BRAIN_TEXT_MODEL_NAME }}
+          BRAIN_TEXT_MODEL_REVISION: ${{ vars.BRAIN_TEXT_MODEL_REVISION }}
+          BRAIN_TEXT_CACHE_DIR: .cache/transformers
           FORCE_GENERATE: ${{ github.event.inputs.force_generate || 'false' }}
           COMMENT_FORCE: ${{ github.event.inputs.force_comments || 'false' }}
           COMMENT_AGENT_ENABLED: ${{ vars.COMMENT_AGENT_ENABLED || 'false' }}

@@ -188,6 +188,29 @@ Cost when enabled: one extra YouTube search call per run. Other channels can ado
 
 Tests (offline): `python -m unittest tests.test_brain_topic_selection -v`
 
+### Decision log (always on when the Brain runs)
+
+The engine started inside the job is thrown away afterwards, so the pipeline keeps its own record. Each Brain-assisted ranking writes one row per candidate to the persistent `topic_decisions` table: the features that were sent, every Brain's score (including **shadow** Brains, which are reported but never change the order), the fused score and rank, and a flag on the topic that was actually used. This is the data any later learned model (and any honest evaluation of the Brain) needs, because it records what was *offered*, not only what was published. A logging problem never affects topic choice.
+
+### Semantic features (optional, shadow first)
+
+Answers "how did this channel's most similar past videos do, and is this a repeat of something posted recently?". A frozen multilingual sentence encoder embeds each candidate; the code finds that channel's nearest past videos and sends only three numbers per topic (`neighbor_ratio`, `neighbor_count`, `max_similarity_recent`) to the platform's `semantic` Brain. No text leaves the pipeline, nothing is trained, and nothing is fine-tuned.
+
+| Variable (repository **Variables**) | Purpose |
+| --- | --- |
+| `BRAIN_SEMANTIC_ENABLED` | `true` to compute the features (also needs `BRAIN_ENABLED`) |
+| `BRAIN_TEXT_MODEL_NAME` | Hugging Face model id. Choose one that covers Hindi and English and **test it on your own topics first** |
+| `BRAIN_TEXT_MODEL_REVISION` | Immutable commit hash of that model. Required; a floating revision is refused because it is part of the cache key |
+| `BRAIN_SEMANTIC_ROLE` | `shadow` (default; scored and logged, never changes the order), `supporting` (votes in rank fusion) or `off` |
+
+Everything fails open: no model, no library, no history or any error means no semantic features and the original behaviour. Vectors are cached in the `text_embeddings` table by text hash, model, revision and preprocessing version, and model weights are cached between runs. Install the extra dependencies with `pip install -r requirements_semantic.txt` (not part of `requirements.txt`, so the other channels never pull in torch).
+
+**Point in time:** a past video's outcome only counts once its 24h window has closed, "recent" means strictly before now, and neighbours come from the same channel only. Outcome = views at about 24h after publish (snapshot within 6h of that mark, else the closed A/B-test `actual_views_24h`).
+
+**Do not promote on faith.** `.github/workflows/semantic-eval.yml` runs weekly and, per channel, replays history exactly as it would have looked at each video's publish time (`python -m tools.eval_semantic --channel english`). The gate needs at least 30 scored videos, a bootstrap 95% interval for the improvement over "predict the median" that stays above zero, and a positive rank correlation. Until a channel passes, keep the Brain in `shadow`. The thresholds (`BRAIN_SEMANTIC_MIN_SIMILARITY`, `_K`, `_RECENT_DAYS`) are starting values to calibrate on your logged data, not tuned numbers.
+
+Tests (offline, no model download): `python -m unittest tests.test_semantic_features tests.test_eval_semantic -v`
+
 ---
 
 ## Intelligence Layer (English, Hindi and Bhakti)
