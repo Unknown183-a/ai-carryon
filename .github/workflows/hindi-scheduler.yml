@@ -56,9 +56,6 @@ jobs:
           HINDI_EDGE_PITCH: ${{ vars.HINDI_EDGE_PITCH }}
           FORCE_GENERATE: ${{ github.event.inputs.force_generate || 'false' }}
           COMMENT_FORCE: ${{ github.event.inputs.force_comments || 'false' }}
-          COMMENT_AGENT_ENABLED: ${{ vars.COMMENT_AGENT_ENABLED || 'false' }}
-          COMMENT_AGENT_CHANNELS: ${{ vars.COMMENT_AGENT_CHANNELS || 'cricket' }}
-          COMMENT_AGENT_DEFAULT_MODE: ${{ vars.COMMENT_AGENT_DEFAULT_MODE || 'draft' }}
         run: python scheduler_hindi.py
 
       - name: Upload run log (for debugging)

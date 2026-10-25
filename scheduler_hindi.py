@@ -367,17 +367,6 @@ def track_views_hindi_job():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-def comment_reply_job_hindi():
-    """Comment agent: draft replies for owner review (window/once-a-day gate and the
-    enable/pause switches live in comment_engine). Never raises; never publishes unless the
-    channel owner enabled publishing AND approved the draft."""
-    try:
-        from comment_engine.service import run_scheduled
-        run_scheduled("hindi", log=log)
-    except Exception as e:
-        log(f"Comment agent job error: {e}")
-
-
 def main():
     log("Hindi Scheduler run started (Cloud Run Job — single pass, Fully Adaptive Mode)")
 
@@ -391,9 +380,6 @@ def main():
         log(f"Cleanup skipped: {e}")
 
     track_views_hindi_job()
-    comment_reply_job_hindi()
-    # Fresh Groq budget for generation (the comment job shares it).
-    reset_groq_budget()
 
     if os.environ.get("FORCE_GENERATE", "false").lower() == "true":
         generate_and_upload_hindi(force=True)

@@ -332,17 +332,6 @@ def track_views_job():
         log(f"TRACEBACK: {traceback.format_exc()}")
 
 
-def comment_reply_job():
-    """Comment agent: draft replies for owner review (window/once-a-day gate and the
-    enable/pause switches live in comment_engine). Never raises; never publishes unless the
-    channel owner enabled publishing AND approved the draft."""
-    try:
-        from comment_engine.service import run_scheduled
-        run_scheduled("english", log=log)
-    except Exception as e:
-        log(f"Comment agent job error: {e}")
-
-
 def main():
     log("Scheduler run started (Cloud Run Job — single pass)")
 
@@ -355,12 +344,8 @@ def main():
     except Exception as e:
         log(f"Cleanup skipped: {e}")
 
-    # Always run view tracking + comment replies on every invocation
+    # Always run view tracking on every invocation
     track_views_job()
-    comment_reply_job()
-    # The comment job shares the Groq per-run call budget; give video
-    # generation a fresh one so replies never push it onto the fallback.
-    reset_groq_budget()
 
     # Manual override for testing: FORCE_GENERATE=true bypasses the
     # schedule gate and daily cap (replaces the old TEST_UPLOAD_ON_START

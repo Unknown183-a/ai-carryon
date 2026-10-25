@@ -1,0 +1,66 @@
+name: Comment Agent (auto)
+
+# Runs the comment agent ONCE A DAY per channel, at the hour that channel's viewers are most present
+# (not a fixed clock time). Every hour a cheap "plan" job asks: which channels have reached their
+# peak hour today and haven't run yet? Only those channels get a full run. Peak hours come from the
+# repo's own view tracking (views gained per hour of day), falling back to the hours viewers actually
+# comment, and a channel with no data yet simply runs at the next opportunity.
+#
+# Needs the repo variable COMMENT_AGENT_ENABLED=true. COMMENT_AGENT_CHANNELS picks the channels
+# (default: cricket). The run only writes DRAFTS; replies are posted only for drafts you approved,
+# only if you enabled publishing for the channel and set COMMENT_AGENT_DEFAULT_MODE=publish_approved.
+
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comment-agent-auto-plan
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      due: ${{ steps.plan.outputs.due }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: .github/workflows/comment-agent-auto.yml
+
+      - name: Install planner dependencies
+        run: pip install "pydantic>=2.5,<3" "PyYAML>=6.0" psycopg2-binary
+
+      - name: Which channels are due?
+        id: plan
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          COMMENT_AGENT_ENABLED: ${{ vars.COMMENT_AGENT_ENABLED || 'false' }}
+          COMMENT_AGENT_CHANNELS: ${{ vars.COMMENT_AGENT_CHANNELS || 'cricket' }}
+        run: |
+          python -m comment_engine plan > plan.txt
+          cat plan.txt
+          echo "due=$(tail -n 1 plan.txt)" >> "$GITHUB_OUTPUT"
+          { echo '### Comment agent plan'; echo '```'; cat plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  run:
+    needs: plan
+    if: ${{ needs.plan.outputs.due != '[]' && needs.plan.outputs.due != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ${{ fromJSON(needs.plan.outputs.due) }}
+    uses: ./.github/workflows/comment-agent.yml
+    with:
+      channel: ${{ matrix.channel }}
+      action: auto-run
+    secrets: inherit

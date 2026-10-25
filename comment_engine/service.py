@@ -7,21 +7,20 @@ Safety model
 - Timeouts/5xx on insert are AMBIGUOUS: we reconcile against YouTube before any retry.
 """
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from .classifier import Classifier
 from .config import PIPELINES, STALE_PUBLISHING_MINUTES, Settings, load_settings
 from .context_retriever import ContextRetriever
 from .deduplication import dedupe_comments
 from .orchestrator import Orchestrator
+from .peak_hours import is_due
 from .persona_registry import PersonaRegistry
 from .reply_generator import ReplyGenerator
 from .reply_validator import ReplyValidator
 from .repository import PROCESSABLE, Repository, now
 from .schemas import ReplyDraft
 from .youtube_client import ABORT, AMBIGUOUS, PERMANENT, YouTubeAPIError, YouTubeCommentClient
-
-IST = timezone(timedelta(hours=5, minutes=30))
 
 
 class AgentError(Exception):
@@ -121,7 +120,8 @@ class CommentAgentService:
     def sync(self, max_comments=None):
         self._check_active()
         limit = max_comments or self.settings.max_comments_per_run
-        threads = self.youtube.list_threads(max_results=max(limit * 3, 30))
+        threads = self.youtube.list_threads(max_results=max(limit * 3, 100))
+        self.repo.record_activity(self.tenant_id, self.channel_id, [t for t in threads if not t["is_own"]])
         fresh = [t for t in threads if not t["is_own"] and t["can_reply"] and not t["own_replied"]]
         known = self.repo.known_comment_ids(self.tenant_id, self.channel_id, [t["comment_id"] for t in fresh])
         fresh, repeats = dedupe_comments(fresh, known)
@@ -367,19 +367,34 @@ class CommentAgentService:
         return done
 
     # -- scheduling -----------------------------------------------------------
-    def run_scheduled(self, force=False):
-        """Daily gate for the generic schedulers (IST window, once per IST day). Returns stats or None."""
+    def due(self, now=None, velocity_provider=None):
+        kw = {"velocity_provider": velocity_provider} if velocity_provider else {}
+        return is_due(self.repo, self.settings, self.channel_id, now=now, **kw)
+
+    def run_cycle(self, now=None):
+        """The once-a-day cycle: run, then mark today done (failures/aborts are retried a few times)."""
+        now = now or datetime.now(timezone.utc)
+        day, t, c = now.date().isoformat(), self.tenant_id, self.channel_id
+        try:
+            stats = self.run()
+        except Exception:
+            self.repo.bump_attempt(t, c, day)
+            raise
+        if stats.get("aborted"):
+            self.repo.bump_attempt(t, c, day)
+        else:
+            self.repo.mark_run_done(t, c, day)
+        return stats
+
+    def run_scheduled(self, force=False, now=None):
+        """Run only when this channel's viewers are most present (see peak_hours). Returns stats or None."""
         if not force:
-            if self.channel_id not in self.settings.channels:
+            due, why, peak = self.due(now)
+            self.log(f"[comment-agent:{self.channel_id}] {'DUE' if due else 'not due'}: {why}"
+                     + (f" | {peak.describe()}" if peak else ""))
+            if not due:
                 return None
-            ist = datetime.now(IST)
-            if not (self.settings.window_start_hour_ist <= ist.hour <= self.settings.window_end_hour_ist):
-                return None
-            key = f"comment_agent_last_run:{self.tenant_id}:{self.channel_id}"
-            if self.repo.db.get_meta(key) == ist.strftime("%Y-%m-%d"):
-                return None
-            self.repo.db.set_meta(key, ist.strftime("%Y-%m-%d"))
-        return self.run()
+        return self.run_cycle(now)
 
 
 def run_scheduled(channel_id, force=False, log=print):

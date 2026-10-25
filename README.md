@@ -337,9 +337,13 @@ sync (official YouTube API) -> classify -> generate (persona + video context + e
 - **Isolation.** Every table and query is scoped by `(tenant_id, channel_id)`; each channel uses its own token.
 - **Persona edits without code:** `python -m comment_engine persona --channel cricket --set voice.emoji_level=low`
   (allowed: language, humor/assertiveness/emoji/slang level, max sentences, publishing mode).
-- **Scheduling:** English/Hindi/Bhakti/Gaming/Finance/Horror call `comment_engine.service.run_scheduled(channel)` after their cycle
-  (once per IST day in the 19:00-23:59 window; `COMMENT_FORCE=true` ignores it). Cricket runs from `--comments` / `/trigger-comments`.
-  Only channels in `COMMENT_AGENT_CHANNELS` (default `cricket`) run on a schedule - enable the rest one at a time.
+- **Runs once a day, at each channel's peak-viewer hour (no fixed clock time).** The hourly workflow *Comment Agent (auto)*
+  asks which channels have reached their peak hour today and haven't run yet; only those run. The peak hour comes from the repo's
+  own view tracking (average views gained per hour of day, UTC), falling back to the hours that channel's viewers actually
+  comment, and a channel with no data yet runs at the next opportunity (which also starts collecting data). A US-audience
+  channel therefore runs at US viewing time and an Indian one at Indian viewing time, automatically. Missed cron slots run later
+  the same day; failed or aborted cycles retry up to 3 times. Check any channel with Actions -> Comment Agent -> `peak`.
+  Needs the repo variable `COMMENT_AGENT_ENABLED=true`; `COMMENT_AGENT_CHANNELS` (default `cricket`) lists the channels to run.
 
 **No local setup needed:** open **Actions -> Comment Agent -> Run workflow**, pick a channel and an action (`run`, `drafts`,
 `approve`, `edit`, `reject`, `publish`, `enable-publishing`, `pause`, `metrics`, `test`). It runs with the repo's secrets, shows the
