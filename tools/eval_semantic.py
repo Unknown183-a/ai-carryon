@@ -16,7 +16,7 @@ sample or one lucky split never passes. The script only REPORTS; promoting the B
 manual decision.
 
 Usage (needs DATABASE_URL for the pipeline database, and the encoder env from agents/text_encoder.py):
-    python -m tools.eval_semantic --channel english [--json out.json]
+    python -m tools.eval_semantic --channel english [--json out.json] [--save]
 """
 import argparse
 import json
@@ -121,6 +121,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--channel", required=True)
     ap.add_argument("--json", help="also write the report to this file")
+    ap.add_argument("--save", action="store_true",
+                    help="also store the report in the database (semantic_eval_reports) for the dashboard")
     args = ap.parse_args(argv)
     encoder = sf.default_encoder()
     if encoder is None:
@@ -130,7 +132,11 @@ def main(argv=None):
     history, vecs, cfg = load(args.channel, db, encoder)
     report = evaluate(history, vecs, cfg)
     report["channel"] = args.channel
+    report["model_id"], report["revision"] = encoder.model_id, encoder.revision
     print(json.dumps(report, indent=2))
+    if args.save:
+        db.save_semantic_eval(args.channel, report)
+        print(f"Saved to semantic_eval_reports ({args.channel}).")
     if args.json:
         with open(args.json, "w") as f:
             json.dump(report, f, indent=2)

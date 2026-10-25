@@ -3,6 +3,7 @@ name: Semantic Brain evaluation
 # Weekly, read-only check of whether the semantic neighbour signal predicts real 24h outcomes
 # (tools/eval_semantic.py). It reports; it never changes what the Brain does. Needs the repository
 # VARIABLES BRAIN_TEXT_MODEL_NAME and BRAIN_TEXT_MODEL_REVISION (an immutable commit hash of the model).
+# Each report is also saved to the database (--save) so the dashboard's Semantic Brain page can show it.
 on:
   schedule:
     - cron: "30 3 * * 1"
@@ -35,7 +36,7 @@ jobs:
           BRAIN_TEXT_MODEL_NAME: ${{ vars.BRAIN_TEXT_MODEL_NAME }}
           BRAIN_TEXT_MODEL_REVISION: ${{ vars.BRAIN_TEXT_MODEL_REVISION }}
           BRAIN_TEXT_CACHE_DIR: .cache/transformers
-        run: python -m tools.eval_semantic --channel ${{ matrix.channel }} --json report-${{ matrix.channel }}.json
+        run: python -m tools.eval_semantic --channel ${{ matrix.channel }} --json report-${{ matrix.channel }}.json --save
       - uses: actions/upload-artifact@v4
         with:
           name: semantic-eval-${{ matrix.channel }}

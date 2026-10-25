@@ -209,7 +209,9 @@ Everything fails open: no model, no library, no history or any error means no se
 
 **Do not promote on faith.** `.github/workflows/semantic-eval.yml` runs weekly and, per channel, replays history exactly as it would have looked at each video's publish time (`python -m tools.eval_semantic --channel english`). The gate needs at least 30 scored videos, a bootstrap 95% interval for the improvement over "predict the median" that stays above zero, and a positive rank correlation. Until a channel passes, keep the Brain in `shadow`. The thresholds (`BRAIN_SEMANTIC_MIN_SIMILARITY`, `_K`, `_RECENT_DAYS`) are starting values to calibrate on your logged data, not tuned numbers.
 
-Tests (offline, no model download): `python -m unittest tests.test_semantic_features tests.test_eval_semantic -v`
+**Dashboard.** The weekly evaluation saves each report to the `semantic_eval_reports` table (`--save`), and the **Semantic Brain** page in the dashboard sidebar shows it: one row per channel with its status and what is still missing, the trend of the improvement over time with its 95% interval, and a live summary of the decision log (what was offered, what the shadow Brain thought, what was used). It is read-only and sits behind the same `APP_PASSWORD` login as the other pages.
+
+Tests (offline, no model download): `python -m unittest tests.test_semantic_features tests.test_eval_semantic tests.test_semantic_report tests.test_semantic_dashboard_page -v` (the page test needs `streamlit` and is skipped without it).
 
 ---
 

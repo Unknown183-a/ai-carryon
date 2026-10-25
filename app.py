@@ -610,7 +610,7 @@ with f3:
     st.link_button("🌐 Live Dashboard", LIVE_APP_URL, use_container_width=True)
 
 st.caption(
-    "Other pages in the sidebar (Dashboard, Peak Hours, A/B Titles, Schedule, Comparison) are the "
+    "Other pages in the sidebar (Dashboard, Peak Hours, A/B Titles, Schedule, Comparison, Semantic Brain) are the "
     "operational control panel — password protected."
 )
 
