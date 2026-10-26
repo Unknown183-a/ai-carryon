@@ -19,9 +19,15 @@ Rules:
     encoder is missing or there is no usable history. Candidates without a feature simply have no evidence.
   * No text leaves this process; only the three numbers are sent to the engine.
 
+Where a channel's history lives: English, Hindi, Bhakti and Horror use the shared `videos` / `snapshots` tables;
+Cricket and Gaming keep their own (`cricket_*`, `gaming_*`) and are read through their own database modules (see
+history_rows). Finance stores no videos or views at all yet, and Horror has no view tracker, so neither can be
+measured until that exists (SOURCE_NOTES says so in the report instead of a misleading "no evidence").
+
 Outcome definition (documented, versioned by OUTCOME_VERSION): views of the snapshot closest to publish + 24h,
 accepted only within +/- 6h; otherwise the closed A/B-test `actual_views_24h` for that video, otherwise unknown.
 """
+import importlib
 import math
 import os
 from dataclasses import dataclass
@@ -33,6 +39,23 @@ import numpy as np
 from agents.text_encoder import load_encoder_from_env, normalize_text, text_hash
 
 OUTCOME_VERSION = "views24h-v1"
+
+# Channels whose videos and view snapshots live in their own database module instead of the shared tables.
+CHANNEL_DB_MODULES = {"cricket": "agents_cricket.database", "gaming": "agents_gaming.database"}
+
+# Channels that cannot be measured yet, and why. Reported as-is when no outcome exists, so an empty result is
+# never mistaken for "the semantic signal found nothing".
+SOURCE_NOTES = {
+    "finance": "Finance stores only a posted-topics list, not its uploaded videos or their view counts, so there is "
+               "nothing to measure yet.",
+    "horror": "Horror saves its videos but has no view tracker, so no view counts are recorded yet.",
+}
+
+
+def source_note(channel):
+    return SOURCE_NOTES.get(channel)
+
+
 WINDOW = timedelta(hours=24)
 TOLERANCE = timedelta(hours=6)
 
@@ -100,6 +123,34 @@ def views_at_24h(published, snapshots):
         if gap <= TOLERANCE and (best_gap is None or gap < best_gap):
             best, best_gap = float(views), gap
     return best
+
+
+def rows_from_grouped_snapshots(grouped):
+    """{video_id: {title, published, snapshots: [{views, timestamp, ...}]}} (what get_all_snapshots() returns in the
+    shared, cricket and gaming databases) -> the rows dict build_history expects. Placeholder videos that a snapshot
+    created before their metadata arrived (empty title / published) are kept here and dropped by build_history."""
+    videos, snaps = [], []
+    for vid, v in (grouped or {}).items():
+        videos.append({"video_id": vid, "title": v.get("title"), "published": v.get("published")})
+        for sn in v.get("snapshots") or []:
+            snaps.append({"video_id": vid, "views": sn.get("views"), "timestamp": sn.get("timestamp")})
+    return {"videos": videos, "ab_tests": [], "snapshots": snaps, "posted": []}
+
+
+def history_rows(channel, db=None):
+    """Raw history rows for `channel` from wherever that channel keeps them. Raises RuntimeError when the channel's
+    own database module could not start, so a broken source is reported as such and never as "no evidence"."""
+    module = CHANNEL_DB_MODULES.get(channel)
+    if module:
+        mod = importlib.import_module(module)
+        channel_db = getattr(mod, "db", None)
+        if channel_db is None:
+            raise RuntimeError(f"{channel} database is unavailable: {getattr(mod, 'db_init_error', 'unknown error')}")
+        return rows_from_grouped_snapshots(channel_db.get_all_snapshots())
+    if db is None:
+        from agents.database import db as shared_db
+        db = shared_db
+    return db.get_semantic_history_rows(channel)
 
 
 def build_history(rows, as_of=None):
@@ -232,7 +283,7 @@ def semantic_features(candidates, channel, *, db=None, encoder=None, now=None, c
             db = _db
         cfg = cfg or SemanticConfig.from_env()
         now = now or datetime.now(timezone.utc)
-        history = build_history(db.get_semantic_history_rows(channel), as_of=now)[:cfg.history_limit]
+        history = build_history(history_rows(channel, db), as_of=now)[:cfg.history_limit]
         if not history:
             return {}
         titles = [c["title"] for c in candidates if c.get("title")]
