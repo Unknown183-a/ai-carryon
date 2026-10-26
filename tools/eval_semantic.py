@@ -15,6 +15,11 @@ strict: at least MIN_EVAL samples, the interval's lower bound above 0 AND a posi
 sample or one lucky split never passes. The script only REPORTS; promoting the Brain (shadow -> supporting) is a
 manual decision.
 
+Each channel's history is read from where that channel keeps it (agents.semantic_features.history_rows): the shared
+tables for English, Hindi, Bhakti and Horror, and the channel's own database for Cricket and Gaming. When nothing can
+be scored the report says why (`diagnosis` and `note`): no videos, no view snapshot near 24h, too few measured videos,
+no similar past video, or an unreadable data source.
+
 Usage (needs DATABASE_URL for the pipeline database, and the encoder env from agents/text_encoder.py):
     python -m tools.eval_semantic --channel english [--json out.json] [--save]
 """
@@ -89,14 +94,34 @@ def evaluate_rows(history, vectors, cfg=sf.SemanticConfig()):
     return rows
 
 
+def _diagnose(found, measured, evaluated, cfg):
+    """(code, sentence) saying why nothing could be scored. The dashboard maps the code to its own wording."""
+    if found == 0:
+        return "no_videos", "No videos were found for this channel's data source."
+    if measured == 0:
+        return "no_outcomes", (f"{found} videos were found, but none has a view-count snapshot within "
+                               f"{int(sf.TOLERANCE.total_seconds() // 3600)} hours of 24 hours after it was published, "
+                               "so no outcome can be measured.")
+    if evaluated == 0:
+        return "few_outcomes", (f"Only {measured} of {found} videos have a measurable 24h outcome, and none had at "
+                                f"least {cfg.min_history} measured videos before it to compare against.")
+    return "no_neighbours", (f"{evaluated} videos were evaluated, but none had a similar past video (similarity of at "
+                             f"least {cfg.min_similarity:g}) when it was published.")
+
+
 def evaluate(history, vectors, cfg=sf.SemanticConfig(), min_eval=MIN_EVAL):
     """history: [HistoryItem] (any order); vectors: {normalized text: vector}. Returns a report dict."""
     rows = evaluate_rows(history, vectors, cfg)
     scored = [r for r in rows if r["ratio"] is not None]
-    report = {"outcome": sf.OUTCOME_VERSION, "videos_with_outcome": len(rows), "videos_with_neighbours": len(scored),
+    found = len(history)
+    measured = sum(1 for h in history if h.views_24h is not None)
+    # videos_with_outcome (kept for older reports) = videos evaluated against earlier history. The two new counts
+    # say what was found and what could be measured, so an empty result can be explained instead of guessed at.
+    report = {"outcome": sf.OUTCOME_VERSION, "videos_found": found, "videos_with_24h_views": measured,
+              "videos_with_outcome": len(rows), "videos_with_neighbours": len(scored),
               "min_eval": min_eval, "gate_passed": False}
     if not scored:
-        report["note"] = "no video had neighbour evidence at its publish time"
+        report["diagnosis"], report["note"] = _diagnose(found, measured, len(rows), cfg)
         return report
     actual = np.array([r["actual"] for r in scored])
     pred = np.array([math.log(r["ratio"]) for r in scored])
@@ -112,7 +137,7 @@ def evaluate(history, vectors, cfg=sf.SemanticConfig(), min_eval=MIN_EVAL):
 def load(channel, db, encoder, now=None, cfg=None):
     cfg = cfg or sf.SemanticConfig.from_env()
     now = now or datetime.now(timezone.utc)
-    history = sf.build_history(db.get_semantic_history_rows(channel), as_of=now)
+    history = sf.build_history(sf.history_rows(channel, db), as_of=now)
     vecs = sf.embed_texts([h.text for h in history], encoder, db)
     return history, vecs, cfg
 
@@ -129,10 +154,24 @@ def main(argv=None):
         print("No encoder configured (BRAIN_TEXT_MODEL_NAME / BRAIN_TEXT_MODEL_REVISION).", file=sys.stderr)
         return 2
     from agents.database import db
-    history, vecs, cfg = load(args.channel, db, encoder)
-    report = evaluate(history, vecs, cfg)
+    failed = None
+    try:
+        history, vecs, cfg = load(args.channel, db, encoder)
+        report = evaluate(history, vecs, cfg)
+    except Exception as e:
+        # A data source that cannot be read is not "no evidence": say so in the report (type only: the message can
+        # carry connection details, which must not reach a dashboard) and fail the job after saving it.
+        failed = e
+        print(f"Could not read the {args.channel} data source: {type(e).__name__}: {e}", file=sys.stderr)
+        report = {"outcome": sf.OUTCOME_VERSION, "videos_found": 0, "videos_with_24h_views": 0,
+                  "videos_with_outcome": 0, "videos_with_neighbours": 0, "min_eval": MIN_EVAL, "gate_passed": False,
+                  "diagnosis": "source_unavailable",
+                  "note": f"The {args.channel} data source could not be read ({type(e).__name__}). See the workflow log."}
     report["channel"] = args.channel
     report["model_id"], report["revision"] = encoder.model_id, encoder.revision
+    note = sf.source_note(args.channel)
+    if note and not report.get("videos_with_24h_views"):
+        report["source_note"] = note
     print(json.dumps(report, indent=2))
     if args.save:
         db.save_semantic_eval(args.channel, report)
@@ -140,7 +179,7 @@ def main(argv=None):
     if args.json:
         with open(args.json, "w") as f:
             json.dump(report, f, indent=2)
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

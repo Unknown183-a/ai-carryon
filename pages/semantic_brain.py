@@ -143,6 +143,9 @@ elif state == sr.NOT_YET:
 else:
     st.info(f"{label}. {why}")
 
+if report and report.get("source_note"):
+    st.info(report["source_note"])
+
 if report:
     need = int(report.get("min_eval") or MIN_EVAL_DEFAULT)
     scored = int(report.get("videos_with_neighbours") or 0)
@@ -170,12 +173,15 @@ if report:
     rev = (report.get("revision") or "")[:8]
     st.caption(f"Evaluated {ist(report.get('evaluated_at'))} · model {model}"
                f"{' @ ' + rev if rev else ''} · outcome definition {report.get('outcome', 'unknown')} · "
-               f"{int(report.get('videos_with_outcome') or 0)} videos with a known 24h outcome")
+               f"{int(report.get('videos_found', report.get('videos_with_outcome')) or 0)} videos found · "
+               f"{int(report.get('videos_with_24h_views', report.get('videos_with_outcome')) or 0)} with a known 24h outcome")
 
 hist = sr.history(reports, channel)
 st.markdown("**Over time**")
 if len(hist) == 0:
     st.caption("No history for this channel yet.")
+elif all(h["mean_gain"] is None for h in hist):
+    st.caption("No evaluation of this channel has produced a gain yet, so there is nothing to chart.")
 else:
     df = pd.DataFrame(hist)
     df["when"] = pd.to_datetime(df["evaluated_at"], utc=True, errors="coerce")

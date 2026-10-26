@@ -32,12 +32,20 @@ def _assess(report):
     n = int(report.get("videos_with_neighbours") or 0)
     need = int(report.get("min_eval") or 30)
     if n == 0:
+        d = report.get("diagnosis")
+        if d in _EMPTY_CODES:
+            return NO_DATA, d, {"found": int(report.get("videos_found") or 0),
+                                "measured": int(report.get("videos_with_24h_views") or 0),
+                                "note": report.get("note")}
         return NO_DATA, "no_evidence", {}
     if n < need:
         return NOT_YET, "few", {"n": n, "need": need}
     ci = report.get("gain_ci95") or [None, None]
     lo = _num(ci[0]) if len(ci) > 0 else None
     rho = _num(report.get("spearman"))
+    gain = _num(report.get("mean_gain"))
+    if gain is not None and gain <= 0:
+        return NOT_YET, "worse", {"gain": gain, "lo": lo}
     if lo is None or lo <= 0:
         return NOT_YET, "interval", {"lo": lo}
     if rho is None or rho <= 0:
@@ -47,6 +55,9 @@ def _assess(report):
     return PASSED, "ok", {}
 
 
+_EMPTY_CODES = ("source_unavailable", "no_videos", "no_outcomes", "few_outcomes", "no_neighbours")
+
+
 def _signed(v):
     return "unknown" if v is None else f"{v:+.2f}"
 
@@ -54,6 +65,15 @@ def _signed(v):
 _LONG = {
     "never": lambda d: "This channel has not been evaluated yet.",
     "no_evidence": lambda d: "No video had similar past videos at the time it was published.",
+    "source_unavailable": lambda d: "This channel's data could not be read, so it was not evaluated. Check the workflow log.",
+    "no_videos": lambda d: "No videos were found for this channel's data source.",
+    "no_outcomes": lambda d: (f"{d['found']} videos were found, but none has a view-count snapshot close to 24 hours "
+                              "after publishing, so no outcome can be measured."),
+    "few_outcomes": lambda d: (f"Only {d['measured']} of {d['found']} videos have a measurable 24h outcome, "
+                               "not enough to compare any video with earlier ones."),
+    "no_neighbours": lambda d: "Videos were evaluated, but none had a similar enough past video when it was published.",
+    "worse": lambda d: ("On average the Brain's guess was no closer to real views than simply predicting the channel "
+                        f"median (gain {_signed(d['gain'])}). More data may change this; it does not pass now."),
     "few": lambda d: f"Only {d['n']} of the {d['need']} scored videos needed so far.",
     "interval": lambda d: ("The improvement over predicting the channel median could still be luck "
                            f"(lower bound {_signed(d['lo'])}, it must be above 0)."),
@@ -64,6 +84,12 @@ _LONG = {
 _SHORT = {
     "never": lambda d: "Not evaluated yet",
     "no_evidence": lambda d: "No similar past videos yet",
+    "source_unavailable": lambda d: "Data source unreadable",
+    "no_videos": lambda d: "No videos found",
+    "no_outcomes": lambda d: f"{d['found']} videos, none with 24h views",
+    "few_outcomes": lambda d: f"Only {d['measured']} of {d['found']} have 24h views",
+    "no_neighbours": lambda d: "No similar past videos",
+    "worse": lambda d: f"No better than the median ({_signed(d['gain'])})",
     "few": lambda d: f"Needs {d['need']}, has {d['n']}",
     "interval": lambda d: f"Gain could be luck (low end {_signed(d['lo'])})",
     "rank": lambda d: f"Higher scores, not more views ({_signed(d['rho'])})",
