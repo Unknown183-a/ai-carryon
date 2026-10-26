@@ -123,7 +123,8 @@ flowchart TD
 | `agents_gaming/` | Gaming pipeline agents (Twitch client, clip finder, etc.) |
 | `agents_bhakti/` | Bhakti (Hindi devotional) pipeline agents |
 | `tests/` | Offline tests (comment engine, Brain topic selection, and more) |
-| `pages/` | Streamlit dashboard pages |
+| `pages/` | Streamlit dashboard pages (includes the **Semantic Brain** evaluation page) |
+| `tools/` | Offline tools, including `eval_semantic.py` (weekly Semantic Brain evaluation) |
 | `scheduler*.py` | One scheduler per channel: `scheduler.py`, `scheduler_hindi.py`, `scheduler_cricket.py`, `scheduler_gaming.py`, `scheduler_bhakti.py` |
 | `app.py` | Streamlit entrypoint |
 | `.github/workflows/` | English, Hindi, Cricket, Gaming and Bhakti scheduler workflows |
@@ -211,7 +212,11 @@ Everything fails open: no model, no library, no history or any error means no se
 
 **Dashboard.** The weekly evaluation saves each report to the `semantic_eval_reports` table (`--save`), and the **Semantic Brain** page in the dashboard sidebar shows it: one row per channel with its status and what is still missing, the trend of the improvement over time with its 95% interval, and a live summary of the decision log (what was offered, what the shadow Brain thought, what was used). It is read-only and sits behind the same `APP_PASSWORD` login as the other pages.
 
-Tests (offline, no model download): `python -m unittest tests.test_semantic_features tests.test_eval_semantic tests.test_semantic_report tests.test_semantic_dashboard_page -v` (the page test needs `streamlit` and is skipped without it).
+**Where each channel's history comes from.** English, Hindi, Bhakti and Horror use the shared `videos` and `snapshots` tables. Cricket and Gaming keep their own `cricket_*` and `gaming_*` tables, so the evaluation reads those through each channel's own database module (`history_rows` in `agents/semantic_features.py`). Finance stores no videos or view counts, and Horror has no view tracker yet, so neither can be measured.
+
+**Why a channel can show no result.** A video only counts once a view snapshot exists within 6 hours of its 24-hour mark, so having many total views is not enough. When nothing can be scored, the saved report and the dashboard say which case applies: no videos found, no snapshot near 24h, too few measured videos, no similar past video, or a data source that could not be read. A result that is no better than the channel median is reported as exactly that, not as luck.
+
+Tests (offline, no model download): `python -m unittest tests.test_semantic_features tests.test_eval_semantic tests.test_semantic_report tests.test_semantic_channel_sources tests.test_semantic_dashboard_page -v` (the page test needs `streamlit` and is skipped without it).
 
 ---
 
@@ -386,6 +391,7 @@ Tests: `python -m pytest tests/test_comment_agent.py -q`
 - Custom thumbnail upload is blocked by a 403 on some channels (likely requires channel phone verification)
 - The comment agent needs the `youtube.force-ssl` OAuth scope on every channel token (see the Comment Agent section)
 - Bhakti has no tab in the Streamlit dashboard yet (its data is in the database)
+- The Semantic Brain cannot be evaluated for Finance (no stored videos or view counts) or Horror (no view tracker) until those exist
 - Saturation gating is not bypassed by `FORCE_GENERATE` (only the schedule-hour gate is)
 
 ---
@@ -394,6 +400,7 @@ Tests: `python -m pytest tests/test_comment_agent.py -q`
 
 - **Close the A/B loop**: title scores are LLM-predicted today. Validate them against real 24h view counts and let pattern selection use ground truth.
 - **Extend the intelligence layer to Cricket and Gaming**: saturation, comparison, and adaptive scheduling currently run for English and Hindi only.
+- **Promote the semantic Brain per channel**: it runs in shadow mode with a weekly evaluation and a dashboard page. Promote a channel only after it passes the evaluation gate. A learned model (CatBoost) and fine-tuning wait for enough logged decisions.
 - **Failure and hook analysis**: systematic tracking of why videos underperform.
 - **Audience, opportunity, and monetization intelligence**: demographic pulls, pre-trend prediction, and RPM-correlated topic scoring.
 - **Centralized "brain" service**: built as [ai-carryon-brain-platform](https://github.com/Amit-coder78/ai-carryon-brain-platform) and live for English topic ranking (see [Brain Platform backend](#brain-platform-backend)). Next: roll it out to the other channels.
