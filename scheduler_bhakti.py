@@ -18,6 +18,13 @@ VIDEOS_PER_DAY = int(os.environ.get("BHAKTI_VIDEOS_PER_DAY", "6"))
 # "music_only": previous behaviour (no voice, no captions, bhajan only).
 BHAKTI_MODE = os.environ.get("BHAKTI_MODE", "narrated").lower()
 
+# --- schedule fix: grace window + starvation fallback ---
+# A peak hour stays "open" this many hours after it starts (late GitHub cron).
+GRACE_HOURS = int(os.environ.get("BHAKTI_GRACE_HOURS", "2"))
+# If nothing was posted for this many hours, upload regardless of peak hours.
+MAX_GAP_HOURS = int(os.environ.get("BHAKTI_MAX_GAP_HOURS", "12"))
+
+
 
 def log(message):
     os.makedirs("output", exist_ok=True)
@@ -43,6 +50,11 @@ def mark_posted_today(topic):
         db.mark_posted(topic, channel="bhakti")
     except Exception as e:
         log(f"DB mark_posted error: {e}")
+    try:
+        from datetime import datetime, timezone
+        db.set_meta("last_upload_hour_bhakti", datetime.now(timezone.utc).isoformat())
+    except Exception as e:
+        log(f"DB last_upload meta error: {e}")
 
 
 def get_adaptive_hours():
@@ -68,30 +80,70 @@ def get_adaptive_hours():
         return []
 
 
+def _last_upload_utc():
+    """Datetime (UTC, aware) of the last Bhakti upload, or None if unknown."""
+    try:
+        from datetime import datetime, timezone
+        from agents.database import db
+        last = db.get_meta("last_upload_hour_bhakti")
+        if not last:
+            return None
+        dt = datetime.fromisoformat(last)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def _current_slot(now, hours, grace):
+    """Most recent peak slot start (UTC datetime) that is still open at `now`
+    (current hour is the peak hour, or up to `grace` hours after it)."""
+    from datetime import timedelta
+    best = None
+    for h in hours:
+        back = (now.hour - h) % 24
+        if back <= grace:
+            start = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=back)
+            if best is None or start > best:
+                best = start
+    return best
+
+
 def should_generate_now():
+    from datetime import datetime, timezone
+    from agents.database import db
+
     if get_posted_count_today() >= VIDEOS_PER_DAY:
         return False, "Daily quota reached"
 
-    adaptive_hours = get_adaptive_hours()
-    import datetime as _dt
-    current_hour = _dt.datetime.utcnow().hour
+    now = datetime.now(timezone.utc)
+    last = _last_upload_utc()
 
-    # None = bootstrap (no data yet), otherwise must be a DB peak hour
-    if adaptive_hours is not None and current_hour not in adaptive_hours:
-        return False, f"Current hour {current_hour:02d}:00 UTC not in DB peak hours {adaptive_hours}"
-
+    # Safety net: never let the channel go silent for days.
     try:
-        from agents.database import db
-        from datetime import datetime, timezone
-        last = db.get_meta("last_upload_hour_bhakti")
-        if last:
-            gap = (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() / 3600
-            if gap < 1.0:
-                return False, f"Only {gap:.1f}h since last Bhakti upload — need 1h gap"
-    except Exception:
-        pass
+        recent = db.get_recent_posted(hours=MAX_GAP_HOURS, channel="bhakti")
+        if not recent:
+            return True, f"STARVATION FALLBACK: nothing posted in last {MAX_GAP_HOURS}h"
+    except Exception as e:
+        log(f"Starvation check skipped: {e}")
 
-    return True, f"Hour {current_hour:02d}:00 UTC OK (peak hours: {adaptive_hours or 'bootstrap'})"
+    if last is not None:
+        gap = (now - last).total_seconds() / 3600
+        if gap < 1.0:
+            return False, f"Only {gap:.1f}h since last Bhakti upload - need 1h gap"
+
+    adaptive_hours = get_adaptive_hours()
+    slot = _current_slot(now, adaptive_hours, GRACE_HOURS)
+    if slot is None:
+        return False, (f"Current hour {now.hour:02d}:00 UTC not in best hours "
+                       f"{adaptive_hours} (+{GRACE_HOURS}h grace)")
+
+    if last is not None and last >= slot:
+        return False, f"Slot {slot:%H}:00 UTC already used (last upload {last:%H:%M} UTC)"
+
+    return True, (f"Current time {now:%H:%M} UTC is in slot {slot:%H}:00 "
+                  f"of best hours {adaptive_hours} (+{GRACE_HOURS}h grace)")
 
 
 def generate_and_upload_bhakti(force=False):
