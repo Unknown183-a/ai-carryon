@@ -44,7 +44,7 @@ def mark_posted_today(topic):
 def get_adaptive_hours():
     """Top N best upload hours from real Hindi velocity data, falling back
     to spread-out defaults for any slots not yet backed by real data."""
-    fallback = [2, 7, 13]  # UTC hours ≈ 7:30AM, 12:30PM, 6:30PM IST
+    fallback = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]  
     MIN_GOOD_WINDOWS = 3  # graduate as soon as we have this many real hours
 
     try:
